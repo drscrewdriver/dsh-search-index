@@ -31,7 +31,7 @@ export { DEFAULT_CONFIG, SWITCH_SEARCH_SETTINGS_NAMESPACE } from './config.ts';
 export type { SwitchSearchConfig } from './config.ts';
 export { SwitchIndexEngine } from './host/engine.ts';
 export { SwitchWatermarkSync } from './host/sync.ts';
-export { rebuildIndex, importIntoIndex, DEFAULT_INDEX_LAYOUT } from './host/rebuild.ts';
+export { rebuildIndex, importIntoIndex, recoverIndex, DEFAULT_INDEX_LAYOUT } from './host/rebuild.ts';
 export { exportSnapshot, parseSnapshot } from './host/snapshot.ts';
 /** The webServer service face this plugin uses (structural mirror). */
 interface SwitchWebServer {

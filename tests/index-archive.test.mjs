@@ -15,7 +15,7 @@
  * Usage: node tests/index-archive.test.mjs  (after npm run build)
  */
 import assert from 'node:assert/strict'
-import { mkdtempSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
@@ -151,4 +151,37 @@ test('archive: prune removes ids from the storage hub with backup + atomic write
   const second = pruneArchiveFile(['s-unknown'], undefined, [file])
   assert.equal(second.removed, 0)
   assert.equal(second.remaining, 2)
+})
+
+test('recovery: stale shadow is discarded when the active index survives', async () => {
+  const { recoverIndex } = await import('../lib/index.mjs')
+  const dir = tempDir('recover-stale')
+  const layout = { ...DEFAULT_INDEX_LAYOUT, dir }
+  writeFileSync(join(dir, layout.active), 'active')
+  writeFileSync(join(dir, layout.building), 'half-built')
+  writeFileSync(`${join(dir, layout.building)}-wal`, 'wal')
+
+  const actions = await recoverIndex(layout)
+  assert.equal(actions.length, 1)
+  assert.match(actions[0], /stale shadow/)
+  assert.ok(existsSync(join(dir, layout.active)), 'active untouched')
+  assert.ok(!existsSync(join(dir, layout.building)), 'shadow discarded')
+  assert.ok(!existsSync(`${join(dir, layout.building)}-wal`), 'shadow wal discarded')
+})
+
+test('recovery: crash during the swap window rolls back to the newest archive', async () => {
+  const { recoverIndex } = await import('../lib/index.mjs')
+  const dir = tempDir('recover-swap')
+  const layout = { ...DEFAULT_INDEX_LAYOUT, dir }
+  // Active already renamed away; newest archive holds the pre-rebuild index.
+  writeFileSync(join(dir, `${layout.archivePrefix}111.sqlite`), 'old')
+  writeFileSync(join(dir, `${layout.archivePrefix}222.sqlite`), 'newest')
+  writeFileSync(join(dir, layout.building), 'half-built')
+
+  const actions = await recoverIndex(layout)
+  assert.equal(actions.length, 1)
+  assert.match(actions[0], /restored/)
+  assert.ok(existsSync(join(dir, layout.active)), 'archive promoted to active')
+  assert.equal(readFileSync(join(dir, layout.active), 'utf8'), 'newest', 'newest archive wins')
+  assert.ok(!existsSync(join(dir, layout.building)), 'shadow discarded')
 })

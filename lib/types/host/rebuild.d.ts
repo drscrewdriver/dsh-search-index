@@ -52,6 +52,17 @@ export interface SwitchIndexLayout {
 }
 /** Default layout names. */
 export declare const DEFAULT_INDEX_LAYOUT: SwitchIndexLayout;
+/**
+ * Inspect the index directory for half-built leftovers from an abnormally
+ * terminated rebuild and recover:
+ * - shadow present + active present: the build never finished — the shadow
+ *   is garbage (the active index kept serving) and is discarded.
+ * - shadow present + active missing: the crash hit the rename window — the
+ *   newest archive is restored as the active index, the shadow discarded.
+ * Runs at host activation, before the engine opens (opening would create a
+ * fresh empty active file and mask the swap-window case).
+ */
+export declare function recoverIndex(layout: SwitchIndexLayout, log?: (msg: string) => void): Promise<string[]>;
 /** List existing archive files, oldest first. */
 export declare function listArchives(layout: SwitchIndexLayout): Promise<string[]>;
 /**

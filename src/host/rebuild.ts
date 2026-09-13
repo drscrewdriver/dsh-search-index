@@ -7,7 +7,7 @@
  * the engine reopens. Old archives are kept (bounded) and stay readable.
  */
 import { existsSync } from 'node:fs'
-import { mkdir, readdir, rename, unlink } from 'node:fs/promises'
+import { mkdir, readdir, rename, rm, unlink } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { SwitchIndexEngine } from './engine.ts'
@@ -57,6 +57,49 @@ export const DEFAULT_INDEX_LAYOUT: SwitchIndexLayout = {
   active: 'index.sqlite',
   building: 'index.building.sqlite',
   archivePrefix: 'index.archive-',
+}
+
+/**
+ * Inspect the index directory for half-built leftovers from an abnormally
+ * terminated rebuild and recover:
+ * - shadow present + active present: the build never finished — the shadow
+ *   is garbage (the active index kept serving) and is discarded.
+ * - shadow present + active missing: the crash hit the rename window — the
+ *   newest archive is restored as the active index, the shadow discarded.
+ * Runs at host activation, before the engine opens (opening would create a
+ * fresh empty active file and mask the swap-window case).
+ */
+export async function recoverIndex(
+  layout: SwitchIndexLayout,
+  log?: (msg: string) => void,
+): Promise<string[]> {
+  const actions: string[] = []
+  await mkdir(layout.dir, { recursive: true })
+  const activePath = join(layout.dir, layout.active)
+  const buildingPath = join(layout.dir, layout.building)
+  const activeExists = existsSync(activePath)
+  if (!existsSync(buildingPath)) return actions
+  const discardShadow = async (): Promise<void> => {
+    for (const suffix of ['', '-wal', '-shm']) {
+      await rm(`${buildingPath}${suffix}`, { force: true })
+    }
+  }
+  if (activeExists) {
+    await discardShadow()
+    actions.push(`discarded stale shadow index (a previous rebuild did not finish; the active index was never at risk)`)
+  } else {
+    const archives = await listArchives(layout)
+    if (archives.length > 0) {
+      const newest = archives[archives.length - 1]
+      await rename(join(layout.dir, newest), activePath)
+      actions.push(`active index was missing (crash during the swap window); restored "${newest}" as the active index`)
+    } else {
+      actions.push('no active index and no archive: the first build crashed mid-way; starting from a fresh index')
+    }
+    await discardShadow()
+  }
+  for (const action of actions) log?.(`index recovery: ${action}`)
+  return actions
 }
 
 /** List existing archive files, oldest first. */

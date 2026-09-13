@@ -28,6 +28,7 @@ import {
   DEFAULT_INDEX_LAYOUT,
   importIntoIndex,
   listArchives,
+  recoverIndex,
   rebuildIndex,
   resolveIndexDir,
   type SwitchIndexLayout,
@@ -45,7 +46,7 @@ export { DEFAULT_CONFIG, SWITCH_SEARCH_SETTINGS_NAMESPACE } from './config.ts'
 export type { SwitchSearchConfig } from './config.ts'
 export { SwitchIndexEngine } from './host/engine.ts'
 export { SwitchWatermarkSync } from './host/sync.ts'
-export { rebuildIndex, importIntoIndex, DEFAULT_INDEX_LAYOUT } from './host/rebuild.ts'
+export { rebuildIndex, importIntoIndex, recoverIndex, DEFAULT_INDEX_LAYOUT } from './host/rebuild.ts'
 export { exportSnapshot, parseSnapshot } from './host/snapshot.ts'
 
 /** The webServer service face this plugin uses (structural mirror). */
@@ -669,6 +670,12 @@ export function apply(ctx: Context): void {
 
   const initialConfig = current()
   void (async () => {
+    try {
+      const recovered = await recoverIndex(layout, log)
+      if (recovered.length > 0) log(`index recovery applied ${recovered.length} fix(es)`)
+    } catch (err) {
+      log(`index recovery failed: ${String(err instanceof Error ? err.message : err)}`)
+    }
     await engine.open().catch(() => {})
     log(`index open: driver=${engine.driverLabel} dir=${layout.dir}`)
     if (initialConfig.autoSync !== false) await state.sync.poll().catch(() => {})
