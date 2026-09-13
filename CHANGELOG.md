@@ -4,6 +4,14 @@
 
 ## Unreleased
 
+### 优化：检索管线重构（分词 / 存储 / 查询路径）
+
+- **Intl.Segmenter 词级分词替代 trigram**：抽取文本按 ICU 词边界空格分隔后进 FTS5 unicode61，查询侧走同一分词。索引体积从 trigram 的全 3 字符窗口降到词级 token（预计 1/4 量级）；2 字短查询从"LIKE 全表扫"恢复为正常索引查询；部分输入用尾词 `*` 前缀命中（"正在搜"→ 正在搜索）；跨词碎片不再误中（精度提升）。
+- **FTS5 external content**：FTS 虚表改为 `content='docs'` 外部内容模式（`index_text` 分词列 + 原文 `text` 列），倒排不再复制全文，存储再省约一半；增删通过 `docs_fts 'delete'` 命令维护一致性。
+- **查询路径去重载**：MATCH 限 rank 的子查询 rowid 直接对齐 `docs.doc_id`，单条语句完成检索 + 类型/表面过滤，去掉每次按键 5000 参数的 `IN (...)` 二次查询。
+- 索引 schema v3：旧索引打开时自动重置，水位同步会在下次轮询自动重灌，无需手动整理。
+- tests：新增分词语义回归（短查询/前缀/精度），7/7。
+
 ### 重构：独立设置卡片（thinking-levels 模式）
 
 - **`settings.plugin.item` 独立卡片**：新增插件自己的设置卡片（双 `id`+`key` 注册，兼容 CLI dsh 的 keyed 槽位与 DSH Desktop 的 list 槽位），替代原 `settings.general.item` 通用行及其本地 store 座位。卡片绑定 `switch-search` 设置命名空间，`useSyncExternalStore` 订阅、`scope.set` 即时提交（无暂存表单）。

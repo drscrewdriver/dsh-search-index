@@ -7,7 +7,7 @@
  */
 import type { DatabaseSync } from 'node:sqlite';
 /** Current switch-search index schema version. Incompatible versions reset in place. */
-export declare const SWITCH_SEARCH_SCHEMA_VERSION = 2;
+export declare const SWITCH_SEARCH_SCHEMA_VERSION = 3;
 /** Application id marking files owned by this plugin's index (ASCII "SWIS"). */
 export declare const SWITCH_SEARCH_APPLICATION_ID = 1398229332;
 /** The official derived-index application id this plugin must never touch. */

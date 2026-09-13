@@ -4,10 +4,16 @@
  * Owns one node:sqlite handle (the plugin's own file, never the official
  * session-query index), ingests complete session logs, and answers
  * session-grouped full-text queries with the strongest per-session hit.
+ *
+ * Search pipeline: text is word-segmented with Intl.Segmenter and stored in
+ * the docs.index_text column; an external-content FTS5 (unicode61) virtual
+ * table builds its inverted index from that column without duplicating text
+ * storage. Queries run through the same segmentation, so CJK matches on word
+ * boundaries with a trailing-token prefix for partial input.
  */
 import type { DatabaseSync } from 'node:sqlite'
 import { openIndexDatabase } from './schema.ts'
-import { buildIndexDocuments, type SwitchRawEvent } from './extract.ts'
+import { buildIndexDocuments, segmentForIndex, segmentQueryTerm, type SwitchRawEvent } from './extract.ts'
 
 /** One indexed session header row. */
 export interface SwitchIndexedSession {
@@ -54,35 +60,23 @@ const SNIPPET_CHARS = 240
 const MATCH_SCAN_LIMIT = 5000
 
 /**
- * Run one function inside an IMMEDIATE transaction.
- * node:sqlite has no cursor-level begin helper; statements are executed raw.
- */
-function withTransaction<T>(db: DatabaseSync, fn: () => T): T {
-  db.exec('BEGIN IMMEDIATE')
-  try {
-    const result = fn()
-    db.exec('COMMIT')
-    return result
-  } catch (error) {
-    try { db.exec('ROLLBACK') } catch { /* rollback of a broken txn is best-effort */ }
-    throw error
-  }
-}
-
-/**
- * Sanitize free text into safe FTS5 trigram terms: each whitespace term is
- * double-quoted (internal quotes doubled), terms AND together.
- * Terms shorter than the trigram size are dropped from the FTS expression.
+ * Sanitize free text into a safe FTS5 query over the segmented index: each
+ * whitespace term is segmented into word tokens, quoted as an adjacent
+ * phrase, and the last token carries a prefix `*` so partial input matches
+ * ("正在搜" hits 正在搜索). Terms AND together.
  */
 export function sanitizeFtsQuery(query: string): string {
-  return query.split(/\s+/u).filter(term => [...term].length >= 3)
-    .map(term => `"${term.replace(/"/g, '""')}"`)
-    .join(' ')
-}
-
-/** Extract quoted literal terms for the LIKE fallback (short queries). */
-export function likeTerms(query: string): string[] {
-  return query.split(/\s+/u).filter(Boolean)
+  const terms = query.split(/\s+/u).filter(Boolean)
+  if (terms.length === 0) return ''
+  const phrases: string[] = []
+  for (const term of terms) {
+    const words = segmentQueryTerm(term)
+      .map(word => word.replace(/"/g, '""'))
+      .filter(word => word !== '')
+    if (words.length === 0) continue
+    phrases.push(`"${words.join(' ')}"*`)
+  }
+  return phrases.join(' ')
 }
 
 /** Build a snippet around the first term occurrence, official-route aligned. */
@@ -104,16 +98,30 @@ export function buildSnippet(text: string, query: string, max = SNIPPET_CHARS): 
   return `${head}${flat.slice(start, end)}${tail}`
 }
 
+/**
+ * Run one function inside an IMMEDIATE transaction.
+ * node:sqlite has no cursor-level begin helper; statements are executed raw.
+ */
+function withTransaction<T>(db: DatabaseSync, fn: () => T): T {
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    const result = fn()
+    db.exec('COMMIT')
+    return result
+  } catch (error) {
+    try { db.exec('ROLLBACK') } catch { /* rollback of a broken txn is best-effort */ }
+    throw error
+  }
+}
+
 /** Constructor options for one engine instance. */
 export interface SwitchIndexEngineOptions {
   /** Absolute path of the index file this engine owns. */
   path: string
 }
 
-/**
- * One open index handle. All mutating calls are synchronous; callers pace
- * them off the HTTP hot path (background sync / rebuild tasks).
- */
+/** One open index handle. All mutating calls are synchronous; callers pace
+ * them off the HTTP hot path (background sync / rebuild tasks). */
 export class SwitchIndexEngine {
   private db: DatabaseSync | undefined
 
@@ -136,6 +144,16 @@ export class SwitchIndexEngine {
     this.db = undefined
   }
 
+  /** Remove one session's FTS entries for external-content bookkeeping. */
+  private deleteSessionFts(db: DatabaseSync, sessionId: string): void {
+    const existing = db.prepare('SELECT doc_id, index_text FROM docs WHERE session_id = ?')
+      .all(sessionId) as { doc_id: number | bigint; index_text: string }[]
+    const deleteFts = db.prepare(`
+      INSERT INTO docs_fts(docs_fts, rowid, index_text) VALUES ('delete', ?, ?)
+    `)
+    for (const row of existing) deleteFts.run(Number(row.doc_id), row.index_text)
+  }
+
   /** Insert or replace one session's documents and header row. */
   upsertSession(input: {
     sessionId: string
@@ -148,17 +166,19 @@ export class SwitchIndexEngine {
     const db = this.requireDb()
     const documents = buildIndexDocuments(input.sessionId, input.events)
     withTransaction(db, () => {
-      db.prepare('DELETE FROM docs_fts WHERE doc_id IN (SELECT doc_id FROM docs WHERE session_id = ?)')
-        .run(input.sessionId)
+      this.deleteSessionFts(db, input.sessionId)
       db.prepare('DELETE FROM docs WHERE session_id = ?').run(input.sessionId)
       const insertDoc = db.prepare(`
-        INSERT INTO docs (session_id, seq, type, surface, time, text)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO docs (session_id, seq, type, surface, time, text, index_text)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
       `)
-      const insertFts = db.prepare('INSERT INTO docs_fts (text, doc_id) VALUES (?, ?)')
+      const insertFts = db.prepare('INSERT INTO docs_fts (rowid, index_text) VALUES (?, ?)')
       for (const doc of documents) {
-        const result = insertDoc.run(doc.sessionId, doc.seq, doc.type, doc.surface, doc.time, doc.text)
-        insertFts.run(doc.text, Number(result.lastInsertRowid))
+        const indexText = segmentForIndex(doc.text)
+        const result = insertDoc.run(
+          doc.sessionId, doc.seq, doc.type, doc.surface, doc.time, doc.text, indexText,
+        )
+        insertFts.run(Number(result.lastInsertRowid), indexText)
       }
       db.prepare(`
         INSERT INTO sessions (session_id, version, title, cwd, updated_at, indexed_at)
@@ -196,7 +216,8 @@ export class SwitchIndexEngine {
 
   /**
    * Insert or replace one session from already-extracted documents
-   * (snapshot import face; no re-extraction, what was exported is restored).
+   * (snapshot import face; no re-extraction, what was exported is restored;
+   * segmentation is recomputed for the current index format).
    */
   importSessionDocs(input: {
     sessionId: string
@@ -206,17 +227,19 @@ export class SwitchIndexEngine {
   }): void {
     const db = this.requireDb()
     withTransaction(db, () => {
-      db.prepare('DELETE FROM docs_fts WHERE doc_id IN (SELECT doc_id FROM docs WHERE session_id = ?)')
-        .run(input.sessionId)
+      this.deleteSessionFts(db, input.sessionId)
       db.prepare('DELETE FROM docs WHERE session_id = ?').run(input.sessionId)
       const insertDoc = db.prepare(`
-        INSERT INTO docs (session_id, seq, type, surface, time, text)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO docs (session_id, seq, type, surface, time, text, index_text)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
       `)
-      const insertFts = db.prepare('INSERT INTO docs_fts (text, doc_id) VALUES (?, ?)')
+      const insertFts = db.prepare('INSERT INTO docs_fts (rowid, index_text) VALUES (?, ?)')
       for (const doc of input.docs) {
-        const result = insertDoc.run(input.sessionId, doc.seq, doc.type, doc.surface, doc.time, doc.text)
-        insertFts.run(doc.text, Number(result.lastInsertRowid))
+        const indexText = segmentForIndex(doc.text)
+        const result = insertDoc.run(
+          input.sessionId, doc.seq, doc.type, doc.surface, doc.time, doc.text, indexText,
+        )
+        insertFts.run(Number(result.lastInsertRowid), indexText)
       }
       db.prepare(`
         INSERT INTO sessions (session_id, version, title, updated_at, indexed_at)
@@ -230,10 +253,10 @@ export class SwitchIndexEngine {
   }
 
   /** Remove one session and its documents entirely. */
-  removeSession(sessionId: string): void {    const db = this.requireDb()
+  removeSession(sessionId: string): void {
+    const db = this.requireDb()
     withTransaction(db, () => {
-      db.prepare('DELETE FROM docs_fts WHERE doc_id IN (SELECT doc_id FROM docs WHERE session_id = ?)')
-        .run(sessionId)
+      this.deleteSessionFts(db, sessionId)
       db.prepare('DELETE FROM docs WHERE session_id = ?').run(sessionId)
       db.prepare('DELETE FROM sessions WHERE session_id = ?').run(sessionId)
     })
@@ -285,6 +308,10 @@ export class SwitchIndexEngine {
 
   /**
    * Run one session-grouped full-text search.
+   *
+   * One statement: the FTS match is bounded by rank in a subquery (its rowid
+   * aligns with docs.doc_id), then the type/surface filters join in — no
+   * second round-trip, no large IN parameter lists.
    * @param request - query text, coarse type filter, page size.
    * @returns hits ranked by strongest per-session match.
    */
@@ -295,88 +322,35 @@ export class SwitchIndexEngine {
   }): SwitchSearchHit[] {
     const db = this.requireDb()
     const match = sanitizeFtsQuery(request.query)
+    if (match === '') return []
+    const limit = Math.min(Math.max(1, request.limit ?? 20), 100)
     const types = resolveTypes(request.types)
     const placeholders = types.map(() => '?').join(', ')
-    const limit = Math.min(Math.max(1, request.limit ?? 20), 100)
-
-    // Trigram MATCH needs >= 3 characters per term; shorter queries fall back
-    // to a bounded LIKE scan over the docs table.
-    const docs: {
+    const docs = db.prepare(`
+      SELECT d.doc_id AS docId, d.session_id AS sessionId, d.seq, d.type, d.time, d.text,
+             s.title, f.rank AS ftsRank
+      FROM (
+        SELECT rowid, rank FROM docs_fts WHERE docs_fts MATCH ? ORDER BY rank LIMIT ?
+      ) f
+      JOIN docs d ON d.doc_id = f.rowid
+      JOIN sessions s ON s.session_id = d.session_id
+      WHERE d.type IN (${placeholders}) AND d.surface = 'current'
+    `).all(match, MATCH_SCAN_LIMIT, ...types) as {
       docId: number | bigint
       sessionId: string
       seq: number
       type: string
-      surface: string
       time: number
       text: string
       title: string
-      rank: number
-    }[] = []
-    if (match !== '') {
-      const rows = db.prepare(`
-        SELECT f.doc_id AS docId, f.rank AS ftsRank
-        FROM docs_fts f
-        WHERE docs_fts MATCH ?
-        ORDER BY ftsRank
-        LIMIT ?
-      `).all(match, MATCH_SCAN_LIMIT) as { docId: number | bigint; ftsRank: number }[]
-      if (rows.length === 0) return []
-      const rankByDocId = new Map<number, number>(rows.map(row => [Number(row.docId), Number(row.ftsRank)]))
-      const docIds = rows.map(row => Number(row.docId))
-      const idPlaceholders = docIds.map(() => '?').join(', ')
-      const fetched = db.prepare(`
-        SELECT d.doc_id AS docId, d.session_id AS sessionId, d.seq, d.type, d.surface, d.time, d.text,
-               s.title
-        FROM docs d
-        JOIN sessions s ON s.session_id = d.session_id
-        WHERE d.doc_id IN (${idPlaceholders})
-          AND d.type IN (${placeholders})
-          AND d.surface = 'current'
-      `).all(...docIds, ...types) as {
-        docId: number | bigint
-        sessionId: string
-        seq: number
-        type: string
-        surface: string
-        time: number
-        text: string
-        title: string
-      }[]
-      for (const doc of fetched) {
-        docs.push({ ...doc, rank: rankByDocId.get(Number(doc.docId)) ?? 0 })
-      }
-    } else {
-      const terms = likeTerms(request.query)
-      const conditions = terms.map(() => "LOWER(d.text) LIKE ? ESCAPE '\\'").join(' AND ')
-      const patterns = terms.map(term => `%${term.toLowerCase().replace(/[%_\\]/g, '\\$&')}%`)
-      const fallbackLimit = MATCH_SCAN_LIMIT
-      const fetched = db.prepare(`
-        SELECT d.doc_id AS docId, d.session_id AS sessionId, d.seq, d.type, d.surface, d.time, d.text,
-               s.title
-        FROM docs d
-        JOIN sessions s ON s.session_id = d.session_id
-        WHERE d.surface = 'current' AND d.type IN (${placeholders})
-          ${terms.length > 0 ? `AND ${conditions}` : ''}
-        LIMIT ?
-      `).all(...types, ...patterns, fallbackLimit) as {
-        docId: number | bigint
-        sessionId: string
-        seq: number
-        type: string
-        surface: string
-        time: number
-        text: string
-        title: string
-      }[]
-      for (const doc of fetched) docs.push({ ...doc, rank: 0 })
-    }
-    if (docs.length === 0) return []
+      ftsRank: number
+    }[]
     // Group by session; strongest hit = best weighted rank (bm25 rank is
-    // negative-better, so weight scales its magnitude; LIKE hits rank 0).
+    // negative-better, so weight scales its magnitude).
     const bestBySession = new Map<string, { doc: typeof docs[number]; score: number }>()
     for (const doc of docs) {
       const weight = TYPE_WEIGHT[doc.type] ?? 1
-      const score = -doc.rank * weight
+      const score = -Number(doc.ftsRank) * weight
       const best = bestBySession.get(doc.sessionId)
       if (best === undefined || score > best.score) bestBySession.set(doc.sessionId, { doc, score })
     }

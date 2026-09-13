@@ -31,6 +31,45 @@ export interface SwitchIndexDoc {
   text: string
 }
 
+/**
+ * ICU word segmenter shared by index and query paths (Node >= 16 / all evergreen
+ * browsers, zero dependency). 'zh' sensitivity keeps CJK word granularity.
+ */
+const SEGMENTER = typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function'
+  ? new Intl.Segmenter('zh', { granularity: 'word' })
+  : undefined
+
+/**
+ * Space-separate word boundaries so the FTS5 unicode61 tokenizer indexes
+ * words instead of whole CJK runs: the index and query sides must apply the
+ * exact same segmentation for a token to meet its match.
+ * @param text - raw extracted text (or a query term).
+ * @returns text with a single space at every word boundary.
+ */
+export function segmentForIndex(text: string): string {
+  if (SEGMENTER === undefined) return text
+  const parts: string[] = []
+  for (const { segment } of SEGMENTER.segment(text)) {
+    const piece = segment.trim()
+    if (piece !== '') parts.push(piece)
+  }
+  return parts.join(' ')
+}
+
+/**
+ * Segment one whitespace-delimited query term into FTS5 phrase tokens.
+ * @returns word-like segments, or the raw term when segmentation is unavailable.
+ */
+export function segmentQueryTerm(term: string): string[] {
+  if (SEGMENTER === undefined) return [term]
+  const words: string[] = []
+  for (const { segment, isWordLike } of SEGMENTER.segment(term)) {
+    const piece = segment.trim()
+    if (piece !== '' && isWordLike === true) words.push(piece)
+  }
+  return words.length > 0 ? words : [term]
+}
+
 /** Whether a runtime value is a plain record. */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)

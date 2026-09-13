@@ -28,6 +28,19 @@ export interface SwitchIndexDoc {
     text: string;
 }
 /**
+ * Space-separate word boundaries so the FTS5 unicode61 tokenizer indexes
+ * words instead of whole CJK runs: the index and query sides must apply the
+ * exact same segmentation for a token to meet its match.
+ * @param text - raw extracted text (or a query term).
+ * @returns text with a single space at every word boundary.
+ */
+export declare function segmentForIndex(text: string): string;
+/**
+ * Segment one whitespace-delimited query term into FTS5 phrase tokens.
+ * @returns word-like segments, or the raw term when segmentation is unavailable.
+ */
+export declare function segmentQueryTerm(term: string): string[];
+/**
  * Extract searchable semantic text from one raw session event.
  * @param event - event to inspect.
  * @returns newline-joined semantic text, or an empty string when non-searchable.

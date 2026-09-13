@@ -20,13 +20,12 @@ export interface SwitchSearchHit {
 /** Coarse type-filter buckets mapped onto raw session event types. */
 export type SwitchIndexContentType = 'all' | 'user' | 'reply' | 'tool';
 /**
- * Sanitize free text into safe FTS5 trigram terms: each whitespace term is
- * double-quoted (internal quotes doubled), terms AND together.
- * Terms shorter than the trigram size are dropped from the FTS expression.
+ * Sanitize free text into a safe FTS5 query over the segmented index: each
+ * whitespace term is segmented into word tokens, quoted as an adjacent
+ * phrase, and the last token carries a prefix `*` so partial input matches
+ * ("正在搜" hits 正在搜索). Terms AND together.
  */
 export declare function sanitizeFtsQuery(query: string): string;
-/** Extract quoted literal terms for the LIKE fallback (short queries). */
-export declare function likeTerms(query: string): string[];
 /** Build a snippet around the first term occurrence, official-route aligned. */
 export declare function buildSnippet(text: string, query: string, max?: number): string;
 /** Constructor options for one engine instance. */
@@ -34,10 +33,8 @@ export interface SwitchIndexEngineOptions {
     /** Absolute path of the index file this engine owns. */
     path: string;
 }
-/**
- * One open index handle. All mutating calls are synchronous; callers pace
- * them off the HTTP hot path (background sync / rebuild tasks).
- */
+/** One open index handle. All mutating calls are synchronous; callers pace
+ * them off the HTTP hot path (background sync / rebuild tasks). */
 export declare class SwitchIndexEngine {
     private readonly options;
     private db;
@@ -48,6 +45,8 @@ export declare class SwitchIndexEngine {
     open(): Promise<void>;
     /** Close the handle. Idempotent. */
     close(): void;
+    /** Remove one session's FTS entries for external-content bookkeeping. */
+    private deleteSessionFts;
     /** Insert or replace one session's documents and header row. */
     upsertSession(input: {
         sessionId: string;
@@ -67,7 +66,8 @@ export declare class SwitchIndexEngine {
     }[];
     /**
      * Insert or replace one session from already-extracted documents
-     * (snapshot import face; no re-extraction, what was exported is restored).
+     * (snapshot import face; no re-extraction, what was exported is restored;
+     * segmentation is recomputed for the current index format).
      */
     importSessionDocs(input: {
         sessionId: string;
@@ -98,6 +98,10 @@ export declare class SwitchIndexEngine {
     countSessions(): number;
     /**
      * Run one session-grouped full-text search.
+     *
+     * One statement: the FTS match is bounded by rank in a subquery (its rowid
+     * aligns with docs.doc_id), then the type/surface filters join in — no
+     * second round-trip, no large IN parameter lists.
      * @param request - query text, coarse type filter, page size.
      * @returns hits ranked by strongest per-session match.
      */

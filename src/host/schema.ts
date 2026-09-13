@@ -10,7 +10,7 @@ import { mkdir } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 
 /** Current switch-search index schema version. Incompatible versions reset in place. */
-export const SWITCH_SEARCH_SCHEMA_VERSION = 2
+export const SWITCH_SEARCH_SCHEMA_VERSION = 3
 
 /** Application id marking files owned by this plugin's index (ASCII "SWIS"). */
 export const SWITCH_SEARCH_APPLICATION_ID = 0x53574954
@@ -87,10 +87,17 @@ function ensureSchema(db: DatabaseSync): void {
       type TEXT NOT NULL,
       surface TEXT NOT NULL,
       time INTEGER NOT NULL,
-      text TEXT NOT NULL
+      text TEXT NOT NULL,
+      index_text TEXT NOT NULL DEFAULT ''
     );
     CREATE UNIQUE INDEX IF NOT EXISTS docs_session_seq ON docs(session_id, seq);
-    CREATE VIRTUAL TABLE IF NOT EXISTS docs_fts USING fts5(text, doc_id UNINDEXED, tokenize = 'trigram');
+    CREATE INDEX IF NOT EXISTS docs_session ON docs(session_id);
+    CREATE VIRTUAL TABLE IF NOT EXISTS docs_fts USING fts5(
+      index_text,
+      content = 'docs',
+      content_rowid = 'doc_id',
+      tokenize = 'unicode61'
+    );
   `)
   db.exec(`PRAGMA application_id = ${SWITCH_SEARCH_APPLICATION_ID}`)
   db.exec(`PRAGMA user_version = ${SWITCH_SEARCH_SCHEMA_VERSION}`)

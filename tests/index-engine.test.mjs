@@ -181,6 +181,32 @@ test('snapshot: export → parse → import round-trips the hits', async () => {
   target.close()
 })
 
+test('engine: Intl.Segmenter word semantics (short query, precision, prefix)', async () => {
+  const dir = tempDir('segmenter')
+  const engine = new SwitchIndexEngine({ path: join(dir, 'index.sqlite') })
+  await engine.open()
+  engine.upsertSession({
+    sessionId: 's1', version: 1, title: '会话一',
+    events: [userMessage(0, '帮我修复登录超时的 bug'), assistantMessage(1, '正在搜索会话历史进行诊断')],
+  })
+
+  // 2-char short query: word segmentation matches where trigram could not.
+  assert.equal(engine.search({ query: '超时' }).length, 1)
+
+  // Partial input: trailing prefix matches the word being typed.
+  const partial = engine.search({ query: '正在搜' })
+  assert.equal(partial.length, 1)
+  assert.equal(partial[0].seq, 1)
+
+  // Cross-word fragments are NOT matches: precision, not substring noise.
+  assert.equal(engine.search({ query: '登超' }).length, 0)
+
+  // Unrelated raw FTS syntax stays inert.
+  assert.equal(engine.search({ query: '"NOT" AND (syntax)' }).length, 0)
+
+  engine.close()
+})
+
 test('snapshot: malformed lines are skipped, not fatal', async () => {
   const { parseSnapshot } = await import('../lib/index.mjs')
   const parsed = parseSnapshot([
