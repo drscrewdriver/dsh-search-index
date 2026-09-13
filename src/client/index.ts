@@ -533,10 +533,15 @@ export function apply(ctx: Context): void {
 
   const slots = ctx.get('slots') as SwitchSlotsService | undefined
   if (slots === undefined) return
-  const sessions = ctx.get('sessions') as SwitchSessionsService | undefined
-  const open = sessions === undefined || typeof sessions.open !== 'function'
-    ? (): void => {}
-    : (sessionId: string): void => { sessions.open(sessionId) }
+  // Session opening resolves lazily at click time: this plugin applies before
+  // the session-controller client module in the load order, so an eager
+  // ctx.get('sessions') captured undefined and every result click silently
+  // no-op'd. The service is a root-context singleton; by the time a user
+  // clicks a hit it is always mounted.
+  const open = (sessionId: string): void => {
+    const sessions = ctx.get('sessions') as SwitchSessionsService | undefined
+    if (sessions !== undefined && typeof sessions.open === 'function') sessions.open(sessionId)
+  }
 
   // The sidebar footer entry: the search panel (title/content toggle).
   slots.inject('sidebar.footer.action', () => slots.register(
