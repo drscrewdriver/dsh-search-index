@@ -4,6 +4,13 @@
 
 ## Unreleased
 
+### 新增：归档批量清理（管理面板）
+
+- 归档面板新增批量管理模式：全选/勾选归档会话 → **JS confirm 确认**（列出将移除的 id 摘要）→ `archive-prune` API 从规范存储 `~/.dsh/storages/workspace.json` 的 `global.archivedSessionIds` 数组中批量移除。
+- 写入遵循官方 storage-json 协议：**先备份（workspace.json.bak-<ts>）再原子替换**（同目录临时文件 + rename），序列化格式与官方一致（2 空格 + 尾换行）；单次上限 5000 个 id。
+- 移除后插件索引**立即解除软删标记**（version=-1，下一轮水位同步重灌仍存在的会话）；运行中的 DSH 内存态在**重启后**才加载新数组——面板与日志均明确提示。
+- tests：prune 备份/原子写/无残留/未知 id 幂等，全套 17/17。
+
 ### 优化：重建可观测性 + 批事务加速 + 可选 better-sqlite3 驱动
 
 - **进度把控修复**：整理进度原先只在完成后上报（面板一直 "0/?"），改为状态 Sink——index-status 即时反映 done/total/阶段。

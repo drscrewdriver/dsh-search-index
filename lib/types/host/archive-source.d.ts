@@ -19,6 +19,24 @@ export interface SwitchArchiveDiagnostics {
  * @returns the archive ids plus which source served them.
  */
 export declare function readArchiveSet(registry?: SwitchRegistryFace): SwitchArchiveRead;
+/**
+ * Remove session ids from the storage hub's global.archivedSessionIds.
+ *
+ * The official backend exposes no unarchive endpoint, so the canonical file
+ * is edited directly, following storage-json's own protocol: backup, atomic
+ * same-directory temp write, rename. The running host keeps the set in
+ * memory and only reloads it at boot — the caller must surface that a DSH
+ * restart is required. Our own index un-flags immediately so the next
+ * watermark pass re-ingests any session whose log still exists.
+ * @param ids - session ids to remove from the archive array.
+ * @param log - optional log sink.
+ * @returns how many ids were actually removed and the remaining count.
+ */
+export declare function pruneArchiveFile(ids: readonly string[], log?: (msg: string) => void, searchPaths?: readonly string[]): {
+    removed: number;
+    remaining: number;
+    file?: string;
+};
 /** Build the lazy source face the syncer expects, with diagnostics capture. */
 export declare function createArchiveSource(getRegistry: () => SwitchRegistryFace | undefined): {
     read: () => SwitchArchiveRead;

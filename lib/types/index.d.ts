@@ -23,6 +23,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { SwitchIndexEngine } from './host/engine.ts';
 import { SwitchWatermarkSync } from './host/sync.ts';
 import { createArchiveSource } from './host/archive-source.ts';
+export { createArchiveSource, pruneArchiveFile, type SwitchArchiveDiagnostics } from './host/archive-source.ts';
 import { type SwitchIndexLayout, type SwitchRebuildState } from './host/rebuild.ts';
 import type { SwitchRawEvent } from './host/extract.ts';
 import { type SwitchSearchConfig } from './config.ts';

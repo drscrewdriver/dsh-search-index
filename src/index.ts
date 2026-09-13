@@ -22,7 +22,8 @@ import z from '@deepseek-ai/schemastery'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { SwitchIndexEngine, type SwitchIndexContentType } from './host/engine.ts'
 import { SwitchWatermarkSync, type SwitchSyncState } from './host/sync.ts'
-import { createArchiveSource, type SwitchArchiveDiagnostics } from './host/archive-source.ts'
+import { createArchiveSource, pruneArchiveFile, type SwitchArchiveDiagnostics } from './host/archive-source.ts'
+export { createArchiveSource, pruneArchiveFile, type SwitchArchiveDiagnostics } from './host/archive-source.ts'
 import {
   DEFAULT_INDEX_LAYOUT,
   importIntoIndex,
@@ -480,6 +481,38 @@ async function indexRebuild(runtime: SwitchRuntime): Promise<{ ok: boolean; star
   return { ok: true, started: true }
 }
 
+/**
+ * archive-prune: batch-remove session ids from the official archive array.
+ * Edits the canonical storage file (backup + atomic replace); the running
+ * host reloads it only at boot, so the caller must restart DSH afterwards.
+ * Our index un-flags the pruned ids immediately (version=-1) so the next
+ * watermark pass re-ingests any whose logs still exist.
+ */
+async function archivePrune(runtime: SwitchRuntime, payload: unknown): Promise<unknown> {
+  const record = payload as { sessionIds?: unknown } | null
+  if (!Array.isArray(record?.sessionIds) || record.sessionIds.length === 0) {
+    return { ok: false, error: '缺少 sessionIds 数组' }
+  }
+  const ids = [...new Set(record.sessionIds.filter((id): id is string => typeof id === 'string' && id !== ''))]
+  if (ids.length === 0) return { ok: false, error: 'sessionIds 无有效值' }
+  if (ids.length > 5000) return { ok: false, error: '单次最多清理 5000 个' }
+  let result
+  try {
+    result = pruneArchiveFile(ids, runtime.log)
+  } catch (err) {
+    return { ok: false, error: String(err instanceof Error ? err.message : err) }
+  }
+  // Mirror the pruned set into our index right away: recompute from the
+  // (post-prune) archive source so un-flagged sessions get version=-1.
+  try {
+    runtime.index.engine.setArchived(new Set(runtime.registry().archivedSessionIds))
+  } catch (err) {
+    runtime.log?.(`archive prune: index un-flag failed: ${String(err instanceof Error ? err.message : err)}`)
+  }
+  runtime.log?.(`archive prune requested ${ids.length}, removed ${result.removed}, remaining ${result.remaining}`)
+  return { ok: true, removed: result.removed, remaining: result.remaining, requiresRestart: true }
+}
+
 /** list-archived: the official archive set as seen by the index. */
 async function listArchived(runtime: SwitchRuntime): Promise<{ ok: boolean; items?: unknown[]; error?: string }> {
   const index = runtime.index
@@ -697,6 +730,10 @@ export function apply(ctx: Context): void {
         }
         if (method === 'list-archived') {
           writeJson(res, 200, await listArchived(runtime))
+          return
+        }
+        if (method === 'archive-prune') {
+          writeJson(res, 200, await archivePrune(runtime, payload))
           return
         }
         writeJson(res, 404, { ok: false, error: `unknown switch-search API method "${method}"` })
