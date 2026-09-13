@@ -86,6 +86,12 @@ export declare class SwitchWatermarkSync {
      */
     poll(): Promise<SwitchSyncState>;
     private runPass;
+    /**
+     * Fold titles for archived header-only rows that never got one (archived
+     * before first indexing). Bounded: only rows with an empty title, and the
+     * title fold reads the log without ingesting content.
+     */
+    private backfillArchivedTitles;
     /** Fold latest titles for changed sessions into the index header rows. */
     private backfillTitles;
 }

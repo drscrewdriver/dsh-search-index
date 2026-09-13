@@ -2,9 +2,10 @@
  * The archived-sessions viewer — a read-only centered dialog over the
  * official archive set as mirrored by the independent index.
  *
- * The official backend has no unarchive endpoint (workspace-controller ships
- * only archiveSession), so the panel browses and opens; it never mutates.
- * Shared by the search panel's footer entry and the settings card.
+ * Rows are informational only (uuid + cached title): archived sessions are
+ * gone from the user's active system, so there is nothing to open — the
+ * panel never navigates and never mutates. Shared by the search panel's
+ * footer entry and the settings card.
  */
 import { createElement, useEffect, useState, type ReactElement } from 'react'
 import { createPortal } from 'react-dom'
@@ -18,16 +19,13 @@ export type ArchiveLocale = (key: LocaleKey, params?: Record<string, unknown>) =
  * The archived-sessions viewer.
  * @param props.t - optional host dictionary lookup.
  * @param props.onClose - close the dialog.
- * @param props.open - open a session by id (lazy sessions-service resolution).
  */
 export function ArchivePanel({
   t,
   onClose,
-  open,
 }: {
   t?: ArchiveLocale
   onClose: () => void
-  open: (sessionId: string) => void
 }): ReactElement {
   const [items, setItems] = useState<HostSessionItem[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -73,19 +71,16 @@ export function ArchivePanel({
     children.push(createElement('ul', {
       key: 'list',
       className: 'dsws_list',
-      role: 'listbox',
+      role: 'list',
       'aria-label': translate(t, 'panel.archived'),
-    }, items.map(item => createElement('li', { key: item.sessionId, role: 'option' }, createElement('button', {
-      type: 'button',
-      className: 'dsws_row',
-      onClick: () => { open(item.sessionId) },
-    }, [
+    }, items.map(item => createElement('li', { key: item.sessionId, className: 'dsws_row dsws_archRow' }, [
       createElement('span', { key: 't', className: 'dsws_rowTitle' }, [
         createElement('span', { key: 'x', className: 'dsws_titleText' }, item.title || translate(t, 'panel.untitled')),
         createElement('span', { key: 'tag', className: 'dsws_tag' }, fmtTime(item.updatedAt)),
       ]),
       item.cwd !== '' && createElement('span', { key: 'c', className: 'dsws_meta' }, item.cwd),
-    ])))))
+      createElement('span', { key: 'id', className: 'dsws_meta dsws_uuid' }, item.sessionId),
+    ]))))
   }
 
   return createPortal(createElement('div', { key: 'archive-root' }, [

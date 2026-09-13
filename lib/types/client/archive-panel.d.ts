@@ -2,9 +2,10 @@
  * The archived-sessions viewer — a read-only centered dialog over the
  * official archive set as mirrored by the independent index.
  *
- * The official backend has no unarchive endpoint (workspace-controller ships
- * only archiveSession), so the panel browses and opens; it never mutates.
- * Shared by the search panel's footer entry and the settings card.
+ * Rows are informational only (uuid + cached title): archived sessions are
+ * gone from the user's active system, so there is nothing to open — the
+ * panel never navigates and never mutates. Shared by the search panel's
+ * footer entry and the settings card.
  */
 import { type ReactElement } from 'react';
 import { type LocaleKey } from './locales.ts';
@@ -14,11 +15,9 @@ export type ArchiveLocale = (key: LocaleKey, params?: Record<string, unknown>) =
  * The archived-sessions viewer.
  * @param props.t - optional host dictionary lookup.
  * @param props.onClose - close the dialog.
- * @param props.open - open a session by id (lazy sessions-service resolution).
  */
-export declare function ArchivePanel({ t, onClose, open, }: {
+export declare function ArchivePanel({ t, onClose, }: {
     t?: ArchiveLocale;
     onClose: () => void;
-    open: (sessionId: string) => void;
 }): ReactElement;
 //# sourceMappingURL=archive-panel.d.ts.map

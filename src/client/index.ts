@@ -163,6 +163,9 @@ const CSS = `
 .dsws_linkBtn:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .dsws_dialogHead{flex:none;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 12px 0}
 .dsws_dialogTitle{color:var(--dsw-alias-label-primary);font-size:14px;font-weight:600;line-height:22px}
+.dsws_archRow{cursor:default}
+.dsws_archRow:hover{background:transparent}
+.dsws_uuid{font-family:var(--ds-font-family-code,monospace);font-size:11px;user-select:text}
 .dsws_pill{flex:none;display:inline-grid;grid-template-columns:14px max-content;align-items:center;column-gap:4px;height:26px;padding:0 10px;box-sizing:border-box;border:none;border-radius:8px;font-size:12px;font-weight:500;line-height:18px;white-space:nowrap;transition:background-color 160ms ease-out,color 160ms ease-out}
 .dsws_pill .dsws_pillIcon{display:grid;place-items:center;width:14px;height:14px}
 .dsws_pill .dsws_pillLabel{display:grid;text-align:left}
@@ -491,11 +494,7 @@ function SwitchFooter({
     openArchive && createElement(ArchivePanel, {
       key: 'archive',
       t,
-      onClose: closeAll,
-      open: (sessionId: string) => {
-        closeAll()
-        open(sessionId)
-      },
+      onClose: () => { setOpenArchive(false) },
     }),
   ])
 }
@@ -522,10 +521,6 @@ function SwitchArchiveFooter({
       key: 'archive',
       t,
       onClose: () => { setOpenArchive(false) },
-      open: (sessionId: string) => {
-        setOpenArchive(false)
-        open(sessionId)
-      },
     }),
   ])
 }

@@ -356,7 +356,6 @@ function IndexBlock(props: { t?: SearchSettingsCardProps['t']; openSession?: (se
     archiveOpen && createPortal(createElement(ArchivePanel, {
       t,
       onClose: () => { setArchiveOpen(false) },
-      open: (sessionId: string) => { props.openSession?.(sessionId) },
     }), document.body),
   ])
 }

@@ -143,6 +143,7 @@ export class SwitchWatermarkSync {
         if (!corpusIds.has(indexed.sessionId)) this.engine.removeSession(indexed.sessionId)
       }
       await this.backfillTitles(changedIds)
+      await this.backfillArchivedTitles()
       this.state.updated = updated
       this.state.failures = failures
       this.state.indexed = this.engine.countSessions()
@@ -156,6 +157,31 @@ export class SwitchWatermarkSync {
       this.log?.(`sync pass FAILED: ${this.state.error}`)
     }
     return this.snapshot()
+  }
+
+  /**
+   * Fold titles for archived header-only rows that never got one (archived
+   * before first indexing). Bounded: only rows with an empty title, and the
+   * title fold reads the log without ingesting content.
+   */
+  private async backfillArchivedTitles(): Promise<void> {
+    const readTitles = this.sessionQuery.readTitleSnapshots
+    if (readTitles === undefined) return
+    const missing = this.engine.listArchived().filter(session => session.title.trim() === '')
+    if (missing.length === 0) return
+    try {
+      const observations = await readTitles(missing.map(session => session.sessionId))
+      for (const observation of observations) {
+        if (observation.status !== 'fulfilled' || observation.value === undefined) continue
+        const title = observation.value.title?.title
+        if (typeof title === 'string' && title.trim().length > 0) {
+          this.engine.updateSessionHeader({ sessionId: observation.value.session.id, title })
+        }
+      }
+      this.log?.(`archived title backfill: ${missing.length} rows processed`)
+    } catch (err) {
+      this.log?.(`archived title backfill failed: ${String(err instanceof Error ? err.message : err)}`)
+    }
   }
 
   /** Fold latest titles for changed sessions into the index header rows. */
