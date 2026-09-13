@@ -39,7 +39,9 @@ export interface SearchSettingsCardInjected {
 /** Full card props. */
 export type SearchSettingsCardProps = SearchSettingsCardInjected;
 /**
- * The settings card body: namespace fields plus the index-lifecycle block.
+ * The settings card body: a collapsed drawer shell (title + description +
+ * chevron, thinking-levels pattern) expanding into the namespace fields and
+ * the index-lifecycle block.
  * @param props - locale seat (optional) and the bound namespace scope.
  */
 export declare function SearchSettingsCard(props: SearchSettingsCardProps): JSX.Element;

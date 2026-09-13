@@ -186,21 +186,101 @@ function IndexBlock(props: { t?: SearchSettingsCardProps['t'] }): JSX.Element {
 }
 
 /**
- * The settings card body: namespace fields plus the index-lifecycle block.
+ * The settings card body: a collapsed drawer shell (title + description +
+ * chevron, thinking-levels pattern) expanding into the namespace fields and
+ * the index-lifecycle block.
  * @param props - locale seat (optional) and the bound namespace scope.
  */
 export function SearchSettingsCard(props: SearchSettingsCardProps): JSX.Element {
   const { scope } = props
   const t = props.t
+  const [open, setOpen] = useState(false)
   const snapshot = useSyncExternalStore(
     (listener) => scope.subscribe(listener),
     () => scope.getSnapshot(),
   )
 
+  const body = createCardBody({ t, snapshot, scope })
+
+  return createElement('div', {
+    style: {
+      border: '1px solid var(--dsw-alias-border-l2, rgba(127,127,127,0.35))',
+      background: 'var(--dsw-alias-bg-layer-3, rgba(127,127,127,0.05))',
+      borderRadius: '12px',
+      transition: 'border-color 0.16s, background 0.16s',
+    },
+  }, [
+    createElement('button', {
+      key: 'head',
+      type: 'button',
+      'aria-expanded': open,
+      style: {
+        appearance: 'none',
+        width: '100%',
+        font: 'inherit',
+        color: 'inherit',
+        textAlign: 'left',
+        cursor: 'pointer',
+        background: 'none',
+        border: 0,
+        borderRadius: '12px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px',
+        padding: '14px 16px',
+      },
+      onClick: () => { setOpen(current => !current) },
+    }, [
+      createElement('span', { key: 'text', style: { flex: '1 1 0%', minWidth: 0 } }, [
+        createElement('div', {
+          key: 'title',
+          style: { fontSize: '14px', fontWeight: 600, color: 'var(--dsw-alias-label-primary)' },
+        }, translate(t, 'card.title')),
+        createElement('div', {
+          key: 'desc',
+          style: { color: 'var(--dsw-alias-label-tertiary, rgba(127,127,127,0.8))', fontSize: '13px', lineHeight: 1.5 },
+        }, translate(t, 'card.description')),
+      ]),
+      createElement('svg', {
+        key: 'chev',
+        width: 16,
+        height: 16,
+        viewBox: '0 0 16 16',
+        'aria-hidden': true,
+        style: {
+          color: 'var(--dsw-alias-label-tertiary, rgba(127,127,127,0.8))',
+          flex: '0 0 auto',
+          transition: 'transform 0.16s',
+          transform: open ? 'rotate(180deg)' : 'none',
+        },
+      }, createElement('path', {
+        d: 'M4 6l4 4 4-4',
+        fill: 'none',
+        stroke: 'currentColor',
+        strokeWidth: 1.5,
+        strokeLinecap: 'round',
+        strokeLinejoin: 'round',
+      })),
+    ]),
+    open && createElement('div', { key: 'body', style: { padding: '12px 16px' } }, body),
+  ])
+}
+
+/** The card's expandable content: namespace fields plus the index block. */
+function createCardBody(props: {
+  t?: SearchSettingsCardProps['t']
+  snapshot: ReturnType<SwitchCardScope['getSnapshot']>
+  scope: SwitchCardScope
+}): JSX.Element[] {
+  const t = props.t
+  const snapshot = props.snapshot
+  const scope = props.scope
+
   if (snapshot.status === 'unavailable') {
-    return createElement('div', { className: 'dsws_setRoot' },
-      createElement('div', { className: 'dsws_setRow' },
-        createElement('span', { className: 'dsws_setTitle' }, translate(t, 'card.unavailable'))))
+    return [
+      createElement('div', { className: 'dsws_setRow', key: 'unavailable' },
+        createElement('span', { className: 'dsws_setTitle' }, translate(t, 'card.unavailable'))),
+    ]
   }
 
   const value: Partial<SwitchSearchConfig> = snapshot.value ?? {}
@@ -287,5 +367,5 @@ export function SearchSettingsCard(props: SearchSettingsCardProps): JSX.Element 
   if (!writable) {
     children.push(createElement('div', { key: 'ro', className: 'dsws_setDesc' }, translate(t, 'card.readonly')))
   }
-  return createElement('div', { className: 'dsws_setRoot' }, children)
+  return children
 }
