@@ -76,7 +76,7 @@
 # 方式一：从 GitHub 直装（推荐）——仓库已提交 lib/，无需本地构建
 dsh plugin --profile web add github:drscrewdriver/dsh-session-search-toggle#release-v0.1.0   # 稳定版
 dsh plugin --profile web add github:drscrewdriver/dsh-session-search-toggle#master          # 基线
-dsh plugin --profile web add github:drscrewdriver/dsh-session-search-toggle#feat/type-filter-search  # 最新开发
+dsh plugin --profile web add github:drscrewdriver/dsh-session-search-toggle#feat/independent-index  # 开发版（v0.1.2-beta.x：独立全文索引引擎 + 插件设置卡片）
 
 # 方式二：本地路径/源码组装（见"开发"章节）
 
@@ -86,7 +86,7 @@ dsh web
 bash ~/.dsh/profiles/web/node_modules/dsh-session-search-toggle/restart-dsh-web.sh
 ```
 
-装完侧边栏底部出现 **"搜索"** 按钮；设置 → 通用出现 **"会话搜索"** 配置行。
+装完侧边栏底部出现 **"搜索"** 按钮；安装开发版（`feat/independent-index`）后，在 **设置 → 插件 → 会话搜索** 出现独立设置卡片（含内容搜索索引的整理/导出/导入）。
 
 > ⚠️ **GitHub 网络可达性**：github: 直装需要能连通 github.com；网络受限时请先配置可用代理或镜像加速，否则 add 会在拉取阶段卡住。
 
