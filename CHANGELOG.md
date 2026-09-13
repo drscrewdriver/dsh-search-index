@@ -4,6 +4,29 @@
 
 ## Unreleased
 
+### 重构：独立设置卡片（thinking-levels 模式）
+
+- **`settings.plugin.item` 独立卡片**：新增插件自己的设置卡片（双 `id`+`key` 注册，兼容 CLI dsh 的 keyed 槽位与 DSH Desktop 的 list 槽位），替代原 `settings.general.item` 通用行及其本地 store 座位。卡片绑定 `switch-search` 设置命名空间，`useSyncExternalStore` 订阅、`scope.set` 即时提交（无暂存表单）。
+- **统一子设置面板**：启用开关、默认搜索模式、自动同步开关、同步间隔、归档保留份数，以及内容搜索索引管理区（状态、整理索引按钮、快照导出/导入）全部收敛到同一张卡片。
+- **locale 字典**：新增 `switch-search` zh/en 字典（`src/client/locales.ts`）；locale 服务在旧版 DSH 缺失时回退内置 zh 文案，settingsScope 缺失时卡片降级为只读 DEFAULT_CONFIG，不崩溃。
+- **客户端拆分**：面板/卡片共用的宿主调用与类型收敛到 `src/client/host-api.ts`；`package.json` 的 `dsh.client.inject` 增加 `@deepseek-ai/dsh-client-locale` 与 `@deepseek-ai/dsh-client-ui-settings`。
+- **测试**：`tests/client-store.test.mjs` 重写为证明新卡片座位（namespace 绑定、无 store 座位、无 settingsScope 时的降级），3/3。
+
+### 新增：独立全文索引引擎（不再依赖 DSH 官方 FTS5 索引）
+
+- **自有索引文件**：内容搜索改走插件自建索引（node:sqlite FTS5 + trigram 分词，独立 application id `0x53574954`），存放于 `~/.dsh-switch-search/`（可用配置 `indexDir` 或环境变量 `DSH_SWITCH_SEARCH_DIR` 覆盖）。官方 `session-query-sqlite` 默认 `openAt: never` 时内容搜索照常可用；官方索引文件永不打开、互不干扰。
+- **水位增量同步**：后台按 `syncIntervalMs`（默认 30s）对比会话 `version` 水位，仅对新增/变更会话调用 `readSession` 增量入库；文本抽取语义与官方 `extractSessionEventText` 对齐（user/reply/tool/todo/turn-end），并复刻 surface 折叠（编辑替换后的旧消息标记 shadowed，不参与搜索）。
+- **非破坏性整理（重建）**：面板/设置可触发"整理索引"——shadow 文件全量构建，期间旧索引持续可搜索；完成后三步原子换名切换，旧索引归档为 `index.archive-<ts>.sqlite`（保留 `archiveKeep` 份，默认 2）。
+- **JSON 快照迁移接口**：`index-export` 导出 JSON Lines 快照（每会话一行，含抽取后的文档），`index-import` 导入快照并走同一整理路径原子换入——快照同步后即可作为索引使用，实现跨机器搬家/冷备。
+- **HTTP API**：`/switch-search/api` 新增 `index-status` / `index-rebuild` / `index-export` / `index-import`；`list-sessions` 在 sessionQuery 不可用时回退读索引；全部沿用原 fence。
+- **客户端**：内容面板在索引缺失时提供"建立索引"入口并在整理期间显示进度；设置行新增"内容搜索索引"管理区（状态徽标、整理按钮、快照导出/导入）。
+- **配置**：`autoSync` / `syncIntervalMs` / `archiveKeep` / `indexDir` 全部可选带默认值，向后兼容。
+
+### 验证
+
+- `node tests/index-engine.test.mjs`：6/6（摄取与分组检索、类型过滤、FTS 语法净化、整理期间旧索引可查、损坏会话隔离、快照导出→导入 roundtrip、坏行跳过）。
+- `npm test`（`tests/client-store.test.mjs`）：9/9。
+
 ### 新增：DSH 双版本兼容（0.1.1-rc.2 / 0.1.2-rc.1）
 
 - **单一产物，运行时自适应**：同一份 `lib/client.js` 在两个版本都能加载，无版本号字符串分支。客户端 bundle 只 `require` `react` / `react-dom`，两者都在两版共享模块表内。

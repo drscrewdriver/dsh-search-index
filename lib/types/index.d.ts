@@ -1,23 +1,33 @@
 /**
  * dsh-session-search-toggle host half: one fenced HTTP route `/switch-search/api`
- * that drives the sidebar search panel's two modes:
+ * backed by the plugin's OWN full-text index (node:sqlite FTS5, a file this
+ * plugin owns — never the official session-query index, which may be absent
+ * entirely under its default `openAt: never`).
  *
  * - `list-sessions` — the title-search corpus: every session id + folded
- *   title (+ cwd/updatedAt), read through `sessionQuery` (live-preferred).
- * - `content-search` — FTS5 message-content search grouped by session: each
- *   hit is the session header plus its strongest matching event's snippet,
- *   seq, and type. This is the "switch to content mode" data source.
+ *   title (+ cwd/updatedAt), read live through `sessionQuery`, falling back to
+ *   the independent index when the live service is unavailable.
+ * - `content-search` — session-grouped message-content search over the
+ *   independent index (docs mirrored from `sessionQuery.readSession` with the
+ *   official extraction semantics).
+ * - `index-status` / `index-rebuild` / `index-export` / `index-import` —
+ *   the index lifecycle surface: watermark sync progress, the non-destructive
+ *   整理 (rebuild into a shadow file + atomic swap + bounded archives), and
+ *   the JSON Lines snapshot migration seam.
  *
- * Both ride `sessionQuery`'s live-preferred corpus, so results include
- * sessions that are not currently loaded into the conversation window.
  * The route is browser-trust fenced exactly like dsh-history's `/history/api`.
  */
 import type { Context } from 'cordis';
 import z from '@deepseek-ai/schemastery';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { SwitchRawEvent } from './host/extract.ts';
 import { type SwitchSearchConfig } from './config.ts';
 export { DEFAULT_CONFIG, SWITCH_SEARCH_SETTINGS_NAMESPACE } from './config.ts';
 export type { SwitchSearchConfig } from './config.ts';
+export { SwitchIndexEngine } from './host/engine.ts';
+export { SwitchWatermarkSync } from './host/sync.ts';
+export { rebuildIndex, importIntoIndex, DEFAULT_INDEX_LAYOUT } from './host/rebuild.ts';
+export { exportSnapshot, parseSnapshot } from './host/snapshot.ts';
 /** The webServer service face this plugin uses (structural mirror). */
 interface SwitchWebServer {
     register(route: {
@@ -82,6 +92,10 @@ interface SwitchSearchPage {
 /** The session-query service face: corpus reads, title folding, FTS5 search. */
 interface SwitchSessionQuery {
     listSessions(signal?: AbortSignal): Promise<readonly SwitchSessionRecord[]>;
+    readSession?(sessionId: string): Promise<{
+        session: SwitchSessionHeader;
+        events: readonly SwitchRawEvent[];
+    }>;
     readTitleSnapshots(sessionIds: readonly string[], signal?: AbortSignal): Promise<readonly SwitchTitleObservationResult[]>;
     searchSessions(request: {
         query: string;
@@ -104,11 +118,10 @@ export declare const name = "dsh-session-search-toggle";
 export declare const inject: string[];
 /** Composition-entry schema: what a dsh profile may configure at assembly time. */
 export declare const Config: z<SwitchSearchConfig>;
-/** Coarse type-filter buckets mapped onto raw session event types. */
-export type SwitchContentType = 'all' | 'user' | 'reply' | 'tool';
 /**
- * Plugin body: mount the fenced /switch-search/api route.
- * @param ctx - host plugin context (webServer, webRuntime).
+ * Plugin body: mount the fenced /switch-search/api route, own the independent
+ * index lifecycle, and register the settings namespace.
+ * @param ctx - host plugin context (webServer, webRuntime, optional sessionQuery).
  */
 export declare function apply(ctx: Context): void;
 //# sourceMappingURL=index.d.ts.map

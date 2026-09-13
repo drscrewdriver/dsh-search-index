@@ -14,9 +14,17 @@ export interface SwitchSearchConfig {
     enabled: boolean;
     /** Which search mode the panel opens in by default. */
     defaultMode: SwitchSearchDefaultMode;
+    /** Whether the independent index auto-syncs from the corpus in the background. */
+    autoSync?: boolean;
+    /** Incremental sync interval in ms (watermark polling). */
+    syncIntervalMs?: number;
+    /** How many archived index files a rebuild keeps. */
+    archiveKeep?: number;
+    /** Optional absolute directory for the independent index files. */
+    indexDir?: string;
 }
 /** Defaults when nothing is configured. */
-export declare const DEFAULT_CONFIG: SwitchSearchConfig;
+export declare const DEFAULT_CONFIG: Required<SwitchSearchConfig>;
 /** The settings namespace the host half registers (kept in lockstep with src/index.ts). */
 export declare const SWITCH_SEARCH_SETTINGS_NAMESPACE = "switch-search";
 //# sourceMappingURL=config.d.ts.map

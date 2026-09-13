@@ -1,20 +1,38 @@
 /**
  * dsh-session-search-toggle host half: one fenced HTTP route `/switch-search/api`
- * that drives the sidebar search panel's two modes:
+ * backed by the plugin's OWN full-text index (node:sqlite FTS5, a file this
+ * plugin owns — never the official session-query index, which may be absent
+ * entirely under its default `openAt: never`).
  *
  * - `list-sessions` — the title-search corpus: every session id + folded
- *   title (+ cwd/updatedAt), read through `sessionQuery` (live-preferred).
- * - `content-search` — FTS5 message-content search grouped by session: each
- *   hit is the session header plus its strongest matching event's snippet,
- *   seq, and type. This is the "switch to content mode" data source.
+ *   title (+ cwd/updatedAt), read live through `sessionQuery`, falling back to
+ *   the independent index when the live service is unavailable.
+ * - `content-search` — session-grouped message-content search over the
+ *   independent index (docs mirrored from `sessionQuery.readSession` with the
+ *   official extraction semantics).
+ * - `index-status` / `index-rebuild` / `index-export` / `index-import` —
+ *   the index lifecycle surface: watermark sync progress, the non-destructive
+ *   整理 (rebuild into a shadow file + atomic swap + bounded archives), and
+ *   the JSON Lines snapshot migration seam.
  *
- * Both ride `sessionQuery`'s live-preferred corpus, so results include
- * sessions that are not currently loaded into the conversation window.
  * The route is browser-trust fenced exactly like dsh-history's `/history/api`.
  */
 import type { Context } from 'cordis'
 import z from '@deepseek-ai/schemastery'
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { SwitchIndexEngine, type SwitchIndexContentType } from './host/engine.ts'
+import { SwitchWatermarkSync, type SwitchSyncState } from './host/sync.ts'
+import {
+  DEFAULT_INDEX_LAYOUT,
+  importIntoIndex,
+  listArchives,
+  rebuildIndex,
+  resolveIndexDir,
+  type SwitchIndexLayout,
+  type SwitchRebuildState,
+} from './host/rebuild.ts'
+import { exportSnapshot, parseSnapshot } from './host/snapshot.ts'
+import type { SwitchRawEvent } from './host/extract.ts'
 import {
   DEFAULT_CONFIG,
   SWITCH_SEARCH_SETTINGS_NAMESPACE,
@@ -23,6 +41,10 @@ import {
 
 export { DEFAULT_CONFIG, SWITCH_SEARCH_SETTINGS_NAMESPACE } from './config.ts'
 export type { SwitchSearchConfig } from './config.ts'
+export { SwitchIndexEngine } from './host/engine.ts'
+export { SwitchWatermarkSync } from './host/sync.ts'
+export { rebuildIndex, importIntoIndex, DEFAULT_INDEX_LAYOUT } from './host/rebuild.ts'
+export { exportSnapshot, parseSnapshot } from './host/snapshot.ts'
 
 /** The webServer service face this plugin uses (structural mirror). */
 interface SwitchWebServer {
@@ -91,6 +113,10 @@ interface SwitchSearchPage {
 /** The session-query service face: corpus reads, title folding, FTS5 search. */
 interface SwitchSessionQuery {
   listSessions(signal?: AbortSignal): Promise<readonly SwitchSessionRecord[]>
+  readSession?(sessionId: string): Promise<{
+    session: SwitchSessionHeader
+    events: readonly SwitchRawEvent[]
+  }>
   readTitleSnapshots(
     sessionIds: readonly string[],
     signal?: AbortSignal,
@@ -119,6 +145,10 @@ export const inject = ['webServer', 'webRuntime']
 export const Config: z<SwitchSearchConfig> = z.object({
   enabled: z.boolean().default(true),
   defaultMode: z.union(['title', 'content']).default('title'),
+  autoSync: z.boolean().default(true),
+  syncIntervalMs: z.number().default(30_000),
+  archiveKeep: z.number().default(2),
+  indexDir: z.string().default(''),
 })
 
 /**
@@ -169,31 +199,13 @@ function installSettingsSection<T>(
 }
 
 /** Body size bound of one JSON request (defense against unbounded reads). */
-const MAX_BODY_BYTES = 1 << 20
+const MAX_BODY_BYTES = 16 << 20
 
 /** Default maximum sessions returned by one content search. */
 const DEFAULT_LIMIT = 20
 
-/** Coarse type-filter buckets mapped onto raw session event types. */
-export type SwitchContentType = 'all' | 'user' | 'reply' | 'tool'
-
-/** Event types included when the coarse filter is `all`. */
-const ALL_CONTENT_TYPES: readonly string[] = ['user/message', 'assistant/message', 'tool/call', 'tool/result']
-
-/** Coarse filter → raw event types. */
-const CONTENT_TYPE_GROUPS: Readonly<Record<Exclude<SwitchContentType, 'all'>, readonly string[]>> = {
-  user: ['user/message'],
-  reply: ['assistant/message'],
-  tool: ['tool/call', 'tool/result'],
-}
-
-/** Content search includes only current-surface messages of the requested types. */
-function contentEventFilters(types: readonly string[]): readonly unknown[] {
-  return [
-    { kind: 'type', values: [...new Set(types)] },
-    { kind: 'surface', values: ['current'] },
-  ]
-}
+/** Environment override for the independent index directory. */
+const INDEX_DIR_ENV = 'DSH_SWITCH_SEARCH_DIR'
 
 /** Normalize a Host-header authority, or undefined when unparsable. */
 function parseAuthority(authority: string): URL | undefined {
@@ -245,8 +257,8 @@ function isTrustedApiRequest(req: IncomingMessage, trustedHosts: readonly string
   }
 }
 
-/** Read and parse the JSON request body (bounded; malformed → null). */
-async function readJsonBody(req: IncomingMessage): Promise<unknown> {
+/** Read the raw request body (bounded; malformed handled by callers). */
+async function readRawBody(req: IncomingMessage): Promise<string> {
   const chunks: Buffer[] = []
   let total = 0
   for await (const chunk of req) {
@@ -255,7 +267,12 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
     if (total > MAX_BODY_BYTES) throw new Error('request body too large')
     chunks.push(buffer)
   }
-  const text = Buffer.concat(chunks).toString('utf8')
+  return Buffer.concat(chunks).toString('utf8')
+}
+
+/** Read and parse the JSON request body (bounded; malformed → null). */
+async function readJsonBody(req: IncomingMessage): Promise<unknown> {
+  const text = await readRawBody(req)
   if (text.trim() === '') return {}
   try {
     return JSON.parse(text) as unknown
@@ -269,6 +286,12 @@ function writeJson(res: ServerResponse, status: number, body: unknown): void {
   const text = JSON.stringify(body)
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-cache' })
   res.end(text)
+}
+
+/** Write a raw text response with the given status and content type. */
+function writeRaw(res: ServerResponse, status: number, contentType: string, body: string): void {
+  res.writeHead(status, { 'content-type': contentType, 'cache-control': 'no-cache' })
+  res.end(body)
 }
 
 /** Fold titles for a set of sessions into a sessionId → title map. */
@@ -287,10 +310,25 @@ async function titleMap(
   return map
 }
 
-/** list-sessions: the full title-search corpus. */
+/** list-sessions: the full title-search corpus (live, index fallback). */
 async function listSessions(ctx: Context): Promise<{ ok: boolean; items?: unknown[]; error?: string }> {
+  const index = getIndex(ctx)
   const sessionQuery = ctx.get('sessionQuery') as SwitchSessionQuery | undefined
-  if (sessionQuery === undefined) return { ok: false, error: 'sessionQuery 服务不可用' }
+  if (sessionQuery === undefined) {
+    // Fall back to the independent index so the panel still works offline.
+    if (index?.engine.isOpen === true) {
+      return {
+        ok: true,
+        items: index.engine.listIndexedSessions().map(session => ({
+          sessionId: session.sessionId,
+          title: session.title,
+          cwd: session.cwd,
+          updatedAt: session.updatedAt,
+        })),
+      }
+    }
+    return { ok: false, error: 'sessionQuery 服务不可用，且独立索引尚未建立' }
+  }
   try {
     const records = await sessionQuery.listSessions()
     const titles = await titleMap(sessionQuery, records.map(record => record.header.id))
@@ -308,7 +346,7 @@ async function listSessions(ctx: Context): Promise<{ ok: boolean; items?: unknow
   }
 }
 
-/** content-search: FTS5 message-content hits grouped by session. */
+/** content-search: session-grouped hits from the independent index. */
 async function contentSearch(
   ctx: Context,
   payload: unknown,
@@ -320,82 +358,244 @@ async function contentSearch(
     ? record.limit
     : DEFAULT_LIMIT
   const limit = Math.min(Math.max(1, requestedLimit), 100)
-  // Coarse type filter: explicit list wins; absent/empty falls back to the
-  // official sidebar behavior (user + reply only).
-  let types: readonly string[]
+  let types: readonly SwitchIndexContentType[]
   if (Array.isArray(record?.types) && record.types.length > 0) {
-    const picked = new Set<SwitchContentType>()
-    for (const entry of record.types) {
-      if (entry === 'all') picked.add('all')
-      else if (entry === 'user' || entry === 'reply' || entry === 'tool') picked.add(entry)
-    }
-    types = picked.has('all')
-      ? ALL_CONTENT_TYPES
-      : picked.size === 0
-        ? ALL_CONTENT_TYPES
-        : [...picked].flatMap(entry => CONTENT_TYPE_GROUPS[entry as Exclude<SwitchContentType, 'all'>])
+    types = record.types.filter((entry): entry is SwitchIndexContentType =>
+      entry === 'all' || entry === 'user' || entry === 'reply' || entry === 'tool')
   } else {
-    types = ['user/message', 'assistant/message']
+    types = ['user', 'reply']
   }
-  const sessionQuery = ctx.get('sessionQuery') as SwitchSessionQuery | undefined
-  if (sessionQuery === undefined) return { ok: false, error: 'sessionQuery 服务不可用' }
+  const index = getIndex(ctx)
+  if (index === undefined || index.engine.isOpen === false) {
+    return { ok: false, error: '独立索引未就绪：请在面板或设置中先建立索引（整理索引）' }
+  }
   try {
-    const page = await sessionQuery.searchSessions({
-      query,
-      eventFilters: contentEventFilters(types),
-      limit,
-    })
-    const titles = await titleMap(sessionQuery, page.items.map(hit => hit.header.id))
     return {
       ok: true,
-      items: page.items.map(hit => ({
-        sessionId: hit.header.id,
-        title: titles.get(hit.header.id) ?? '',
-        snippet: hit.bestMatch.snippet,
-        seq: hit.bestMatch.seq,
-        type: hit.bestMatch.type,
-        time: hit.bestMatch.time,
-      })),
+      items: index.engine.search({ query, types, limit }),
     }
   } catch (err) {
     return { ok: false, error: String(err instanceof Error ? err.message : err) }
   }
 }
 
-/**
- * search-status: probe whether the host full-text index is reachable. The
- * shipped DSH bundle ships `openAt: never` (content search disabled); this
- * tells the panel whether 内容搜索 can work so it can render a setup hint
- * instead of a bare failure.
- */
-async function searchStatus(
-  ctx: Context,
-): Promise<{ ok: boolean; available?: boolean; reason?: string; error?: string }> {
-  const sessionQuery = ctx.get('sessionQuery') as SwitchSessionQuery | undefined
-  if (sessionQuery === undefined) {
-    return { ok: true, available: false, reason: 'unavailable' }
+/** search-status: probe the independent index readiness and progress. */
+async function searchStatus(ctx: Context): Promise<unknown> {
+  const index = getIndex(ctx)
+  if (index === undefined) return { ok: true, available: false, reason: 'unavailable' }
+  const sync = index.sync.snapshot()
+  return {
+    ok: true,
+    available: index.engine.isOpen && index.engine.countSessions() > 0,
+    reason: index.engine.isOpen ? undefined : 'not-open',
+    indexing: sync.state === 'syncing',
+    sync,
+    rebuild: index.rebuild,
   }
-  try {
-    // A disabled index throws SESSION_QUERY_SEARCH_DISABLED before any work.
-    await sessionQuery.searchSessions({ query: 'probe', limit: 1 })
-    return { ok: true, available: true }
-  } catch (err) {
-    const message = String(err instanceof Error ? err.message : err)
-    const disabled = /SEARCH_DISABLED|disabled/u.test(message)
-    return {
-      ok: true,
-      available: false,
-      reason: disabled ? 'disabled' : 'unavailable',
-      error: message,
-    }
+}
+
+/** index-status: full lifecycle surface for the settings row. */
+async function indexStatus(ctx: Context): Promise<unknown> {
+  const index = getIndex(ctx)
+  if (index === undefined) return { ok: true, available: false, reason: 'unavailable' }
+  const sync = index.sync.snapshot()
+  let indexed = sync.indexed
+  if (index.engine.isOpen) indexed = index.engine.countSessions()
+  return {
+    ok: true,
+    available: index.engine.isOpen && indexed > 0,
+    dir: index.layout.dir,
+    archives: await listArchives(index.layout).catch(() => []),
+    sync: { ...sync, indexed } satisfies SwitchSyncState,
+    rebuild: index.rebuild,
   }
 }
 
 /**
- * Plugin body: mount the fenced /switch-search/api route.
- * @param ctx - host plugin context (webServer, webRuntime).
+ * index-rebuild: start the non-destructive 整理 (shadow build → atomic swap →
+ * archives). Responds immediately; progress rides index-status.
+ */
+async function indexRebuild(ctx: Context): Promise<{ ok: boolean; started?: boolean; error?: string }> {
+  const index = getIndex(ctx)
+  if (index === undefined) return { ok: false, error: '索引服务未就绪' }
+  if (index.rebuild.state === 'building' || index.rebuild.state === 'swapping') {
+    return { ok: false, error: '整理已在进行中' }
+  }
+  const sessionQuery = ctx.get('sessionQuery') as SwitchSessionQuery | undefined
+  if (sessionQuery === undefined || sessionQuery.readSession === undefined) {
+    return { ok: false, error: 'sessionQuery 服务不可用，无法读取会话日志' }
+  }
+  const config = currentConfig(ctx)
+  const keepArchives = Math.max(0, config.archiveKeep ?? DEFAULT_CONFIG.archiveKeep)
+  void rebuildIndex(
+    index.engine,
+    index.layout,
+    {
+      listSessions: () => sessionQuery.listSessions(),
+      readSession: async (sessionId: string) => {
+        const log = await sessionQuery.readSession!(sessionId)
+        return { session: log.session, events: log.events }
+      },
+    },
+    keepArchives,
+  ).then((state) => {
+    index.rebuild = state
+  }).catch((err) => {
+    index.rebuild = {
+      state: 'error',
+      done: 0,
+      total: 0,
+      startedAt: Date.now(),
+      finishedAt: 0,
+      failures: [],
+      error: String(err instanceof Error ? err.message : err),
+    }
+  })
+  index.rebuild = { state: 'building', done: 0, total: 0, startedAt: Date.now(), finishedAt: 0, failures: [] }
+  return { ok: true, started: true }
+}
+
+/** index-export: dump the active index as JSON Lines. */
+async function indexExport(ctx: Context, res: ServerResponse): Promise<void> {
+  const index = getIndex(ctx)
+  if (index === undefined || index.engine.isOpen === false) {
+    writeJson(res, 200, { ok: false, error: '独立索引未就绪' })
+    return
+  }
+  writeRaw(res, 200, 'application/x-ndjson; charset=utf-8', exportSnapshot(index.engine))
+}
+
+/** index-import: parse a JSON Lines snapshot and swap it in as the active index. */
+async function indexImport(ctx: Context, text: string) {
+  const index = getIndex(ctx)
+  if (index === undefined) return { ok: false, error: '索引服务未就绪' }
+  if (index.rebuild.state === 'building' || index.rebuild.state === 'swapping') {
+    return { ok: false, error: '整理/导入已在进行中' }
+  }
+  // Body is either raw JSON Lines or a JSON envelope { snapshot: "..." }.
+  if (text.includes('"snapshot"')) {
+    try {
+      const envelope = JSON.parse(text) as { snapshot?: unknown }
+      if (typeof envelope.snapshot === 'string') text = envelope.snapshot
+    } catch { /* treat as plain JSONL */ }
+  }
+  const parsed = parseSnapshot(text)
+  if (parsed.records.length === 0) return { ok: false, error: `快照无可导入会话（跳过 ${parsed.skipped} 行）` }
+  const config = currentConfig(ctx)
+  const keepArchives = Math.max(0, config.archiveKeep ?? DEFAULT_CONFIG.archiveKeep)
+  void importIntoIndex(index.engine, index.layout, parsed.records, keepArchives)
+    .then((state) => { index.rebuild = state })
+    .catch((err) => {
+      index.rebuild = {
+        state: 'error',
+        done: 0,
+        total: parsed.records.length,
+        startedAt: Date.now(),
+        finishedAt: 0,
+        failures: [],
+        error: String(err instanceof Error ? err.message : err),
+      }
+    })
+  index.rebuild = { state: 'building', done: 0, total: parsed.records.length, startedAt: Date.now(), finishedAt: 0, failures: [] }
+  return { ok: true, started: true, sessions: parsed.records.length, skipped: parsed.skipped }
+}
+
+/** ------------------------------------------------------------------ index service */
+
+/** The per-activation index service state carried on the ctx record. */
+interface SwitchIndexServiceState {
+  engine: SwitchIndexEngine
+  sync: SwitchWatermarkSync
+  layout: SwitchIndexLayout
+  rebuild: SwitchRebuildState
+}
+
+/** Symbol key under which the index service rides the plugin context. */
+const INDEX_STATE_KEY = Symbol('dsh-session-search-toggle/index')
+
+/** The mutable per-activation record the HTTP handlers read through. */
+interface SwitchIndexCtxRecord {
+  [INDEX_STATE_KEY]?: SwitchIndexServiceState
+  currentConfig?: () => SwitchSearchConfig
+}
+
+/** Latest merged configuration (settings namespace layered on the entry). */
+function currentConfig(ctx: Context): SwitchSearchConfig {
+  const record = ctx as unknown as SwitchIndexCtxRecord
+  return record.currentConfig?.() ?? DEFAULT_CONFIG
+}
+
+/** The index service state, or undefined before activation completes. */
+function getIndex(ctx: Context): SwitchIndexServiceState | undefined {
+  return (ctx as unknown as SwitchIndexCtxRecord)[INDEX_STATE_KEY]
+}
+
+/**
+ * Plugin body: mount the fenced /switch-search/api route, own the independent
+ * index lifecycle, and register the settings namespace.
+ * @param ctx - host plugin context (webServer, webRuntime, optional sessionQuery).
  */
 export function apply(ctx: Context): void {
+  const record = ctx as unknown as SwitchIndexCtxRecord
+
+  // Register the runtime-adjustable settings namespace (the composition entry
+  // is the base; the settings section layers on top).
+  let current: () => SwitchSearchConfig = () => DEFAULT_CONFIG
+  installSettingsSection(ctx, SWITCH_SEARCH_SETTINGS_NAMESPACE, Config, DEFAULT_CONFIG, {
+    setSource: (source) => { current = source },
+    onChange: () => {},
+  })
+  record.currentConfig = () => current()
+
+  // Independent index lifecycle: open the engine, run an initial watermark
+  // sync, and keep polling. All of it is background work; HTTP stays instant.
+  const config = current()
+  const layout: SwitchIndexLayout = {
+    ...DEFAULT_INDEX_LAYOUT,
+    dir: resolveIndexDir(config.indexDir || process.env[INDEX_DIR_ENV]),
+  }
+  const engine = new SwitchIndexEngine({ path: `${layout.dir}/${layout.active}` })
+  const sessionQuery = ctx.get('sessionQuery') as SwitchSessionQuery | undefined
+  const state: SwitchIndexServiceState = {
+    engine,
+    sync: new SwitchWatermarkSync(engine, {
+      listSessions: () => sessionQuery?.listSessions() ?? Promise.resolve([]),
+      readSession: async (sessionId: string) => {
+        if (sessionQuery?.readSession === undefined) throw new Error('sessionQuery.readSession 不可用')
+        return sessionQuery.readSession(sessionId)
+      },
+      readTitleSnapshots: sessionQuery === undefined
+        ? undefined
+        : (ids) => sessionQuery.readTitleSnapshots(ids),
+    }),
+    layout,
+    rebuild: { state: 'idle', done: 0, total: 0, startedAt: 0, finishedAt: 0, failures: [] },
+  }
+  record[INDEX_STATE_KEY] = state
+
+  let syncTimer: ReturnType<typeof setInterval> | undefined
+  const scheduleSync = (intervalMs: number): void => {
+    if (syncTimer !== undefined) clearInterval(syncTimer)
+    if (intervalMs <= 0) return
+    syncTimer = setInterval(() => {
+      const latest = current()
+      if (latest.autoSync === false) return
+      void state.sync.poll().catch(() => {})
+    }, Math.max(5_000, intervalMs))
+  }
+
+  const initialConfig = current()
+  void (async () => {
+    await engine.open().catch(() => {})
+    if (initialConfig.autoSync !== false) await state.sync.poll().catch(() => {})
+    scheduleSync(initialConfig.syncIntervalMs ?? DEFAULT_CONFIG.syncIntervalMs!)
+  })()
+
+  ctx.effect(() => () => {
+    if (syncTimer !== undefined) clearInterval(syncTimer)
+    engine.close()
+  }, 'dsh-session-search-toggle: index lifecycle')
+
   ctx.effect(() => ctx.webServer.register({
     kind: 'prefix',
     path: '/switch-search/api',
@@ -417,6 +617,16 @@ export function apply(ctx: Context): void {
         return
       }
       try {
+        if (method === 'index-export') {
+          await indexExport(ctx, res)
+          return
+        }
+        if (method === 'index-import') {
+          // The body is raw JSON Lines (or a { snapshot } envelope), not JSON.
+          const text = await readRawBody(req)
+          writeJson(res, 200, await indexImport(ctx, text))
+          return
+        }
         const payload = await readJsonBody(req)
         if (method === 'list-sessions') {
           writeJson(res, 200, await listSessions(ctx))
@@ -426,8 +636,12 @@ export function apply(ctx: Context): void {
           writeJson(res, 200, await contentSearch(ctx, payload))
           return
         }
-        if (method === 'search-status') {
-          writeJson(res, 200, await searchStatus(ctx))
+        if (method === 'search-status' || method === 'index-status') {
+          writeJson(res, 200, method === 'search-status' ? await searchStatus(ctx) : await indexStatus(ctx))
+          return
+        }
+        if (method === 'index-rebuild') {
+          writeJson(res, 200, await indexRebuild(ctx))
           return
         }
         writeJson(res, 404, { ok: false, error: `unknown switch-search API method "${method}"` })
@@ -436,13 +650,4 @@ export function apply(ctx: Context): void {
       }
     },
   }), 'dsh-session-search-toggle: /switch-search/api route')
-
-  // Register the runtime-adjustable settings namespace (the composition entry
-  // is the base; the settings section layers on top). The panel and the
-  // settings row read `current()` through the same source.
-  let current: () => SwitchSearchConfig = () => DEFAULT_CONFIG
-  installSettingsSection(ctx, SWITCH_SEARCH_SETTINGS_NAMESPACE, Config, DEFAULT_CONFIG, {
-    setSource: (source) => { current = source },
-    onChange: () => {},
-  })
 }

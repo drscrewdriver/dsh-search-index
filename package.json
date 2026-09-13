@@ -1,6 +1,6 @@
 {
   "name": "dsh-session-search-toggle",
-  "version": "0.1.1-beta.2",
+  "version": "0.1.2-beta.1",
   "description": "DSH web 侧边栏会话搜索增强：标题搜索 ↔ 内容搜索一键切换，内容搜索按会话聚合展示标题与命中片段。",
   "type": "module",
   "repository": {
@@ -43,6 +43,8 @@
     },
     "client": {
       "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-settings",
         "@deepseek-ai/dsh-client-ui-settings-general"
       ],
       "platform": "web"
