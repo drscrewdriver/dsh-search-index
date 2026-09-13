@@ -311,9 +311,9 @@ async function titleMap(
 }
 
 /** list-sessions: the full title-search corpus (live, index fallback). */
-async function listSessions(ctx: Context): Promise<{ ok: boolean; items?: unknown[]; error?: string }> {
-  const index = getIndex(ctx)
-  const sessionQuery = ctx.get('sessionQuery') as SwitchSessionQuery | undefined
+async function listSessions(runtime: SwitchRuntime): Promise<{ ok: boolean; items?: unknown[]; error?: string }> {
+  const index = runtime.index
+  const sessionQuery = runtime.sessionQuery
   if (sessionQuery === undefined) {
     // Fall back to the independent index so the panel still works offline.
     if (index?.engine.isOpen === true) {
@@ -348,7 +348,7 @@ async function listSessions(ctx: Context): Promise<{ ok: boolean; items?: unknow
 
 /** content-search: session-grouped hits from the independent index. */
 async function contentSearch(
-  ctx: Context,
+  runtime: SwitchRuntime,
   payload: unknown,
 ): Promise<{ ok: boolean; items?: unknown[]; error?: string }> {
   const record = payload as { query?: unknown; limit?: unknown; types?: unknown } | null
@@ -365,8 +365,8 @@ async function contentSearch(
   } else {
     types = ['user', 'reply']
   }
-  const index = getIndex(ctx)
-  if (index === undefined || index.engine.isOpen === false) {
+  const index = runtime.index
+  if (index.engine.isOpen === false) {
     return { ok: false, error: '独立索引未就绪：请在面板或设置中先建立索引（整理索引）' }
   }
   try {
@@ -380,9 +380,8 @@ async function contentSearch(
 }
 
 /** search-status: probe the independent index readiness and progress. */
-async function searchStatus(ctx: Context): Promise<unknown> {
-  const index = getIndex(ctx)
-  if (index === undefined) return { ok: true, available: false, reason: 'unavailable' }
+async function searchStatus(runtime: SwitchRuntime): Promise<unknown> {
+  const index = runtime.index
   const sync = index.sync.snapshot()
   return {
     ok: true,
@@ -395,9 +394,8 @@ async function searchStatus(ctx: Context): Promise<unknown> {
 }
 
 /** index-status: full lifecycle surface for the settings row. */
-async function indexStatus(ctx: Context): Promise<unknown> {
-  const index = getIndex(ctx)
-  if (index === undefined) return { ok: true, available: false, reason: 'unavailable' }
+async function indexStatus(runtime: SwitchRuntime): Promise<unknown> {
+  const index = runtime.index
   const sync = index.sync.snapshot()
   let indexed = sync.indexed
   if (index.engine.isOpen) indexed = index.engine.countSessions()
@@ -415,17 +413,16 @@ async function indexStatus(ctx: Context): Promise<unknown> {
  * index-rebuild: start the non-destructive 整理 (shadow build → atomic swap →
  * archives). Responds immediately; progress rides index-status.
  */
-async function indexRebuild(ctx: Context): Promise<{ ok: boolean; started?: boolean; error?: string }> {
-  const index = getIndex(ctx)
-  if (index === undefined) return { ok: false, error: '索引服务未就绪' }
+async function indexRebuild(runtime: SwitchRuntime): Promise<{ ok: boolean; started?: boolean; error?: string }> {
+  const index = runtime.index
   if (index.rebuild.state === 'building' || index.rebuild.state === 'swapping') {
     return { ok: false, error: '整理已在进行中' }
   }
-  const sessionQuery = ctx.get('sessionQuery') as SwitchSessionQuery | undefined
+  const sessionQuery = runtime.sessionQuery
   if (sessionQuery === undefined || sessionQuery.readSession === undefined) {
     return { ok: false, error: 'sessionQuery 服务不可用，无法读取会话日志' }
   }
-  const config = currentConfig(ctx)
+  const config = runtime.config()
   const keepArchives = Math.max(0, config.archiveKeep ?? DEFAULT_CONFIG.archiveKeep)
   void rebuildIndex(
     index.engine,
@@ -456,9 +453,9 @@ async function indexRebuild(ctx: Context): Promise<{ ok: boolean; started?: bool
 }
 
 /** index-export: dump the active index as JSON Lines. */
-async function indexExport(ctx: Context, res: ServerResponse): Promise<void> {
-  const index = getIndex(ctx)
-  if (index === undefined || index.engine.isOpen === false) {
+async function indexExport(runtime: SwitchRuntime, res: ServerResponse): Promise<void> {
+  const index = runtime.index
+  if (index.engine.isOpen === false) {
     writeJson(res, 200, { ok: false, error: '独立索引未就绪' })
     return
   }
@@ -466,9 +463,8 @@ async function indexExport(ctx: Context, res: ServerResponse): Promise<void> {
 }
 
 /** index-import: parse a JSON Lines snapshot and swap it in as the active index. */
-async function indexImport(ctx: Context, text: string) {
-  const index = getIndex(ctx)
-  if (index === undefined) return { ok: false, error: '索引服务未就绪' }
+async function indexImport(runtime: SwitchRuntime, text: string) {
+  const index = runtime.index
   if (index.rebuild.state === 'building' || index.rebuild.state === 'swapping') {
     return { ok: false, error: '整理/导入已在进行中' }
   }
@@ -481,7 +477,7 @@ async function indexImport(ctx: Context, text: string) {
   }
   const parsed = parseSnapshot(text)
   if (parsed.records.length === 0) return { ok: false, error: `快照无可导入会话（跳过 ${parsed.skipped} 行）` }
-  const config = currentConfig(ctx)
+  const config = runtime.config()
   const keepArchives = Math.max(0, config.archiveKeep ?? DEFAULT_CONFIG.archiveKeep)
   void importIntoIndex(index.engine, index.layout, parsed.records, keepArchives)
     .then((state) => { index.rebuild = state })
@@ -502,32 +498,24 @@ async function indexImport(ctx: Context, text: string) {
 
 /** ------------------------------------------------------------------ index service */
 
-/** The per-activation index service state carried on the ctx record. */
-interface SwitchIndexServiceState {
+/** The per-activation index service state, carried in the apply closure. */
+export interface SwitchIndexServiceState {
   engine: SwitchIndexEngine
   sync: SwitchWatermarkSync
   layout: SwitchIndexLayout
   rebuild: SwitchRebuildState
 }
 
-/** Symbol key under which the index service rides the plugin context. */
-const INDEX_STATE_KEY = Symbol('dsh-session-search-toggle/index')
-
-/** The mutable per-activation record the HTTP handlers read through. */
-interface SwitchIndexCtxRecord {
-  [INDEX_STATE_KEY]?: SwitchIndexServiceState
-  currentConfig?: () => SwitchSearchConfig
-}
-
-/** Latest merged configuration (settings namespace layered on the entry). */
-function currentConfig(ctx: Context): SwitchSearchConfig {
-  const record = ctx as unknown as SwitchIndexCtxRecord
-  return record.currentConfig?.() ?? DEFAULT_CONFIG
-}
-
-/** The index service state, or undefined before activation completes. */
-function getIndex(ctx: Context): SwitchIndexServiceState | undefined {
-  return (ctx as unknown as SwitchIndexCtxRecord)[INDEX_STATE_KEY]
+/**
+ * Everything an HTTP handler needs, captured from the apply closure: the
+ * optional live sessionQuery, the index service state, and the latest config.
+ * Handlers never touch the cordis context — arbitrary property writes on a
+ * Context are rejected ("cannot set property ... without provide").
+ */
+interface SwitchRuntime {
+  sessionQuery: SwitchSessionQuery | undefined
+  index: SwitchIndexServiceState
+  config: () => SwitchSearchConfig
 }
 
 /**
@@ -536,8 +524,6 @@ function getIndex(ctx: Context): SwitchIndexServiceState | undefined {
  * @param ctx - host plugin context (webServer, webRuntime, optional sessionQuery).
  */
 export function apply(ctx: Context): void {
-  const record = ctx as unknown as SwitchIndexCtxRecord
-
   // Register the runtime-adjustable settings namespace (the composition entry
   // is the base; the settings section layers on top).
   let current: () => SwitchSearchConfig = () => DEFAULT_CONFIG
@@ -545,7 +531,6 @@ export function apply(ctx: Context): void {
     setSource: (source) => { current = source },
     onChange: () => {},
   })
-  record.currentConfig = () => current()
 
   // Independent index lifecycle: open the engine, run an initial watermark
   // sync, and keep polling. All of it is background work; HTTP stays instant.
@@ -571,7 +556,7 @@ export function apply(ctx: Context): void {
     layout,
     rebuild: { state: 'idle', done: 0, total: 0, startedAt: 0, finishedAt: 0, failures: [] },
   }
-  record[INDEX_STATE_KEY] = state
+  const runtime: SwitchRuntime = { sessionQuery, index: state, config: () => current() }
 
   let syncTimer: ReturnType<typeof setInterval> | undefined
   const scheduleSync = (intervalMs: number): void => {
@@ -618,30 +603,30 @@ export function apply(ctx: Context): void {
       }
       try {
         if (method === 'index-export') {
-          await indexExport(ctx, res)
+          await indexExport(runtime, res)
           return
         }
         if (method === 'index-import') {
           // The body is raw JSON Lines (or a { snapshot } envelope), not JSON.
           const text = await readRawBody(req)
-          writeJson(res, 200, await indexImport(ctx, text))
+          writeJson(res, 200, await indexImport(runtime, text))
           return
         }
         const payload = await readJsonBody(req)
         if (method === 'list-sessions') {
-          writeJson(res, 200, await listSessions(ctx))
+          writeJson(res, 200, await listSessions(runtime))
           return
         }
         if (method === 'content-search') {
-          writeJson(res, 200, await contentSearch(ctx, payload))
+          writeJson(res, 200, await contentSearch(runtime, payload))
           return
         }
         if (method === 'search-status' || method === 'index-status') {
-          writeJson(res, 200, method === 'search-status' ? await searchStatus(ctx) : await indexStatus(ctx))
+          writeJson(res, 200, method === 'search-status' ? await searchStatus(runtime) : await indexStatus(runtime))
           return
         }
         if (method === 'index-rebuild') {
-          writeJson(res, 200, await indexRebuild(ctx))
+          writeJson(res, 200, await indexRebuild(runtime))
           return
         }
         writeJson(res, 404, { ok: false, error: `unknown switch-search API method "${method}"` })

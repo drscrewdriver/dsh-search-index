@@ -20,6 +20,9 @@
 import type { Context } from 'cordis';
 import z from '@deepseek-ai/schemastery';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { SwitchIndexEngine } from './host/engine.ts';
+import { SwitchWatermarkSync } from './host/sync.ts';
+import { type SwitchIndexLayout, type SwitchRebuildState } from './host/rebuild.ts';
 import type { SwitchRawEvent } from './host/extract.ts';
 import { type SwitchSearchConfig } from './config.ts';
 export { DEFAULT_CONFIG, SWITCH_SEARCH_SETTINGS_NAMESPACE } from './config.ts';
@@ -118,6 +121,14 @@ export declare const name = "dsh-session-search-toggle";
 export declare const inject: string[];
 /** Composition-entry schema: what a dsh profile may configure at assembly time. */
 export declare const Config: z<SwitchSearchConfig>;
+/** ------------------------------------------------------------------ index service */
+/** The per-activation index service state, carried in the apply closure. */
+export interface SwitchIndexServiceState {
+    engine: SwitchIndexEngine;
+    sync: SwitchWatermarkSync;
+    layout: SwitchIndexLayout;
+    rebuild: SwitchRebuildState;
+}
 /**
  * Plugin body: mount the fenced /switch-search/api route, own the independent
  * index lifecycle, and register the settings namespace.
