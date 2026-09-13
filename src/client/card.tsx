@@ -60,16 +60,73 @@ function Row(props: { title: string; desc?: string; control: JSX.Element }): JSX
   ])
 }
 
-/** A boolean switch editing one namespace field. */
+/**
+ * A boolean switch editing one namespace field.
+ *
+ * Drawn entirely with inline styles (thinking-levels discipline): the card
+ * must not depend on the injected stylesheet — scoped or late-loaded settings
+ * pages left the class-based switch rendering as a bare checkbox dot.
+ */
 function Toggle(props: { checked: boolean; writable: boolean; onChange: (checked: boolean) => void }): JSX.Element {
-  return createElement('label', { className: 'dsws_switch' }, [
+  const checked = props.checked
+  return createElement('label', {
+    style: {
+      position: 'relative',
+      width: '40px',
+      height: '22px',
+      flex: 'none',
+      display: 'inline-block',
+      cursor: props.writable ? 'pointer' : 'not-allowed',
+    },
+  }, [
     createElement('input', {
+      key: 'input',
       type: 'checkbox',
-      checked: props.checked,
+      checked,
       disabled: !props.writable,
       onChange: (e: { target: { checked: boolean } }) => props.onChange(e.target.checked),
+      style: {
+        position: 'absolute',
+        inset: 0,
+        width: '100%',
+        height: '100%',
+        opacity: 0,
+        margin: 0,
+        cursor: props.writable ? 'pointer' : 'not-allowed',
+      },
     }),
-    createElement('span', { key: 'track', className: 'dsws_switchTrack' }, createElement('span', { className: 'dsws_switchThumb' })),
+    createElement('span', {
+      key: 'track',
+      style: {
+        position: 'absolute',
+        inset: 0,
+        background: checked
+          ? 'var(--dsw-alias-state-business-primary, #4c6ef5)'
+          : 'var(--dsw-alias-bg-module-platform, rgba(127,127,127,0.25))',
+        border: `1px solid ${checked
+          ? 'var(--dsw-alias-state-business-primary, #4c6ef5)'
+          : 'var(--dsw-alias-border-l2, rgba(127,127,127,0.35))'}`,
+        borderRadius: '11px',
+        transition: 'background .15s ease, border-color .15s ease',
+        pointerEvents: 'none',
+      },
+    }),
+    createElement('span', {
+      key: 'thumb',
+      style: {
+        position: 'absolute',
+        top: '2px',
+        left: '2px',
+        width: '16px',
+        height: '16px',
+        background: '#fff',
+        borderRadius: '50%',
+        boxShadow: '0 1px 2px rgba(0,0,0,.2)',
+        transition: 'transform .15s ease',
+        transform: checked ? 'translateX(18px)' : 'none',
+        pointerEvents: 'none',
+      },
+    }),
   ])
 }
 
@@ -142,7 +199,58 @@ function IndexBlock(props: { t?: SearchSettingsCardProps['t'] }): JSX.Element {
         ? `${translate(t, 'card.index.desc', { indexed: status.sync?.indexed ?? '?' })}${(status.archives?.length ?? 0) > 0 ? translate(t, 'card.index.archives', { archives: status.archives?.length }) : ''}`
         : translate(t, 'card.index.empty')
 
-  return createElement('div', { className: 'dsws_setRow' }, [
+  // Rebuild progress: a labeled bar with percentage, indeterminate sweep when
+  // the total is not known yet. Rendered prominently above the action row.
+  const rebuildDone = status?.rebuild?.done ?? 0
+  const rebuildTotal = status?.rebuild?.total ?? 0
+  const progressPct = rebuilding && rebuildTotal > 0
+    ? Math.min(100, Math.round((rebuildDone / rebuildTotal) * 100))
+    : undefined
+  const progressBlock = rebuilding
+    ? createElement('div', {
+        key: 'progress',
+        style: { display: 'flex', flexDirection: 'column', gap: '4px', margin: '2px 0 6px', width: '100%' },
+      }, [
+        createElement('div', {
+          key: 'bar',
+          style: {
+            height: '6px',
+            borderRadius: '3px',
+            background: 'var(--dsw-alias-interactive-bg-hover, rgba(127,127,127,0.2))',
+            overflow: 'hidden',
+          },
+        }, createElement('div', {
+          style: progressPct === undefined
+            ? {
+                height: '100%',
+                width: '30%',
+                borderRadius: '3px',
+                background: 'var(--dsw-alias-state-business-primary, #4c6ef5)',
+                opacity: 0.6,
+              }
+            : {
+                height: '100%',
+                width: `${progressPct}%`,
+                borderRadius: '3px',
+                background: 'var(--dsw-alias-state-business-primary, #4c6ef5)',
+                transition: 'width .4s ease',
+              },
+        })),
+        createElement('span', {
+          style: {
+            color: 'var(--dsw-alias-state-business-primary, #4c6ef5)',
+            fontSize: '12px',
+            lineHeight: '18px',
+            fontWeight: 600,
+            fontVariantNumeric: 'tabular-nums',
+          },
+        }, progressPct === undefined
+          ? translate(t, 'card.index.rebuilding', { done: rebuildDone, total: '?' })
+          : `${progressPct}% · ${translate(t, 'card.index.rebuilding', { done: rebuildDone, total: rebuildTotal })}`),
+      ])
+    : null
+
+  return createElement('div', { className: 'dsws_setRow', style: rebuilding ? { flexDirection: 'column', alignItems: 'stretch' } : undefined }, [
     createElement('div', { key: 'text', className: 'dsws_setText' }, [
       createElement('span', { key: 't', className: 'dsws_setTitle' }, translate(t, 'card.index')),
       createElement('span', { key: 'd', className: 'dsws_setDesc' }, statusLine),
@@ -152,6 +260,7 @@ function IndexBlock(props: { t?: SearchSettingsCardProps['t'] }): JSX.Element {
       note !== null && createElement('span', { key: 'note', className: 'dsws_setDesc' }, note),
       createElement('span', { key: 'hint', className: 'dsws_setDesc' }, translate(t, 'card.index.rebuild.hint')),
     ]),
+    progressBlock,
     createElement('div', { key: 'btns', className: 'dsws_btnRow' }, [
       createElement('button', {
         key: 'rebuild',

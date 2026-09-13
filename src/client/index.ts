@@ -150,6 +150,10 @@ const CSS = `
 .dsws_actBtn:disabled{cursor:not-allowed;opacity:.5}
 .dsws_indexLine{color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px}
 .dsws_btnRow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.dsws_progressWrap{display:flex;flex-direction:column;gap:4px;padding:8px 10px 0}
+.dsws_progress{height:6px;border-radius:3px;background:var(--dsw-alias-interactive-bg-hover);overflow:hidden}
+.dsws_progressFill{height:100%;border-radius:3px;background:var(--dsw-alias-state-business-primary);transition:width .4s ease}
+.dsws_progressLabel{color:var(--dsw-alias-state-business-primary);font-size:12px;line-height:18px;font-weight:600;font-variant-numeric:tabular-nums}
 `
 
 /** Inject the plugin stylesheet once per activation (removed on disposal). */
@@ -329,10 +333,18 @@ function SwitchPanel({
     }
   } else {
     if (searchStatus.rebuilding) {
-      children.push(createElement('div', {
-        key: 'rebuilding',
-        className: 'dsws_status',
-      }, translate(t, 'panel.rebuilding', { done: searchStatus.done, total: searchStatus.total || '?' })))
+      const pct = searchStatus.total > 0
+        ? Math.min(100, Math.round((searchStatus.done / searchStatus.total) * 100))
+        : undefined
+      children.push(createElement('div', { key: 'rebuilding', className: 'dsws_progressWrap' }, [
+        createElement('div', { key: 'bar', className: 'dsws_progress' },
+          createElement('div', {
+            className: 'dsws_progressFill',
+            style: pct === undefined ? { width: '30%', opacity: 0.6 } : { width: `${pct}%` },
+          })),
+        createElement('span', { key: 'label', className: 'dsws_progressLabel' },
+          translate(t, 'panel.rebuilding', { done: searchStatus.done, total: searchStatus.total || '?' })),
+      ]))
     } else if (searchStatus.available === false) {
       children.push(createElement('div', { key: 'unavailable', className: 'dsws_error' }, [
         createElement('div', { key: 'msg' },
@@ -533,11 +545,11 @@ export function apply(ctx: Context): void {
     ? (): void => {}
     : (sessionId: string): void => { sessions.open(sessionId) }
 
-  // [disabled] 搜索按钮 UI 暂时移除——保留 host API + 设置卡片，侧边栏入口关闭。
-  // slots.inject('sidebar.footer.action', () => slots.register(
-  //   { name: 'sidebar.footer.action', id: 'dsh-session-search-toggle', order: 10 },
-  //   (props: SwitchFooterProps) => createElement(SwitchFooter, { ...props, open }),
-  // ))
+  // The sidebar footer entry: the search panel (title/content toggle).
+  slots.inject('sidebar.footer.action', () => slots.register(
+    { name: 'sidebar.footer.action', id: 'dsh-session-search-toggle', order: 10 },
+    (props: SwitchFooterProps) => createElement(SwitchFooter, { ...props, open }),
+  ), 'dsh-session-search-toggle: sidebar footer entry')
 
   // The plugin settings card (settings.plugin.item) replaces the old
   // settings.general.item row + local store seat. Both `id` and `key` are
