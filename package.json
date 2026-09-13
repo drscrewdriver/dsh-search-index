@@ -81,5 +81,8 @@
     "tsdown": "^0.22.2",
     "tsx": "^4.23.12",
     "typescript": "^5.6.0"
+  },
+  "optionalDependencies": {
+    "better-sqlite3": "^11.10.0"
   }
 }

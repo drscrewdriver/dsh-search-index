@@ -219,3 +219,20 @@ test('snapshot: malformed lines are skipped, not fatal', async () => {
   assert.equal(parsed.skipped, 2)
   assert.equal(parsed.records[0].docs[0].text, '内容')
 })
+
+test('engine: batched transactions nest safely and report the driver', async () => {
+  const dir = tempDir('batch')
+  const engine = new SwitchIndexEngine({ path: join(dir, 'index.sqlite') })
+  await engine.open()
+  assert.ok(['better-sqlite3', 'node:sqlite'].includes(engine.driverLabel), `unexpected driver ${engine.driverLabel}`)
+  // 50 writes inside one batched transaction; a nested runBatched joins it.
+  engine.runBatched(() => {
+    for (let i = 0; i < 50; i += 1) {
+      engine.upsertSession({ sessionId: `s${i}`, version: 1, events: [userMessage(0, `批量内容 ${i}`)] })
+      engine.runBatched(() => {})
+    }
+  })
+  assert.equal(engine.countSessions(), 50)
+  assert.equal(engine.search({ query: '批量内容 49' }).length, 1)
+  engine.close()
+})

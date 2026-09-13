@@ -12,7 +12,7 @@
  * boundaries with a trailing-token prefix for partial input.
  */
 import type { DatabaseSync } from 'node:sqlite'
-import { openIndexDatabase } from './schema.ts'
+import { openIndexDatabase, type SwitchSqliteDriver } from './schema.ts'
 import { buildIndexDocuments, segmentForIndex, segmentQueryTerm, type SwitchRawEvent } from './extract.ts'
 
 /** One indexed session header row. */
@@ -99,22 +99,6 @@ export function buildSnippet(text: string, query: string, max = SNIPPET_CHARS): 
   return `${head}${flat.slice(start, end)}${tail}`
 }
 
-/**
- * Run one function inside an IMMEDIATE transaction.
- * node:sqlite has no cursor-level begin helper; statements are executed raw.
- */
-function withTransaction<T>(db: DatabaseSync, fn: () => T): T {
-  db.exec('BEGIN IMMEDIATE')
-  try {
-    const result = fn()
-    db.exec('COMMIT')
-    return result
-  } catch (error) {
-    try { db.exec('ROLLBACK') } catch { /* rollback of a broken txn is best-effort */ }
-    throw error
-  }
-}
-
 /** Constructor options for one engine instance. */
 export interface SwitchIndexEngineOptions {
   /** Absolute path of the index file this engine owns. */
@@ -125,8 +109,44 @@ export interface SwitchIndexEngineOptions {
  * them off the HTTP hot path (background sync / rebuild tasks). */
 export class SwitchIndexEngine {
   private db: DatabaseSync | undefined
+  private driver: SwitchSqliteDriver = 'node:sqlite'
+  private inBatch = false
 
   constructor(private readonly options: SwitchIndexEngineOptions) {}
+
+  /** Which SQLite driver is serving this handle. */
+  get driverLabel(): SwitchSqliteDriver {
+    return this.driver
+  }
+
+  /**
+   * Run one write inside the current batched transaction, or its own
+   * IMMEDIATE transaction when not batching (nested calls join the batch).
+   */
+  withWriteTx<T>(fn: () => T): T {
+    const db = this.requireDb()
+    if (this.inBatch) return fn()
+    db.exec('BEGIN IMMEDIATE')
+    this.inBatch = true
+    try {
+      const result = fn()
+      db.exec('COMMIT')
+      return result
+    } catch (error) {
+      try { db.exec('ROLLBACK') } catch { /* rollback of a broken txn is best-effort */ }
+      throw error
+    } finally {
+      this.inBatch = false
+    }
+  }
+
+  /**
+   * Run one function as a single batched transaction (one fsync checkpoint):
+   * upserts inside it join via withWriteTx instead of opening their own.
+   */
+  runBatched<T>(fn: () => T): T {
+    return this.withWriteTx(fn)
+  }
 
   /** Whether the handle is open. */
   get isOpen(): boolean {
@@ -136,7 +156,9 @@ export class SwitchIndexEngine {
   /** Open (creating or migrating) the index file. Idempotent. */
   async open(): Promise<void> {
     if (this.db !== undefined) return
-    this.db = await openIndexDatabase(this.options.path)
+    const opened = await openIndexDatabase(this.options.path)
+    this.db = opened.db
+    this.driver = opened.driver
   }
 
   /** Close the handle. Idempotent. */
@@ -166,7 +188,7 @@ export class SwitchIndexEngine {
   }): void {
     const db = this.requireDb()
     const documents = buildIndexDocuments(input.sessionId, input.events)
-    withTransaction(db, () => {
+    this.withWriteTx(() => {
       this.deleteSessionFts(db, input.sessionId)
       db.prepare('DELETE FROM docs WHERE session_id = ?').run(input.sessionId)
       const insertDoc = db.prepare(`
@@ -215,7 +237,7 @@ export class SwitchIndexEngine {
     updatedAt?: number
   }): void {
     const db = this.requireDb()
-    withTransaction(db, () => {
+    this.withWriteTx(() => {
       this.deleteSessionFts(db, input.sessionId)
       db.prepare('DELETE FROM docs WHERE session_id = ?').run(input.sessionId)
       db.prepare(`
@@ -246,7 +268,7 @@ export class SwitchIndexEngine {
    */
   setArchived(archivedIds: ReadonlySet<string>): void {
     const db = this.requireDb()
-    withTransaction(db, () => {
+    this.withWriteTx(() => {
       const rows = db.prepare('SELECT session_id, archived FROM sessions').all() as
         { session_id: string; archived: number }[]
       for (const row of rows) {
@@ -289,7 +311,7 @@ export class SwitchIndexEngine {
     docs: readonly { seq: number; type: string; surface: string; time: number; text: string }[]
   }): void {
     const db = this.requireDb()
-    withTransaction(db, () => {
+    this.withWriteTx(() => {
       this.deleteSessionFts(db, input.sessionId)
       db.prepare('DELETE FROM docs WHERE session_id = ?').run(input.sessionId)
       const insertDoc = db.prepare(`
@@ -318,7 +340,7 @@ export class SwitchIndexEngine {
   /** Remove one session and its documents entirely. */
   removeSession(sessionId: string): void {
     const db = this.requireDb()
-    withTransaction(db, () => {
+    this.withWriteTx(() => {
       this.deleteSessionFts(db, sessionId)
       db.prepare('DELETE FROM docs WHERE session_id = ?').run(sessionId)
       db.prepare('DELETE FROM sessions WHERE session_id = ?').run(sessionId)

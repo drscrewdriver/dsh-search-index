@@ -4,6 +4,15 @@
 
 ## Unreleased
 
+### 优化：重建可观测性 + 批事务加速 + 可选 better-sqlite3 驱动
+
+- **进度把控修复**：整理进度原先只在完成后上报（面板一直 "0/?"），改为状态 Sink——index-status 即时反映 done/total/阶段。
+- **开发日志**（`[switch-search]` 前缀，走 cordis logger）：驱动标识、重建每 50 会话速率行（sess/s / eta / chunk 耗时）、阶段转换、同步轮次汇总（scanned/updated/skipped-archived/failures/duration）——为前后速度对比提供数据。
+- **批事务 checkpoint**：重建按 50 会话一个事务提交（fsync 摊销），chunk 失败逐个重放隔离；PRAGMA 调优（synchronous=NORMAL / temp_store=MEMORY / cache_size=64MB）。
+- **双驱动**：`better-sqlite3` 以 optionalDependencies 引入（原生编译失败不阻断安装），运行时动态加载、缺失回退 node:sqlite；引擎与 index-status 均标注当前驱动（`driver` 字段），装与不装只影响速度不影响功能。
+- **搜索入口文案**：底部按钮"标题"→"会话搜索"。
+- tests：新增批事务嵌套安全 + 驱动标识测试，全套 16/16。
+
 ### 新增：归档软删除同步 + 归档查看面板 + DSH 风格对齐
 
 - **归档软删除（schema v4）**：每轮水位同步读取官方 `workspaceRegistry.archivedSessionIds`（惰性解析，服务缺失自动降级），归档会话在索引中打 `archived` 标记——从搜索和会话列表排除、文档内容移除但 header（标题缓存）保留；**恢复归档自动重灌全文**（version=-1 触发下轮重读）。

@@ -67,6 +67,7 @@ export class SwitchWatermarkSync {
     private readonly engine: SwitchIndexEngine,
     private readonly sessionQuery: SwitchSyncSessionQuery,
     private readonly readArchiveSource?: () => SwitchArchiveSource | undefined,
+    private readonly log?: (msg: string) => void,
   ) {
 
   }
@@ -90,6 +91,7 @@ export class SwitchWatermarkSync {
 
   private async runPass(): Promise<SwitchSyncState> {
     this.state.state = 'syncing'
+    const passStart = Date.now()
     try {
       const records = await this.sessionQuery.listSessions()
       this.state.total = records.length
@@ -99,6 +101,7 @@ export class SwitchWatermarkSync {
       const archiveSource = this.readArchiveSource?.()
       const archivedSet = new Set(archiveSource?.archivedSessionIds ?? [])
       this.engine.setArchived(archivedSet)
+      const archivedSetSize = archivedSet.size
       const failures: { sessionId: string; error: string }[] = []
       let updated = 0
       const changedIds: string[] = []
@@ -146,9 +149,11 @@ export class SwitchWatermarkSync {
       this.state.lastSyncAt = Date.now()
       this.state.state = 'idle'
       this.state.error = undefined
+      this.log?.(`sync pass: scanned=${this.state.total} updated=${updated} skipped-archived=${String(archivedSetSize)} failures=${failures.length} indexed=${this.state.indexed} duration=${Date.now() - passStart}ms driver=${this.engine.driverLabel}`)
     } catch (err) {
       this.state.state = 'error'
       this.state.error = String(err instanceof Error ? err.message : err)
+      this.log?.(`sync pass FAILED: ${this.state.error}`)
     }
     return this.snapshot()
   }

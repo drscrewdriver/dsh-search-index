@@ -19,17 +19,42 @@ export const SWITCH_SEARCH_APPLICATION_ID = 0x53574954
 export const OFFICIAL_SESSION_QUERY_APPLICATION_ID = 0x44534851
 
 /**
+ * Which SQLite driver served the handle (better-sqlite3 when the optional
+ * dependency installed, node:sqlite otherwise). Surfaced in logs and
+ * index-status so rebuild speed can be compared across drivers.
+ */
+export type SwitchSqliteDriver = 'better-sqlite3' | 'node:sqlite'
+
+/**
+ * Open the raw handle: better-sqlite3 (synchronous, faster statement
+ * dispatch) when the optional dependency is present, node:sqlite otherwise.
+ * Both expose the same prepare/exec/close shape this plugin uses.
+ */
+async function openRawHandle(actual: string): Promise<{ db: DatabaseSync; driver: SwitchSqliteDriver }> {
+  try {
+    // Non-literal specifier keeps typecheck green when the optional native
+    // dependency is absent; tsdown externalizes it via neverBundle.
+    const spec = 'better-sqlite3'
+    const mod = (await import(spec)) as unknown as { default?: new (p: string) => DatabaseSync }
+    const Ctor = mod.default ?? (mod as unknown as new (p: string) => DatabaseSync)
+    return { db: new Ctor(actual), driver: 'better-sqlite3' }
+  } catch {
+    const { DatabaseSync } = await import('node:sqlite')
+    return { db: new DatabaseSync(actual), driver: 'node:sqlite' }
+  }
+}
+
+/**
  * Open, validate, and initialize one switch-search index file.
  * Missing directories and files are created; a file that belongs to another
  * application (including the official session-query index) is refused.
  * @param path - absolute path to the index file.
- * @returns initialized database handle owned by the caller.
+ * @returns initialized database handle owned by the caller, plus the driver.
  */
-export async function openIndexDatabase(path: string): Promise<DatabaseSync> {
+export async function openIndexDatabase(path: string): Promise<{ db: DatabaseSync; driver: SwitchSqliteDriver }> {
   const actual = resolve(path)
   await mkdir(dirname(actual), { recursive: true })
-  const { DatabaseSync } = await import('node:sqlite')
-  const db = new DatabaseSync(actual)
+  const { db, driver } = await openRawHandle(actual)
   try {
     const { application_id: applicationId } = db.prepare('PRAGMA application_id').get() as { application_id: number }
     const { user_version: version } = db.prepare('PRAGMA user_version').get() as { user_version: number }
@@ -44,7 +69,12 @@ export async function openIndexDatabase(path: string): Promise<DatabaseSync> {
     }
     db.exec(`PRAGMA journal_mode = wal`)
     ensureSchema(db)
-    return db
+    // Write-throughput pragmas: NORMAL is crash-safe under WAL (fsync moves
+    // to checkpoints), MEMORY temp + a 64MB page cache mostly serve rebuilds.
+    db.exec(`PRAGMA synchronous = NORMAL`)
+    db.exec(`PRAGMA temp_store = MEMORY`)
+    db.exec(`PRAGMA cache_size = -65536`)
+    return { db, driver }
   } catch (error: unknown) {
     db.close()
     throw error

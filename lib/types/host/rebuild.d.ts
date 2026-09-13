@@ -66,7 +66,15 @@ export declare function listArchives(layout: SwitchIndexLayout): Promise<string[
  * @param onProgress - optional progress callback after each session.
  * @returns the rebuild state snapshot after completion.
  */
-export declare function rebuildIndex(activeEngine: SwitchIndexEngine, layout: SwitchIndexLayout, sessionQuery: SwitchRebuildSessionQuery, keepArchives: number, onProgress?: (done: number, total: number) => void, archiveSource?: () => SwitchArchiveSource | undefined): Promise<SwitchRebuildState>;
+/** Optional observability callbacks for rebuildIndex. */
+export interface SwitchRebuildHooks {
+    /** Progress log line sink (cordis logger bridge). */
+    log?: (msg: string) => void;
+    /** State-mutation sink: called after every change so index-status sees
+     * live progress (the "0/?" bug was state cloned only at completion). */
+    onState?: (state: SwitchRebuildState) => void;
+}
+export declare function rebuildIndex(activeEngine: SwitchIndexEngine, layout: SwitchIndexLayout, sessionQuery: SwitchRebuildSessionQuery, keepArchives: number, onProgress?: (done: number, total: number) => void, archiveSource?: () => SwitchArchiveSource | undefined, hooks?: SwitchRebuildHooks): Promise<SwitchRebuildState>;
 /** One doc-level record the snapshot importer feeds in. */
 export interface SwitchImportRecord {
     sessionId: string;

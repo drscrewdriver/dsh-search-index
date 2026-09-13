@@ -42,6 +42,7 @@ export declare const zh: {
     readonly 'panel.contentSearch': "内容";
     readonly 'panel.searchTitle': "搜索会话标题…";
     readonly 'panel.searchContent': "搜索会话内容…";
+    readonly 'panel.entry': "会话搜索";
     readonly 'panel.buildIndex': "建立索引";
     readonly 'panel.archived': "归档会话";
     readonly 'panel.archived.loading': "正在读取归档列表…";

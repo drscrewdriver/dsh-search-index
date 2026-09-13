@@ -422,6 +422,7 @@ async function indexStatus(runtime: SwitchRuntime): Promise<unknown> {
     ok: true,
     available: index.engine.isOpen && indexed > 0,
     archivedSessions: index.engine.isOpen ? index.engine.countArchived() : 0,
+    driver: index.engine.driverLabel,
     archive: index.archiveReader.diagnostics() as SwitchArchiveDiagnostics,
     dir: index.layout.dir,
     archives: await listArchives(index.layout).catch(() => []),
@@ -451,13 +452,17 @@ async function indexRebuild(runtime: SwitchRuntime): Promise<{ ok: boolean; star
     {
       listSessions: () => sessionQuery.listSessions(),
       readSession: async (sessionId: string) => {
-        const log = await sessionQuery.readSession!(sessionId)
-        return { session: log.session, events: log.events }
+        const snapshot = await sessionQuery.readSession!(sessionId)
+        return { session: snapshot.session, events: snapshot.events }
       },
     },
     keepArchives,
     undefined,
     runtime.registry,
+    {
+      log: runtime.log,
+      onState: (live) => { index.rebuild = live },
+    },
   ).then((state) => {
     index.rebuild = state
   }).catch((err) => {
@@ -560,6 +565,8 @@ interface SwitchRuntime {
   config: () => SwitchSearchConfig
   /** Lazy official archive-set source (registry first, file fallback). */
   registry: () => { archivedSessionIds: readonly string[] }
+  /** Cordis logger bridge ([switch-search] prefixed). */
+  log: (msg: string) => void
 }
 
 /**
@@ -585,6 +592,12 @@ export function apply(ctx: Context): void {
   }
   const engine = new SwitchIndexEngine({ path: `${layout.dir}/${layout.active}` })
   const sessionQuery = ctx.get('sessionQuery') as SwitchSessionQuery | undefined
+  const log = (msg: string): void => {
+    try {
+      const logger = (ctx as unknown as { logger?: { info?: (m: string) => void; warn?: (m: string) => void } }).logger
+      logger?.info?.(`[switch-search] ${msg}`)
+    } catch { /* logging must never break the host */ }
+  }
   const archiveReader = createArchiveSource(() => ctx.get('workspaceRegistry'))
   const state: SwitchIndexServiceState = {
     engine,
@@ -598,7 +611,7 @@ export function apply(ctx: Context): void {
       readTitleSnapshots: sessionQuery === undefined
         ? undefined
         : (ids) => sessionQuery.readTitleSnapshots(ids),
-    }, () => ({ archivedSessionIds: archiveReader.read().ids })),
+    }, () => ({ archivedSessionIds: archiveReader.read().ids }), log),
     layout,
     rebuild: { state: 'idle', done: 0, total: 0, startedAt: 0, finishedAt: 0, failures: [] },
   }
@@ -607,6 +620,7 @@ export function apply(ctx: Context): void {
     index: state,
     config: () => current(),
     registry: () => ({ archivedSessionIds: archiveReader.read().ids }),
+    log,
   }
 
   let syncTimer: ReturnType<typeof setInterval> | undefined
@@ -623,6 +637,7 @@ export function apply(ctx: Context): void {
   const initialConfig = current()
   void (async () => {
     await engine.open().catch(() => {})
+    log(`index open: driver=${engine.driverLabel} dir=${layout.dir}`)
     if (initialConfig.autoSync !== false) await state.sync.poll().catch(() => {})
     scheduleSync(initialConfig.syncIntervalMs ?? DEFAULT_CONFIG.syncIntervalMs!)
   })()

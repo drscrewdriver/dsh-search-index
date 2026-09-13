@@ -78,6 +78,18 @@ export async function listArchives(layout: SwitchIndexLayout): Promise<string[]>
  * @param onProgress - optional progress callback after each session.
  * @returns the rebuild state snapshot after completion.
  */
+/** Optional observability callbacks for rebuildIndex. */
+export interface SwitchRebuildHooks {
+  /** Progress log line sink (cordis logger bridge). */
+  log?: (msg: string) => void
+  /** State-mutation sink: called after every change so index-status sees
+   * live progress (the "0/?" bug was state cloned only at completion). */
+  onState?: (state: SwitchRebuildState) => void
+}
+
+/** Sessions per batched transaction (one fsync checkpoint per chunk). */
+const REBUILD_CHUNK = 50
+
 export async function rebuildIndex(
   activeEngine: SwitchIndexEngine,
   layout: SwitchIndexLayout,
@@ -85,7 +97,20 @@ export async function rebuildIndex(
   keepArchives: number,
   onProgress?: (done: number, total: number) => void,
   archiveSource?: () => SwitchArchiveSource | undefined,
+  hooks?: SwitchRebuildHooks,
 ): Promise<SwitchRebuildState> {
+  const startedMs = Date.now()
+  let docsWritten = 0
+  const emit = (): void => { hooks?.onState?.({ ...state }) }
+  const rate = (): string => {
+    const secs = Math.max(0.001, (Date.now() - startedMs) / 1000)
+    return `${(state.done / secs).toFixed(1)} sess/s`
+  }
+  const eta = (): string => {
+    if (state.total <= 0 || state.done === 0) return '?'
+    const secs = (Date.now() - startedMs) / 1000
+    return `${Math.max(0, Math.round((state.total - state.done) / (state.done / secs)))}s`
+  }
   const state: SwitchRebuildState = {
     state: 'building',
     done: 0,
@@ -95,6 +120,8 @@ export async function rebuildIndex(
     failures: [],
   }
   try {
+    hooks?.log?.(`rebuild started: dir=${layout.dir} keep=${keepArchives}`)
+    emit()
     await mkdir(layout.dir, { recursive: true })
     const buildingPath = join(layout.dir, layout.building)
     // A stale shadow from a crashed run is discarded.
@@ -104,36 +131,63 @@ export async function rebuildIndex(
     try {
       const records = await sessionQuery.listSessions()
       state.total = records.length
+      hooks?.log?.(`rebuild corpus listed: ${state.total} sessions; archived copy skips content`)
+      emit()
       // Archived sessions copy as header-only rows: the soft-deleted flag is
       // rebuilt from the official archive set, no docs, no FTS entries.
       const archivedSet = new Set(archiveSource?.()?.archivedSessionIds ?? [])
-      for (const record of records) {
-        const header = record.header
-        if (archivedSet.has(header.id)) {
-          shadow.upsertArchivedHeader({
-            sessionId: header.id,
-            version: header.version,
-            cwd: header.cwd ?? '',
-            updatedAt: header.createdAt ?? 0,
-          })
-          state.done += 1
-          onProgress?.(state.done, state.total)
-          continue
+      const readLog = async (header: { id: string; version: number; createdAt?: number; cwd?: string }) => {
+        const log = await sessionQuery.readSession(header.id)
+        return { sessionId: header.id, version: log.session.version, cwd: log.session.cwd ?? '', updatedAt: log.session.createdAt ?? 0, events: log.events }
+      }
+      for (let i = 0; i < records.length; i += REBUILD_CHUNK) {
+        const chunk = records.slice(i, i + REBUILD_CHUNK)
+        const chunkStart = Date.now()
+        const reads: Array<{ sessionId: string; version: number; cwd: string; updatedAt: number; events: readonly SwitchRawEvent[] }> = []
+        for (const record of chunk) {
+          const header = record.header
+          if (archivedSet.has(header.id)) continue
+          try {
+            reads.push(await readLog(header))
+          } catch (err) {
+            state.failures.push({ sessionId: header.id, error: String(err instanceof Error ? err.message : err) })
+          }
         }
+        // One transaction per chunk = one checkpoint; a chunk-level failure
+        // replays session-by-session to keep the bad session isolated.
         try {
-          const log = await sessionQuery.readSession(header.id)
-          shadow.upsertSession({
-            sessionId: header.id,
-            version: log.session.version,
-            cwd: log.session.cwd ?? '',
-            updatedAt: log.session.createdAt ?? 0,
-            events: log.events,
+          shadow.runBatched(() => {
+            for (const item of reads) {
+              shadow.upsertSession(item)
+              docsWritten += item.events.length
+            }
+            for (const record of chunk) {
+              const header = record.header
+              if (archivedSet.has(header.id)) shadow.upsertArchivedHeader({
+                sessionId: header.id, version: header.version,
+                cwd: header.cwd ?? '', updatedAt: header.createdAt ?? 0,
+              })
+            }
           })
         } catch (err) {
-          state.failures.push({ sessionId: header.id, error: String(err instanceof Error ? err.message : err) })
+          hooks?.log?.(`rebuild chunk txn failed, replaying individually: ${String(err instanceof Error ? err.message : err)}`)
+          for (const item of reads) {
+            try { shadow.upsertSession(item); docsWritten += item.events.length }
+            catch (e2) { state.failures.push({ sessionId: item.sessionId, error: String(e2 instanceof Error ? e2.message : e2) }) }
+          }
+          for (const record of chunk) {
+            const header = record.header
+            if (archivedSet.has(header.id)) {
+              try {
+                shadow.upsertArchivedHeader({ sessionId: header.id, version: header.version, cwd: header.cwd ?? '', updatedAt: header.createdAt ?? 0 })
+              } catch { /* header rows are best-effort */ }
+            }
+          }
         }
-        state.done += 1
+        state.done = Math.min(state.total, i + chunk.length)
         onProgress?.(state.done, state.total)
+        emit()
+        hooks?.log?.(`rebuild ${state.done}/${state.total} (${Math.round((state.done / Math.max(1, state.total)) * 100)}%) ${rate()} elapsed ${Math.round((Date.now() - startedMs) / 1000)}s eta ${eta()} chunk ${Date.now() - chunkStart}ms`)
       }
       shadow.close()
     } catch (error) {
@@ -143,6 +197,8 @@ export async function rebuildIndex(
     }
 
     state.state = 'swapping'
+    emit()
+    hooks?.log?.(`rebuild shadow complete: ${state.done} sessions, ~${docsWritten} docs, ${state.failures.length} failures; swapping`)
     // The swap window is three synchronous renames; queries fail only inside it.
     const activePath = join(layout.dir, layout.active)
     if (existsSync(activePath)) {
@@ -154,9 +210,13 @@ export async function rebuildIndex(
     await pruneArchives(layout, keepArchives)
     state.finishedAt = Date.now()
     state.state = 'idle'
+    emit()
+    hooks?.log?.(`rebuild done: total ${((state.finishedAt - startedMs) / 1000).toFixed(1)}s, archives pruned to ${keepArchives}`)
   } catch (err) {
     state.state = 'error'
     state.error = String(err instanceof Error ? err.message : err)
+    hooks?.log?.(`rebuild FAILED at done=${state.done}: ${state.error}`)
+    emit()
     // Leave the active engine usable if the swap itself failed before rename.
     if (!activeEngine.isOpen) await activeEngine.open().catch(() => {})
   }

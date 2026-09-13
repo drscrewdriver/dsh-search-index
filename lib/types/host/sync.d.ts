@@ -74,9 +74,10 @@ export declare class SwitchWatermarkSync {
     private readonly engine;
     private readonly sessionQuery;
     private readonly readArchiveSource?;
+    private readonly log?;
     private running;
     private readonly state;
-    constructor(engine: SwitchIndexEngine, sessionQuery: SwitchSyncSessionQuery, readArchiveSource?: (() => SwitchArchiveSource | undefined) | undefined);
+    constructor(engine: SwitchIndexEngine, sessionQuery: SwitchSyncSessionQuery, readArchiveSource?: (() => SwitchArchiveSource | undefined) | undefined, log?: ((msg: string) => void) | undefined);
     /** Current progress snapshot (cloned). */
     snapshot(): SwitchSyncState;
     /**

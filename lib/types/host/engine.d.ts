@@ -1,3 +1,4 @@
+import { type SwitchSqliteDriver } from './schema.ts';
 import { type SwitchRawEvent } from './extract.ts';
 /** One indexed session header row. */
 export interface SwitchIndexedSession {
@@ -39,7 +40,21 @@ export interface SwitchIndexEngineOptions {
 export declare class SwitchIndexEngine {
     private readonly options;
     private db;
+    private driver;
+    private inBatch;
     constructor(options: SwitchIndexEngineOptions);
+    /** Which SQLite driver is serving this handle. */
+    get driverLabel(): SwitchSqliteDriver;
+    /**
+     * Run one write inside the current batched transaction, or its own
+     * IMMEDIATE transaction when not batching (nested calls join the batch).
+     */
+    withWriteTx<T>(fn: () => T): T;
+    /**
+     * Run one function as a single batched transaction (one fsync checkpoint):
+     * upserts inside it join via withWriteTx instead of opening their own.
+     */
+    runBatched<T>(fn: () => T): T;
     /** Whether the handle is open. */
     get isOpen(): boolean;
     /** Open (creating or migrating) the index file. Idempotent. */

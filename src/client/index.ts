@@ -477,7 +477,7 @@ function SwitchFooter({
       'aria-label': `${translate(t, 'card.title')}（${translate(t, 'panel.titleSearch')} / ${translate(t, 'panel.contentSearch')}）`,
       'aria-expanded': openPanel,
       onClick: () => { setOpenPanel(true) },
-    }, [searchIcon(), wide && createElement('span', { key: 'label' }, translate(t, 'panel.titleSearch'))]),
+    }, [searchIcon(), wide && createElement('span', { key: 'label' }, translate(t, 'panel.entry'))]),
     openPanel && createElement(SwitchPanel, {
       key: 'panel',
       t,

@@ -46,7 +46,7 @@ const hostConfig: UserConfig = {
   sourcemap: true,
   clean: false,
   deps: {
-    neverBundle: [/^node:/, '@deepseek-ai/dsh-session-query', '@deepseek-ai/dsh-session'],
+    neverBundle: [/^node:/, '@deepseek-ai/dsh-session-query', '@deepseek-ai/dsh-session', 'better-sqlite3'],
   },
 }
 
