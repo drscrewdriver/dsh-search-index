@@ -31,16 +31,18 @@ export function ArchivePanel({
 }): ReactElement {
   const [items, setItems] = useState<HostSessionItem[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     let cancelled = false
+    setError(null)
     callHost<HostSessionItem>('list-archived', {}).then((res) => {
       if (cancelled) return
       if (res.ok) setItems(res.items)
       else setError(res.error ?? '读取归档列表失败')
     })
     return () => { cancelled = true }
-  }, [])
+  }, [attempt])
 
   // Escape closes the panel.
   useEffect(() => {
@@ -51,7 +53,18 @@ export function ArchivePanel({
 
   const children: ReactElement[] = []
   if (error !== null) {
-    children.push(createElement('div', { key: 'err', className: 'dsws_error' }, error))
+    children.push(createElement('div', { key: 'err', className: 'dsws_error' }, [
+      createElement('div', { key: 'msg' }, error === '请求超时'
+        ? '读取归档列表超时：Host 可能正忙（如正在整理索引），稍后重试。'
+        : error),
+      createElement('button', {
+        key: 'retry',
+        type: 'button',
+        className: 'dsws_actBtn',
+        style: { marginTop: '6px' },
+        onClick: () => { setAttempt(n => n + 1) },
+      }, '重试'),
+    ]))
   } else if (items === null) {
     children.push(createElement('div', { key: 'loading', className: 'dsws_status' }, translate(t, 'panel.archived.loading')))
   } else if (items.length === 0) {

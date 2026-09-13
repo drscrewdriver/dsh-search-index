@@ -21,7 +21,8 @@ import type { Context } from 'cordis'
 import z from '@deepseek-ai/schemastery'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { SwitchIndexEngine, type SwitchIndexContentType } from './host/engine.ts'
-import { SwitchWatermarkSync, type SwitchArchiveSource, type SwitchSyncState } from './host/sync.ts'
+import { SwitchWatermarkSync, type SwitchSyncState } from './host/sync.ts'
+import { createArchiveSource, type SwitchArchiveDiagnostics } from './host/archive-source.ts'
 import {
   DEFAULT_INDEX_LAYOUT,
   importIntoIndex,
@@ -405,6 +406,7 @@ async function searchStatus(runtime: SwitchRuntime): Promise<unknown> {
     reason: index.engine.isOpen ? undefined : 'not-open',
     indexing: sync.state === 'syncing',
     archivedSessions: index.engine.countArchived(),
+    archive: index.archiveReader.diagnostics(),
     sync,
     rebuild: index.rebuild,
   }
@@ -420,6 +422,7 @@ async function indexStatus(runtime: SwitchRuntime): Promise<unknown> {
     ok: true,
     available: index.engine.isOpen && indexed > 0,
     archivedSessions: index.engine.isOpen ? index.engine.countArchived() : 0,
+    archive: index.archiveReader.diagnostics() as SwitchArchiveDiagnostics,
     dir: index.layout.dir,
     archives: await listArchives(index.layout).catch(() => []),
     sync: { ...sync, indexed } satisfies SwitchSyncState,
@@ -541,6 +544,8 @@ export interface SwitchIndexServiceState {
   sync: SwitchWatermarkSync
   layout: SwitchIndexLayout
   rebuild: SwitchRebuildState
+  /** Official archive-set reader (registry first, storage-hub file fallback). */
+  archiveReader: ReturnType<typeof createArchiveSource>
 }
 
 /**
@@ -553,8 +558,8 @@ interface SwitchRuntime {
   sessionQuery: SwitchSessionQuery | undefined
   index: SwitchIndexServiceState
   config: () => SwitchSearchConfig
-  /** Lazy official archive-set source (workspaceRegistry mirror). */
-  registry: () => SwitchArchiveSource | undefined
+  /** Lazy official archive-set source (registry first, file fallback). */
+  registry: () => { archivedSessionIds: readonly string[] }
 }
 
 /**
@@ -580,8 +585,10 @@ export function apply(ctx: Context): void {
   }
   const engine = new SwitchIndexEngine({ path: `${layout.dir}/${layout.active}` })
   const sessionQuery = ctx.get('sessionQuery') as SwitchSessionQuery | undefined
+  const archiveReader = createArchiveSource(() => ctx.get('workspaceRegistry'))
   const state: SwitchIndexServiceState = {
     engine,
+    archiveReader,
     sync: new SwitchWatermarkSync(engine, {
       listSessions: () => sessionQuery?.listSessions() ?? Promise.resolve([]),
       readSession: async (sessionId: string) => {
@@ -591,7 +598,7 @@ export function apply(ctx: Context): void {
       readTitleSnapshots: sessionQuery === undefined
         ? undefined
         : (ids) => sessionQuery.readTitleSnapshots(ids),
-    }, () => (ctx.get('workspaceRegistry') as SwitchArchiveSource | undefined)),
+    }, () => ({ archivedSessionIds: archiveReader.read().ids })),
     layout,
     rebuild: { state: 'idle', done: 0, total: 0, startedAt: 0, finishedAt: 0, failures: [] },
   }
@@ -599,7 +606,7 @@ export function apply(ctx: Context): void {
     sessionQuery,
     index: state,
     config: () => current(),
-    registry: () => ctx.get('workspaceRegistry') as SwitchArchiveSource | undefined,
+    registry: () => ({ archivedSessionIds: archiveReader.read().ids }),
   }
 
   let syncTimer: ReturnType<typeof setInterval> | undefined

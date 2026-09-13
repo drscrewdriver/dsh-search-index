@@ -22,6 +22,7 @@ import z from '@deepseek-ai/schemastery';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { SwitchIndexEngine } from './host/engine.ts';
 import { SwitchWatermarkSync } from './host/sync.ts';
+import { createArchiveSource } from './host/archive-source.ts';
 import { type SwitchIndexLayout, type SwitchRebuildState } from './host/rebuild.ts';
 import type { SwitchRawEvent } from './host/extract.ts';
 import { type SwitchSearchConfig } from './config.ts';
@@ -136,6 +137,8 @@ export interface SwitchIndexServiceState {
     sync: SwitchWatermarkSync;
     layout: SwitchIndexLayout;
     rebuild: SwitchRebuildState;
+    /** Official archive-set reader (registry first, storage-hub file fallback). */
+    archiveReader: ReturnType<typeof createArchiveSource>;
 }
 /**
  * Plugin body: mount the fenced /switch-search/api route, own the independent
