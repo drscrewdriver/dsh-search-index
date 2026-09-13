@@ -4,6 +4,11 @@
 
 ## Unreleased
 
+### 交互：归档清理收敛到编辑模式
+
+- 归档面板默认只读；头部新增「编辑」按钮进入编辑态——复选框、全选、红色「删除选中 (N)」仅在编辑态出现，「完成」退出并清空选择。
+- 删除按钮仍走完整确认流程（JS confirm：id 摘要 + 备份/重启/不可撤销警示）→ `archive-prune` → 索引即时解除软删 → 刷新列表并停留在编辑态可继续清理。
+
 ### 新增：归档批量清理（管理面板）
 
 - 归档面板新增批量管理模式：全选/勾选归档会话 → **JS confirm 确认**（列出将移除的 id 摘要）→ `archive-prune` API 从规范存储 `~/.dsh/storages/workspace.json` 的 `global.archivedSessionIds` 数组中批量移除。

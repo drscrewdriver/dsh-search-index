@@ -168,6 +168,9 @@ const CSS = `
 .dsws_uuid{font-family:var(--ds-font-family-code,monospace);font-size:11px;user-select:text}
 .dsws_archCheck{flex:none;display:grid;place-items:center;width:18px;height:18px}
 .dsws_archCheck input{width:14px;height:14px;margin:0;cursor:pointer;accent-color:var(--dsw-alias-state-business-primary)}
+.dsws_dangerBtn{border-color:var(--dsw-alias-state-error-primary,var(--dsw-alias-state-warn-label));color:var(--dsw-alias-state-error-primary,var(--dsw-alias-state-warn-label))}
+.dsws_dangerBtn:hover{background:var(--dsw-alias-state-error-tertiary,var(--dsw-alias-state-warn-tertiary))}
+.dsws_editActive{border-color:var(--dsw-alias-state-business-primary);color:var(--dsw-alias-state-business-primary)}
 .dsws_pill{flex:none;display:inline-grid;grid-template-columns:14px max-content;align-items:center;column-gap:4px;height:26px;padding:0 10px;box-sizing:border-box;border:none;border-radius:8px;font-size:12px;font-weight:500;line-height:18px;white-space:nowrap;transition:background-color 160ms ease-out,color 160ms ease-out}
 .dsws_pill .dsws_pillIcon{display:grid;place-items:center;width:14px;height:14px}
 .dsws_pill .dsws_pillLabel{display:grid;text-align:left}

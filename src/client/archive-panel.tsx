@@ -44,6 +44,7 @@ export function ArchivePanel({
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
   const [pruning, setPruning] = useState(false)
   const [note, setNote] = useState<string | null>(null)
+  const [editing, setEditing] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -70,6 +71,13 @@ export function ArchivePanel({
       else next.add(sessionId)
       return next
     })
+  }
+
+  /** Enter/exit edit mode; leaving clears the selection. */
+  const toggleEditing = (): void => {
+    setEditing(prev => !prev)
+    setSelected(new Set())
+    setNote(null)
   }
 
   const toggleAll = (): void => {
@@ -123,29 +131,30 @@ export function ArchivePanel({
     children.push(createElement('div', { key: 'empty', className: 'dsws_empty' }, translate(t, 'panel.archived.empty')))
   } else {
     const allSelected = selected.size === items.length
-    children.push(createElement('div', { key: 'manage', className: 'dsws_btnRow', style: { padding: '4px 10px 0' } }, [
-      createElement('button', {
-        key: 'all',
-        type: 'button',
-        className: 'dsws_actBtn',
-        onClick: toggleAll,
-      }, allSelected ? '取消全选' : '全选'),
-      createElement('button', {
-        key: 'prune',
-        type: 'button',
-        className: 'dsws_actBtn',
-        disabled: pruning || selected.size === 0,
-        onClick: pruneSelected,
-      }, pruning ? '清理中…' : `清理选中 (${selected.size})`),
-      createElement('span', { key: 'hint', className: 'dsws_indexLine' }, '清理 = 从官方归档数组移除，需重启 DSH 生效'),
-    ]))
+    if (editing) {
+      children.push(createElement('div', { key: 'manage', className: 'dsws_btnRow', style: { padding: '4px 10px 0' } }, [
+        createElement('button', {
+          key: 'all',
+          type: 'button',
+          className: 'dsws_actBtn',
+          onClick: toggleAll,
+        }, allSelected ? '取消全选' : '全选'),
+        createElement('button', {
+          key: 'prune',
+          type: 'button',
+          className: 'dsws_actBtn dsws_dangerBtn',
+          disabled: pruning || selected.size === 0,
+          onClick: pruneSelected,
+        }, pruning ? '删除中…' : `删除选中 (${selected.size})`),
+      ]))
+    }
     children.push(createElement('ul', {
       key: 'list',
       className: 'dsws_list',
       role: 'list',
       'aria-label': translate(t, 'panel.archived'),
     }, items.map(item => createElement('li', { key: item.sessionId, className: 'dsws_row dsws_archRow' }, [
-      createElement('label', { key: 'sel', className: 'dsws_archCheck' }, [
+      editing && createElement('label', { key: 'sel', className: 'dsws_archCheck' }, [
         createElement('input', {
           type: 'checkbox',
           checked: selected.has(item.sessionId),
@@ -171,13 +180,23 @@ export function ArchivePanel({
     }, [
       createElement('div', { key: 'head', className: 'dsws_dialogHead' }, [
         createElement('span', { key: 'title', className: 'dsws_dialogTitle' }, translate(t, 'panel.archived')),
-        createElement('button', {
-          key: 'close',
-          type: 'button',
-          className: 'dsws_actBtn',
-          onClick: onClose,
-        }, translate(t, 'panel.archived.close')),
+        createElement('span', { key: 'headBtns', className: 'dsws_btnRow' }, [
+          createElement('button', {
+            key: 'edit',
+            type: 'button',
+            className: `dsws_actBtn${editing ? ' dsws_editActive' : ''}`,
+            onClick: toggleEditing,
+          }, editing ? '完成' : '编辑'),
+          createElement('button', {
+            key: 'close',
+            type: 'button',
+            className: 'dsws_actBtn',
+            onClick: onClose,
+          }, translate(t, 'panel.archived.close')),
+        ]),
       ]),
+      editing && createElement('div', { key: 'edithint', className: 'dsws_indexLine', style: { padding: '4px 12px 0' } },
+        '编辑模式：勾选要清理的会话，按"删除选中"从官方归档数组移除（自动备份，需重启 DSH 生效）。'),
       note !== null && createElement('div', { key: 'note', className: 'dsws_status' }, note),
       children,
     ]),
