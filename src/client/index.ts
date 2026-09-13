@@ -500,6 +500,69 @@ function SwitchFooter({
   ])
 }
 
+/** The bottom-bar archive entry: opens the archived-sessions viewer. */
+function SwitchArchiveFooter({
+  t,
+  wide,
+  open,
+}: SwitchFooterProps & { t?: CardLocale; open: (sessionId: string) => void }): ReactElement {
+  const [openArchive, setOpenArchive] = useState(false)
+  return createElement('div', { className: 'dsws_root' }, [
+    createElement('button', {
+      key: 'btn',
+      type: 'button',
+      className: 'dsws_button',
+      title: translate(t, 'panel.archived'),
+      'aria-label': translate(t, 'panel.archived'),
+      'aria-haspopup': 'dialog',
+      'aria-expanded': openArchive,
+      onClick: () => { setOpenArchive(true) },
+    }, [archiveIcon(), wide && createElement('span', { key: 'label' }, translate(t, 'panel.archived'))]),
+    openArchive && createElement(ArchivePanel, {
+      key: 'archive',
+      t,
+      onClose: () => { setOpenArchive(false) },
+      open: (sessionId: string) => {
+        setOpenArchive(false)
+        open(sessionId)
+      },
+    }),
+  ])
+}
+
+/** Inline archive-box icon (same 16px grid as the official settings gear). */
+function archiveIcon(): ReactElement {
+  return createElement('svg', {
+    width: 16,
+    height: 16,
+    viewBox: '0 0 16 16',
+    fill: 'none',
+    'aria-hidden': true,
+  }, [
+    createElement('path', {
+      key: 'lid',
+      d: 'M2 3.5h12v2.2H2z',
+      stroke: 'currentColor',
+      strokeWidth: 1.3,
+      strokeLinejoin: 'round',
+    }),
+    createElement('path', {
+      key: 'box',
+      d: 'M3.2 5.7h9.6v6.1a1 1 0 0 1-1 1H4.2a1 1 0 0 1-1-1z',
+      stroke: 'currentColor',
+      strokeWidth: 1.3,
+      strokeLinejoin: 'round',
+    }),
+    createElement('path', {
+      key: 'slot',
+      d: 'M6.4 8.2h3.2',
+      stroke: 'currentColor',
+      strokeWidth: 1.3,
+      strokeLinecap: 'round',
+    }),
+  ])
+}
+
 /** ------------------------------------------------------------------ helpers */
 
 /** Format an epoch-ms timestamp: today → HH:mm, else YYYY-MM-DD HH:mm. */
@@ -584,11 +647,17 @@ export function apply(ctx: Context): void {
     if (sessions !== undefined && typeof sessions.open === 'function') sessions.open(sessionId)
   }
 
-  // The sidebar footer entry: the search panel (title/content toggle).
+  // The sidebar footer entries: the search panel (title/content toggle) and
+  // the archive viewer — two bottom-bar buttons beside the official
+  // settings trigger, both opening the centered dialog.
   slots.inject('sidebar.footer.action', () => slots.register(
     { name: 'sidebar.footer.action', id: 'dsh-session-search-toggle', order: 10 },
     (props: SwitchFooterProps) => createElement(SwitchFooter, { ...props, open }),
   ), 'dsh-session-search-toggle: sidebar footer entry')
+  slots.inject('sidebar.footer.action', () => slots.register(
+    { name: 'sidebar.footer.action', id: 'dsh-session-search-toggle-archive', order: 11 },
+    (props: SwitchFooterProps) => createElement(SwitchArchiveFooter, { ...props, open }),
+  ), 'dsh-session-search-toggle: sidebar archive entry')
 
   // The plugin settings card (settings.plugin.item) replaces the old
   // settings.general.item row + local store seat. Both `id` and `key` are
