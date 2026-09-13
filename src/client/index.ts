@@ -86,6 +86,9 @@ interface SwitchFooterProps {
   wide: boolean
 }
 
+/** Last panel mode used this web session (mode memory, not persisted). */
+let lastPanelMode: 'title' | 'content' = 'title'
+
 declare module 'cordis' {
   interface Context {
     slots: SwitchSlotsService
@@ -184,7 +187,14 @@ function SwitchPanel({
   onClose: () => void
   open: (sessionId: string) => void
 }): ReactElement {
-  const [mode, setMode] = useState<'title' | 'content'>('title')
+  // Mode memory: the panel reopens in the mode last used in this web session
+  // (first open falls back to 'title'). Session-scoped on purpose — no
+  // persistence, the settings card's defaultMode stays the durable preference.
+  const [mode, setModeState] = useState<'title' | 'content'>(lastPanelMode)
+  const setMode = (next: 'title' | 'content'): void => {
+    lastPanelMode = next
+    setModeState(next)
+  }
   const [query, setQuery] = useState('')
   const [contentType, setContentType] = useState<ContentType>('all')
   const [sessions, setSessions] = useState<HostSessionItem[] | null>(null)
