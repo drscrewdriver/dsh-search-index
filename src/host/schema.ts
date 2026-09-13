@@ -10,7 +10,7 @@ import { mkdir } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 
 /** Current switch-search index schema version. Incompatible versions reset in place. */
-export const SWITCH_SEARCH_SCHEMA_VERSION = 3
+export const SWITCH_SEARCH_SCHEMA_VERSION = 4
 
 /** Application id marking files owned by this plugin's index (ASCII "SWIS"). */
 export const SWITCH_SEARCH_APPLICATION_ID = 0x53574954
@@ -78,7 +78,8 @@ function ensureSchema(db: DatabaseSync): void {
       title TEXT NOT NULL DEFAULT '',
       cwd TEXT NOT NULL DEFAULT '',
       updated_at INTEGER NOT NULL DEFAULT 0,
-      indexed_at INTEGER NOT NULL DEFAULT 0
+      indexed_at INTEGER NOT NULL DEFAULT 0,
+      archived INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE IF NOT EXISTS docs (
       doc_id INTEGER PRIMARY KEY AUTOINCREMENT,

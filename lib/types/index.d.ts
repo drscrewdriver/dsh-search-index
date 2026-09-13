@@ -108,11 +108,19 @@ interface SwitchSessionQuery {
         signal?: AbortSignal;
     }): Promise<SwitchSearchPage>;
 }
+/**
+ * The workspace registry face this plugin reads (structural mirror): the
+ * official archive set. Read lazily — the registry may mount after plugins.
+ */
+interface SwitchWorkspaceRegistry {
+    readonly archivedSessionIds: readonly string[];
+}
 declare module 'cordis' {
     interface Context {
         webServer: SwitchWebServer;
         webRuntime: SwitchWebRuntime;
         sessionQuery?: SwitchSessionQuery;
+        workspaceRegistry?: SwitchWorkspaceRegistry;
     }
 }
 /** Stable plugin name for the cordis row. */

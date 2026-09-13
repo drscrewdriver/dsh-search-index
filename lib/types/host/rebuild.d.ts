@@ -1,5 +1,6 @@
 import { SwitchIndexEngine } from './engine.ts';
 import type { SwitchRawEvent } from './extract.ts';
+import type { SwitchArchiveSource } from './sync.ts';
 /** The corpus reader a rebuild needs (same faces as the syncer). */
 export interface SwitchRebuildSessionQuery {
     listSessions(): Promise<readonly {
@@ -65,7 +66,7 @@ export declare function listArchives(layout: SwitchIndexLayout): Promise<string[
  * @param onProgress - optional progress callback after each session.
  * @returns the rebuild state snapshot after completion.
  */
-export declare function rebuildIndex(activeEngine: SwitchIndexEngine, layout: SwitchIndexLayout, sessionQuery: SwitchRebuildSessionQuery, keepArchives: number, onProgress?: (done: number, total: number) => void): Promise<SwitchRebuildState>;
+export declare function rebuildIndex(activeEngine: SwitchIndexEngine, layout: SwitchIndexLayout, sessionQuery: SwitchRebuildSessionQuery, keepArchives: number, onProgress?: (done: number, total: number) => void, archiveSource?: () => SwitchArchiveSource | undefined): Promise<SwitchRebuildState>;
 /** One doc-level record the snapshot importer feeds in. */
 export interface SwitchImportRecord {
     sessionId: string;

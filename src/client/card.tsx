@@ -15,12 +15,14 @@
  */
 import { useEffect, useState, useSyncExternalStore, type JSX } from 'react'
 import { createElement } from 'react'
+import { createPortal } from 'react-dom'
 import type { SwitchSearchConfig } from '../config.ts'
 import {
   callHostAny,
   downloadSnapshot,
   type HostIndexStatus,
 } from './host-api.ts'
+import { ArchivePanel } from './archive-panel.tsx'
 import { translate, type LocaleKey } from './locales.ts'
 
 /**
@@ -43,6 +45,8 @@ export interface SearchSettingsCardInjected {
   scope: SwitchCardScope
   /** Optional host dictionary lookup (present when the locale service exists). */
   t?: (key: LocaleKey, params?: Record<string, unknown>) => string
+  /** Lazy session-open face for the archive viewer (resolved at click time). */
+  openSession?: (sessionId: string) => void
 }
 
 /** Full card props. */
@@ -130,11 +134,34 @@ function Toggle(props: { checked: boolean; writable: boolean; onChange: (checked
   ])
 }
 
+/**
+ * A status pill in the official ConnectionIndicator visual language: rounded
+ * chip, semantic state tokens, animated dots while syncing.
+ */
+function StatusPill(props: { state: 'ready' | 'syncing' | 'error' | 'neutral'; label: string; icon: string; dots?: boolean }): JSX.Element {
+  const stateClass = props.state === 'ready' ? 'dsws_pillReady'
+    : props.state === 'syncing' ? 'dsws_pillWarn'
+      : props.state === 'error' ? 'dsws_pillError'
+        : 'dsws_pillNeutral'
+  return createElement('span', { className: `dsws_pill ${stateClass}` }, [
+    createElement('span', { key: 'icon', className: 'dsws_pillIcon', 'aria-hidden': true }, props.icon),
+    createElement('span', { key: 'label', className: 'dsws_pillLabel' }, [
+      createElement('span', { key: 'text' }, props.label),
+      props.dots === true && createElement('span', {
+        key: 'dots',
+        className: 'dsws_pillDots',
+        'aria-hidden': true,
+      }, createElement('span', {}, '.'), createElement('span', {}, '.'), createElement('span', {}, '.')),
+    ]),
+  ])
+}
+
 /** The independent-index lifecycle block (status + 整理 + snapshot seam). */
-function IndexBlock(props: { t?: SearchSettingsCardProps['t'] }): JSX.Element {
+function IndexBlock(props: { t?: SearchSettingsCardProps['t']; openSession?: (sessionId: string) => void }): JSX.Element {
   const [status, setStatus] = useState<HostIndexStatus | null>(null)
   const [note, setNote] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [archiveOpen, setArchiveOpen] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -190,6 +217,21 @@ function IndexBlock(props: { t?: SearchSettingsCardProps['t'] }): JSX.Element {
     }).catch((err: unknown) => setNote(translate(t, 'card.action.failed', { error: String(err instanceof Error ? err.message : err) })))
       .finally(() => setBusy(false))
   }
+
+  const pillState: 'ready' | 'syncing' | 'error' | 'neutral' = rebuilding
+    ? 'syncing'
+    : status?.rebuild?.state === 'error'
+      ? 'error'
+      : status === null || status.available !== true
+        ? 'neutral'
+        : 'ready'
+  const pillLabel = rebuilding
+    ? translate(t, 'card.index.rebuilding', { done: status?.rebuild?.done ?? 0, total: status?.rebuild?.total || '?' })
+    : status === null
+      ? translate(t, 'card.index.reading')
+      : status.available === true
+        ? translate(t, 'card.index.desc', { indexed: status.sync?.indexed ?? '?' })
+        : translate(t, 'card.index.empty')
 
   const statusLine = status === null
     ? translate(t, 'card.index.reading')
@@ -253,6 +295,19 @@ function IndexBlock(props: { t?: SearchSettingsCardProps['t'] }): JSX.Element {
   return createElement('div', { className: 'dsws_setRow', style: rebuilding ? { flexDirection: 'column', alignItems: 'stretch' } : undefined }, [
     createElement('div', { key: 'text', className: 'dsws_setText' }, [
       createElement('span', { key: 't', className: 'dsws_setTitle' }, translate(t, 'card.index')),
+      createElement('span', { key: 'p', style: { display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' } }, [
+        createElement(StatusPill, {
+          key: 'pill',
+          state: pillState,
+          label: pillLabel,
+          icon: pillState === 'ready' ? '✓' : pillState === 'syncing' || pillState === 'error' ? '!' : '·',
+          dots: pillState === 'syncing',
+        }),
+        (status?.archivedSessions ?? 0) > 0 && createElement('span', {
+          key: 'archived',
+          className: 'dsws_pill dsws_pillNeutral',
+        }, `${translate(t, 'panel.archived')} ${status?.archivedSessions}`),
+      ]),
       createElement('span', { key: 'd', className: 'dsws_setDesc' }, statusLine),
       rebuildError !== null && rebuildError !== undefined
         && createElement('span', { key: 'err', className: 'dsws_setDesc' }, translate(t, 'card.index.rebuildError', { error: rebuildError })),
@@ -276,6 +331,13 @@ function IndexBlock(props: { t?: SearchSettingsCardProps['t'] }): JSX.Element {
         disabled: blocking || status?.available !== true,
         onClick: onExport,
       }, translate(t, 'card.index.export')),
+      createElement('button', {
+        key: 'viewArchived',
+        type: 'button',
+        className: 'dsws_actBtn',
+        disabled: busy,
+        onClick: () => { setArchiveOpen(true) },
+      }, translate(t, 'card.index.viewArchived')),
       createElement('label', { key: 'import', className: 'dsws_actBtn' }, [
         translate(t, 'card.index.import'),
         createElement('input', {
@@ -291,6 +353,11 @@ function IndexBlock(props: { t?: SearchSettingsCardProps['t'] }): JSX.Element {
         }),
       ]),
     ]),
+    archiveOpen && createPortal(createElement(ArchivePanel, {
+      t,
+      onClose: () => { setArchiveOpen(false) },
+      open: (sessionId: string) => { props.openSession?.(sessionId) },
+    }), document.body),
   ])
 }
 
@@ -309,7 +376,7 @@ export function SearchSettingsCard(props: SearchSettingsCardProps): JSX.Element 
     () => scope.getSnapshot(),
   )
 
-  const body = createCardBody({ t, snapshot, scope })
+  const body = createCardBody({ t, snapshot, scope, openSession: props.openSession })
 
   return createElement('div', {
     style: {
@@ -380,6 +447,7 @@ function createCardBody(props: {
   t?: SearchSettingsCardProps['t']
   snapshot: ReturnType<SwitchCardScope['getSnapshot']>
   scope: SwitchCardScope
+  openSession?: (sessionId: string) => void
 }): JSX.Element[] {
   const t = props.t
   const snapshot = props.snapshot
@@ -470,7 +538,7 @@ function createCardBody(props: {
     }),
   ]
 
-  const indexBlock = IndexBlock({ t })
+  const indexBlock = IndexBlock({ t, openSession: props.openSession })
   children.push(indexBlock)
 
   if (!writable) {

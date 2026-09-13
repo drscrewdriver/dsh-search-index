@@ -4,6 +4,14 @@
 
 ## Unreleased
 
+### 新增：归档软删除同步 + 归档查看面板 + DSH 风格对齐
+
+- **归档软删除（schema v4）**：每轮水位同步读取官方 `workspaceRegistry.archivedSessionIds`（惰性解析，服务缺失自动降级），归档会话在索引中打 `archived` 标记——从搜索和会话列表排除、文档内容移除但 header（标题缓存）保留；**恢复归档自动重灌全文**（version=-1 触发下轮重读）。
+- **整理不再复制归档内容**：重建/快照导出导入遇到归档会话只写 header 行，docs/fts 零复制。
+- **归档查看面板**：只读居中浮窗列出官方归档集（标题/时间/cwd），点击打开会话；入口两处——搜索面板底部"归档会话"与设置卡片"查看归档"（新增 `list-archived` API，沿用 fence）。官方无 unarchive 端点，面板不提供恢复操作。
+- **DSH 风格对齐**（对齐官方 `SettingsRoot` / `ConnectionIndicator` 源码度量与 token）：footer 按钮改官方 trigger 规格（42px/12px radius/hover token）；索引状态改官方药丸语言（`--dsw-alias-state-warn/success/error-*` 语义色、同步中点点动画 + `prefers-reduced-motion` 关停）；浮窗遮罩换 Modal mask token（`--dsw-alias-bg-mask-1` + blur）。
+- tests：新增 `tests/index-archive.test.mjs`（5 项：软删/恢复重灌/header 行/重建跳过/快照规则），全套 15/15。
+
 ### 优化：检索管线重构（分词 / 存储 / 查询路径）
 
 - **Intl.Segmenter 词级分词替代 trigram**：抽取文本按 ICU 词边界空格分隔后进 FTS5 unicode61，查询侧走同一分词。索引体积从 trigram 的全 3 字符窗口降到词级 token（预计 1/4 量级）；2 字短查询从"LIKE 全表扫"恢复为正常索引查询；部分输入用尾词 `*` 前缀命中（"正在搜"→ 正在搜索）；跨词碎片不再误中（精度提升）。

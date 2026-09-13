@@ -60,15 +60,23 @@ export interface SwitchSyncState {
     error?: string;
 }
 /**
+ * The official archive-set face (workspaceRegistry mirror): read-only.
+ * Resolved lazily per pass — the registry may mount after this plugin.
+ */
+export interface SwitchArchiveSource {
+    readonly archivedSessionIds: readonly string[];
+}
+/**
  * One watermark syncer bound to one open engine. `poll()` is re-entrant-safe:
  * overlapping calls collapse into the running pass.
  */
 export declare class SwitchWatermarkSync {
     private readonly engine;
     private readonly sessionQuery;
+    private readonly readArchiveSource?;
     private running;
     private readonly state;
-    constructor(engine: SwitchIndexEngine, sessionQuery: SwitchSyncSessionQuery);
+    constructor(engine: SwitchIndexEngine, sessionQuery: SwitchSyncSessionQuery, readArchiveSource?: (() => SwitchArchiveSource | undefined) | undefined);
     /** Current progress snapshot (cloned). */
     snapshot(): SwitchSyncState;
     /**

@@ -23,6 +23,7 @@ export interface SwitchIndexedSession {
   cwd: string
   updatedAt: number
   indexedAt: number
+  archived: boolean
 }
 
 /** One session-grouped search hit. */
@@ -181,14 +182,15 @@ export class SwitchIndexEngine {
         insertFts.run(Number(result.lastInsertRowid), indexText)
       }
       db.prepare(`
-        INSERT INTO sessions (session_id, version, title, cwd, updated_at, indexed_at)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO sessions (session_id, version, title, cwd, updated_at, indexed_at, archived)
+        VALUES (?, ?, ?, ?, ?, ?, 0)
         ON CONFLICT(session_id) DO UPDATE SET
           version = excluded.version,
           title = CASE WHEN excluded.title != '' THEN excluded.title ELSE sessions.title END,
           cwd = excluded.cwd,
           updated_at = excluded.updated_at,
-          indexed_at = excluded.indexed_at
+          indexed_at = excluded.indexed_at,
+          archived = 0
       `).run(
         input.sessionId,
         input.version,
@@ -197,6 +199,67 @@ export class SwitchIndexEngine {
         input.updatedAt ?? 0,
         Date.now(),
       )
+    })
+  }
+
+  /**
+   * Write an archived session's header row without any document content:
+   * the official archive never removes logs, and the index mirrors that with
+   * a flag while skipping the content copy on rebuilds.
+   */
+  upsertArchivedHeader(input: {
+    sessionId: string
+    version: number
+    title?: string
+    cwd?: string
+    updatedAt?: number
+  }): void {
+    const db = this.requireDb()
+    withTransaction(db, () => {
+      this.deleteSessionFts(db, input.sessionId)
+      db.prepare('DELETE FROM docs WHERE session_id = ?').run(input.sessionId)
+      db.prepare(`
+        INSERT INTO sessions (session_id, version, title, cwd, updated_at, indexed_at, archived)
+        VALUES (?, ?, ?, ?, ?, ?, 1)
+        ON CONFLICT(session_id) DO UPDATE SET
+          version = excluded.version,
+          title = CASE WHEN excluded.title != '' THEN excluded.title ELSE sessions.title END,
+          cwd = excluded.cwd,
+          updated_at = excluded.updated_at,
+          indexed_at = excluded.indexed_at,
+          archived = 1
+      `).run(
+        input.sessionId,
+        input.version,
+        input.title ?? '',
+        input.cwd ?? '',
+        input.updatedAt ?? 0,
+        Date.now(),
+      )
+    })
+  }
+
+  /**
+   * Apply the official archive set: mark archived ids, unmark the rest.
+   * Clearing the flag forces the next watermark pass to re-ingest the
+   * session's full content (version = -1).
+   */
+  setArchived(archivedIds: ReadonlySet<string>): void {
+    const db = this.requireDb()
+    withTransaction(db, () => {
+      const rows = db.prepare('SELECT session_id, archived FROM sessions').all() as
+        { session_id: string; archived: number }[]
+      for (const row of rows) {
+        const shouldBe = archivedIds.has(row.session_id) ? 1 : 0
+        if (row.archived === shouldBe) continue
+        if (shouldBe === 1) {
+          this.deleteSessionFts(db, row.session_id)
+          db.prepare('DELETE FROM docs WHERE session_id = ?').run(row.session_id)
+          db.prepare('UPDATE sessions SET archived = 1 WHERE session_id = ?').run(row.session_id)
+        } else {
+          db.prepare('UPDATE sessions SET archived = 0, version = -1 WHERE session_id = ?').run(row.session_id)
+        }
+      }
     })
   }
 
@@ -292,17 +355,31 @@ export class SwitchIndexEngine {
     return row === undefined ? undefined : rowToSession(row)
   }
 
-  /** All indexed session rows, newest indexed first. */
+  /** Active (non-archived) indexed sessions, newest first. */
   listIndexedSessions(): SwitchIndexedSession[] {
     const db = this.requireDb()
-    const rows = db.prepare('SELECT * FROM sessions ORDER BY updated_at DESC').all() as Record<string, unknown>[]
+    const rows = db.prepare('SELECT * FROM sessions WHERE archived = 0 ORDER BY updated_at DESC').all() as Record<string, unknown>[]
     return rows.map(rowToSession)
   }
 
-  /** Number of indexed sessions. */
+  /** Archived (soft-deleted) sessions, newest first — the archive viewer face. */
+  listArchived(): SwitchIndexedSession[] {
+    const db = this.requireDb()
+    const rows = db.prepare('SELECT * FROM sessions WHERE archived = 1 ORDER BY updated_at DESC').all() as Record<string, unknown>[]
+    return rows.map(rowToSession)
+  }
+
+  /** Number of active (non-archived) indexed sessions. */
   countSessions(): number {
     const db = this.requireDb()
-    const row = db.prepare('SELECT COUNT(*) AS n FROM sessions').get() as { n: number | bigint }
+    const row = db.prepare('SELECT COUNT(*) AS n FROM sessions WHERE archived = 0').get() as { n: number | bigint }
+    return Number(row.n)
+  }
+
+  /** Number of archived (soft-deleted) sessions. */
+  countArchived(): number {
+    const db = this.requireDb()
+    const row = db.prepare('SELECT COUNT(*) AS n FROM sessions WHERE archived = 1').get() as { n: number | bigint }
     return Number(row.n)
   }
 
@@ -334,7 +411,7 @@ export class SwitchIndexEngine {
       ) f
       JOIN docs d ON d.doc_id = f.rowid
       JOIN sessions s ON s.session_id = d.session_id
-      WHERE d.type IN (${placeholders}) AND d.surface = 'current'
+      WHERE d.type IN (${placeholders}) AND d.surface = 'current' AND s.archived = 0
     `).all(match, MATCH_SCAN_LIMIT, ...types) as {
       docId: number | bigint
       sessionId: string
@@ -394,5 +471,6 @@ function rowToSession(row: Record<string, unknown>): SwitchIndexedSession {
     cwd: String(row['cwd'] ?? ''),
     updatedAt: Number(row['updated_at'] ?? 0),
     indexedAt: Number(row['indexed_at'] ?? 0),
+    archived: Number(row['archived'] ?? 0) === 1,
   }
 }

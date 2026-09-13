@@ -41,6 +41,14 @@ export interface SwitchSyncState {
 }
 
 /**
+ * The official archive-set face (workspaceRegistry mirror): read-only.
+ * Resolved lazily per pass — the registry may mount after this plugin.
+ */
+export interface SwitchArchiveSource {
+  readonly archivedSessionIds: readonly string[]
+}
+
+/**
  * One watermark syncer bound to one open engine. `poll()` is re-entrant-safe:
  * overlapping calls collapse into the running pass.
  */
@@ -58,7 +66,10 @@ export class SwitchWatermarkSync {
   constructor(
     private readonly engine: SwitchIndexEngine,
     private readonly sessionQuery: SwitchSyncSessionQuery,
-  ) {}
+    private readonly readArchiveSource?: () => SwitchArchiveSource | undefined,
+  ) {
+
+  }
 
   /** Current progress snapshot (cloned). */
   snapshot(): SwitchSyncState {
@@ -82,12 +93,31 @@ export class SwitchWatermarkSync {
     try {
       const records = await this.sessionQuery.listSessions()
       this.state.total = records.length
+      // The official archive set first: flag flips are soft deletes (docs
+      // dropped, header kept) and un-archives force a version reset so the
+      // next diff re-ingests the full content. Registry absent -> no-op.
+      const archiveSource = this.readArchiveSource?.()
+      const archivedSet = new Set(archiveSource?.archivedSessionIds ?? [])
+      this.engine.setArchived(archivedSet)
       const failures: { sessionId: string; error: string }[] = []
       let updated = 0
       const changedIds: string[] = []
       for (const record of records) {
         const header = record.header
         const existing = this.engine.getSession(header.id)
+        if (archivedSet.has(header.id)) {
+          // Header-only ingest (no docs): the title cache carries over.
+          if (existing !== undefined && existing.archived && existing.version === header.version) continue
+          this.engine.upsertArchivedHeader({
+            sessionId: header.id,
+            version: header.version,
+            cwd: header.cwd ?? '',
+            updatedAt: header.createdAt ?? 0,
+            title: existing?.title ?? '',
+          })
+          updated += 1
+          continue
+        }
         if (existing !== undefined && existing.version === header.version) continue
         changedIds.push(header.id)
         try {
@@ -132,6 +162,8 @@ export class SwitchWatermarkSync {
       for (const observation of observations) {
         if (observation.status !== 'fulfilled' || observation.value === undefined) continue
         const title = observation.value.title?.title
+        const row = this.engine.getSession(observation.value.session.id)
+        if (row?.archived === true) continue
         if (typeof title === 'string' && title.trim().length > 0) {
           this.engine.updateSessionHeader({ sessionId: observation.value.session.id, title })
         }

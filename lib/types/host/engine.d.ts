@@ -7,6 +7,7 @@ export interface SwitchIndexedSession {
     cwd: string;
     updatedAt: number;
     indexedAt: number;
+    archived: boolean;
 }
 /** One session-grouped search hit. */
 export interface SwitchSearchHit {
@@ -56,6 +57,24 @@ export declare class SwitchIndexEngine {
         updatedAt?: number;
         events: readonly SwitchRawEvent[];
     }): void;
+    /**
+     * Write an archived session's header row without any document content:
+     * the official archive never removes logs, and the index mirrors that with
+     * a flag while skipping the content copy on rebuilds.
+     */
+    upsertArchivedHeader(input: {
+        sessionId: string;
+        version: number;
+        title?: string;
+        cwd?: string;
+        updatedAt?: number;
+    }): void;
+    /**
+     * Apply the official archive set: mark archived ids, unmark the rest.
+     * Clearing the flag forces the next watermark pass to re-ingest the
+     * session's full content (version = -1).
+     */
+    setArchived(archivedIds: ReadonlySet<string>): void;
     /** One session's stored documents, ascending seq (snapshot export face). */
     exportSessionDocs(sessionId: string): {
         seq: number;
@@ -92,10 +111,14 @@ export declare class SwitchIndexEngine {
     }): void;
     /** One indexed session row, or undefined. */
     getSession(sessionId: string): SwitchIndexedSession | undefined;
-    /** All indexed session rows, newest indexed first. */
+    /** Active (non-archived) indexed sessions, newest first. */
     listIndexedSessions(): SwitchIndexedSession[];
-    /** Number of indexed sessions. */
+    /** Archived (soft-deleted) sessions, newest first — the archive viewer face. */
+    listArchived(): SwitchIndexedSession[];
+    /** Number of active (non-archived) indexed sessions. */
     countSessions(): number;
+    /** Number of archived (soft-deleted) sessions. */
+    countArchived(): number;
     /**
      * Run one session-grouped full-text search.
      *

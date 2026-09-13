@@ -21,7 +21,7 @@ import type { Context } from 'cordis'
 import z from '@deepseek-ai/schemastery'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { SwitchIndexEngine, type SwitchIndexContentType } from './host/engine.ts'
-import { SwitchWatermarkSync, type SwitchSyncState } from './host/sync.ts'
+import { SwitchWatermarkSync, type SwitchArchiveSource, type SwitchSyncState } from './host/sync.ts'
 import {
   DEFAULT_INDEX_LAYOUT,
   importIntoIndex,
@@ -127,11 +127,20 @@ interface SwitchSessionQuery {
   ): Promise<SwitchSearchPage>
 }
 
+/**
+ * The workspace registry face this plugin reads (structural mirror): the
+ * official archive set. Read lazily — the registry may mount after plugins.
+ */
+interface SwitchWorkspaceRegistry {
+  readonly archivedSessionIds: readonly string[]
+}
+
 declare module 'cordis' {
   interface Context {
     webServer: SwitchWebServer
     webRuntime: SwitchWebRuntime
     sessionQuery?: SwitchSessionQuery
+    workspaceRegistry?: SwitchWorkspaceRegistry
   }
 }
 
@@ -395,6 +404,7 @@ async function searchStatus(runtime: SwitchRuntime): Promise<unknown> {
     available: index.engine.isOpen && index.engine.countSessions() > 0,
     reason: index.engine.isOpen ? undefined : 'not-open',
     indexing: sync.state === 'syncing',
+    archivedSessions: index.engine.countArchived(),
     sync,
     rebuild: index.rebuild,
   }
@@ -409,6 +419,7 @@ async function indexStatus(runtime: SwitchRuntime): Promise<unknown> {
   return {
     ok: true,
     available: index.engine.isOpen && indexed > 0,
+    archivedSessions: index.engine.isOpen ? index.engine.countArchived() : 0,
     dir: index.layout.dir,
     archives: await listArchives(index.layout).catch(() => []),
     sync: { ...sync, indexed } satisfies SwitchSyncState,
@@ -442,6 +453,8 @@ async function indexRebuild(runtime: SwitchRuntime): Promise<{ ok: boolean; star
       },
     },
     keepArchives,
+    undefined,
+    runtime.registry,
   ).then((state) => {
     index.rebuild = state
   }).catch((err) => {
@@ -457,6 +470,23 @@ async function indexRebuild(runtime: SwitchRuntime): Promise<{ ok: boolean; star
   })
   index.rebuild = { state: 'building', done: 0, total: 0, startedAt: Date.now(), finishedAt: 0, failures: [] }
   return { ok: true, started: true }
+}
+
+/** list-archived: the official archive set as seen by the index. */
+async function listArchived(runtime: SwitchRuntime): Promise<{ ok: boolean; items?: unknown[]; error?: string }> {
+  const index = runtime.index
+  if (index.engine.isOpen === false) {
+    return { ok: false, error: '独立索引未就绪' }
+  }
+  return {
+    ok: true,
+    items: index.engine.listArchived().map(session => ({
+      sessionId: session.sessionId,
+      title: session.title,
+      cwd: session.cwd,
+      updatedAt: session.updatedAt,
+    })),
+  }
 }
 
 /** index-export: dump the active index as JSON Lines. */
@@ -523,6 +553,8 @@ interface SwitchRuntime {
   sessionQuery: SwitchSessionQuery | undefined
   index: SwitchIndexServiceState
   config: () => SwitchSearchConfig
+  /** Lazy official archive-set source (workspaceRegistry mirror). */
+  registry: () => SwitchArchiveSource | undefined
 }
 
 /**
@@ -559,11 +591,16 @@ export function apply(ctx: Context): void {
       readTitleSnapshots: sessionQuery === undefined
         ? undefined
         : (ids) => sessionQuery.readTitleSnapshots(ids),
-    }),
+    }, () => (ctx.get('workspaceRegistry') as SwitchArchiveSource | undefined)),
     layout,
     rebuild: { state: 'idle', done: 0, total: 0, startedAt: 0, finishedAt: 0, failures: [] },
   }
-  const runtime: SwitchRuntime = { sessionQuery, index: state, config: () => current() }
+  const runtime: SwitchRuntime = {
+    sessionQuery,
+    index: state,
+    config: () => current(),
+    registry: () => ctx.get('workspaceRegistry') as SwitchArchiveSource | undefined,
+  }
 
   let syncTimer: ReturnType<typeof setInterval> | undefined
   const scheduleSync = (intervalMs: number): void => {
@@ -634,6 +671,10 @@ export function apply(ctx: Context): void {
         }
         if (method === 'index-rebuild') {
           writeJson(res, 200, await indexRebuild(runtime))
+          return
+        }
+        if (method === 'list-archived') {
+          writeJson(res, 200, await listArchived(runtime))
           return
         }
         writeJson(res, 404, { ok: false, error: `unknown switch-search API method "${method}"` })

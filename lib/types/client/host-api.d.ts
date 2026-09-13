@@ -56,6 +56,7 @@ export interface HostIndexStatus {
     reason?: string;
     dir?: string;
     archives?: string[];
+    archivedSessions?: number;
     sync?: HostSyncState;
     rebuild?: HostRebuildState;
     error?: string;

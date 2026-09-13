@@ -20,6 +20,7 @@ import type { Context } from 'cordis'
 import { DEFAULT_CONFIG, SWITCH_SEARCH_SETTINGS_NAMESPACE, type SwitchSearchConfig } from '../config.ts'
 import { callHost, callHostAny, type HostContentHit, type HostIndexStatus, type HostSessionItem } from './host-api.ts'
 import { SearchSettingsCard, type SwitchCardScope } from './card.tsx'
+import { ArchivePanel } from './archive-panel.tsx'
 import { NS, en, translate, zh, type LocaleKey } from './locales.ts'
 
 /** ------------------------------------------------------------------ types */
@@ -102,7 +103,7 @@ declare module 'cordis' {
 
 const CSS = `
 .dsws_root{box-sizing:border-box;position:relative;display:flex;align-items:center;justify-content:center;flex:none;width:100%}
-.dsws_button{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:6px;height:28px;border:none;border-radius:8px;background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer;padding:0 10px;font-size:12px;line-height:18px;white-space:nowrap}
+.dsws_button{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:8px;height:42px;border:none;border-radius:12px;background:transparent;color:var(--dsw-alias-label-primary);cursor:pointer;padding:0 10px 0 8px;font-family:inherit;font-size:14px;line-height:22px;white-space:nowrap;overflow:hidden;transition:background-color 160ms ease-out,color 160ms ease-out}
 .dsws_button:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .dsws_button svg{flex:none}
 .dsws_trigger{position:fixed;z-index:2147483000;left:50%;top:50%;transform:translate(-50%,-50%);width:520px;max-width:calc(100vw - 24px);max-height:min(72vh,640px);box-sizing:border-box;background:var(--dsw-specific-tip);border:1px solid var(--dsw-alias-border-l1);border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.16);overflow:hidden;display:flex;flex-direction:column;font-family:Inter,var(--dsw-font-family)}
@@ -129,7 +130,7 @@ const CSS = `
 .dsws_status{color:var(--dsw-alias-label-tertiary);padding:10px 8px 8px;font-size:12px;line-height:18px}
 .dsws_error{color:var(--dsw-alias-state-error-primary);padding:8px;font-size:12px;line-height:18px}
 .dsws_empty{color:var(--dsw-alias-label-tertiary);padding:10px 8px 8px;font-size:12px;line-height:18px}
-.dsws_backdrop{position:fixed;inset:0;z-index:2147482999;background:transparent}
+.dsws_backdrop{position:fixed;inset:0;z-index:2147482999;background:var(--dsw-alias-bg-mask-1,rgba(0,0,0,.24));backdrop-filter:blur(var(--dsw-mask-blur,4px))}
 .dsws_setRoot{display:flex;flex-direction:column;width:100%}
 .dsws_setRow{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--dsw-alias-border-l2)}
 .dsws_setRow:last-child{border-bottom:none}
@@ -157,6 +158,24 @@ const CSS = `
 .dsws_progress{height:6px;border-radius:3px;background:var(--dsw-alias-interactive-bg-hover);overflow:hidden}
 .dsws_progressFill{height:100%;border-radius:3px;background:var(--dsw-alias-state-business-primary);transition:width .4s ease}
 .dsws_progressLabel{color:var(--dsw-alias-state-business-primary);font-size:12px;line-height:18px;font-weight:600;font-variant-numeric:tabular-nums}
+.dsws_panelFoot{flex:none;display:flex;align-items:center;gap:8px;padding:8px 10px 10px;border-top:1px solid var(--dsw-alias-border-l2)}
+.dsws_linkBtn{height:26px;border:none;background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer;border-radius:6px;padding:0 8px;font:inherit;font-size:12px;line-height:18px}
+.dsws_linkBtn:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
+.dsws_dialogHead{flex:none;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 12px 0}
+.dsws_dialogTitle{color:var(--dsw-alias-label-primary);font-size:14px;font-weight:600;line-height:22px}
+.dsws_pill{flex:none;display:inline-grid;grid-template-columns:14px max-content;align-items:center;column-gap:4px;height:26px;padding:0 10px;box-sizing:border-box;border:none;border-radius:8px;font-size:12px;font-weight:500;line-height:18px;white-space:nowrap;transition:background-color 160ms ease-out,color 160ms ease-out}
+.dsws_pill .dsws_pillIcon{display:grid;place-items:center;width:14px;height:14px}
+.dsws_pill .dsws_pillLabel{display:grid;text-align:left}
+.dsws_pill .dsws_pillLabel>span{grid-area:1/1}
+.dsws_pillReady{background:var(--dsw-alias-state-success-tertiary);color:var(--dsw-alias-state-success-primary)}
+.dsws_pillWarn{background:var(--dsw-alias-state-warn-tertiary);color:var(--dsw-alias-state-warn-label)}
+.dsws_pillError{background:var(--dsw-alias-state-error-tertiary,var(--dsw-alias-state-warn-tertiary));color:var(--dsw-alias-state-error-primary,var(--dsw-alias-state-warn-label))}
+.dsws_pillNeutral{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-secondary)}
+.dsws_pillDots span{opacity:0;animation:dsws-reveal-dot 1.5s step-end infinite}
+.dsws_pillDots span:nth-child(2){animation-delay:.5s}
+.dsws_pillDots span:nth-child(3){animation-delay:1s}
+@keyframes dsws-reveal-dot{0%,32%{opacity:0}33%,100%{opacity:1}}
+@media (prefers-reduced-motion:reduce){.dsws_pillDots span{animation:none;opacity:1}}
 `
 
 /** Inject the plugin stylesheet once per activation (removed on disposal). */
@@ -179,10 +198,12 @@ function injectStyles(): () => void {
 function SwitchPanel({
   t,
   onClose,
+  onOpenArchive,
   open,
 }: {
   t?: CardLocale
   onClose: () => void
+  onOpenArchive: () => void
   open: (sessionId: string) => void
 }): ReactElement {
   // Mode memory: the panel reopens in the mode last used in this web session
@@ -425,6 +446,14 @@ function SwitchPanel({
           onClick: () => { setContentType(chip.id) },
         }, translate(t, chip.labelKey)))),
       children,
+      createElement('div', { key: 'foot', className: 'dsws_panelFoot' }, [
+        createElement('button', {
+          key: 'archive',
+          type: 'button',
+          className: 'dsws_linkBtn',
+          onClick: onOpenArchive,
+        }, translate(t, 'panel.archived.entry')),
+      ]),
     ]),
   ]), document.body)
 }
@@ -436,6 +465,8 @@ function SwitchFooter({
   open,
 }: SwitchFooterProps & { t?: CardLocale; open: (sessionId: string) => void }): ReactElement {
   const [openPanel, setOpenPanel] = useState(false)
+  const [openArchive, setOpenArchive] = useState(false)
+  const closeAll = (): void => { setOpenPanel(false); setOpenArchive(false) }
 
   return createElement('div', { className: 'dsws_root' }, [
     createElement('button', {
@@ -450,9 +481,19 @@ function SwitchFooter({
     openPanel && createElement(SwitchPanel, {
       key: 'panel',
       t,
-      onClose: () => { setOpenPanel(false) },
+      onClose: closeAll,
+      onOpenArchive: () => { setOpenPanel(false); setOpenArchive(true) },
       open: (sessionId: string) => {
-        setOpenPanel(false)
+        closeAll()
+        open(sessionId)
+      },
+    }),
+    openArchive && createElement(ArchivePanel, {
+      key: 'archive',
+      t,
+      onClose: closeAll,
+      open: (sessionId: string) => {
+        closeAll()
         open(sessionId)
       },
     }),
@@ -574,6 +615,7 @@ export function apply(ctx: Context): void {
           subscribe: () => () => {},
           set: async () => {},
         },
+        openSession: open,
       }
     },
   }, SearchSettingsCard), 'dsh-session-search-toggle: plugin settings card')

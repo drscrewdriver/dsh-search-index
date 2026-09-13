@@ -12,6 +12,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { SwitchIndexEngine } from './engine.ts'
 import type { SwitchRawEvent } from './extract.ts'
+import type { SwitchArchiveSource } from './sync.ts'
 
 /** The corpus reader a rebuild needs (same faces as the syncer). */
 export interface SwitchRebuildSessionQuery {
@@ -83,6 +84,7 @@ export async function rebuildIndex(
   sessionQuery: SwitchRebuildSessionQuery,
   keepArchives: number,
   onProgress?: (done: number, total: number) => void,
+  archiveSource?: () => SwitchArchiveSource | undefined,
 ): Promise<SwitchRebuildState> {
   const state: SwitchRebuildState = {
     state: 'building',
@@ -102,8 +104,22 @@ export async function rebuildIndex(
     try {
       const records = await sessionQuery.listSessions()
       state.total = records.length
+      // Archived sessions copy as header-only rows: the soft-deleted flag is
+      // rebuilt from the official archive set, no docs, no FTS entries.
+      const archivedSet = new Set(archiveSource?.()?.archivedSessionIds ?? [])
       for (const record of records) {
         const header = record.header
+        if (archivedSet.has(header.id)) {
+          shadow.upsertArchivedHeader({
+            sessionId: header.id,
+            version: header.version,
+            cwd: header.cwd ?? '',
+            updatedAt: header.createdAt ?? 0,
+          })
+          state.done += 1
+          onProgress?.(state.done, state.total)
+          continue
+        }
         try {
           const log = await sessionQuery.readSession(header.id)
           shadow.upsertSession({
