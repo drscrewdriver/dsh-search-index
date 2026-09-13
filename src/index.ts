@@ -310,23 +310,30 @@ async function titleMap(
   return map
 }
 
-/** list-sessions: the full title-search corpus (live, index fallback). */
+/** list-sessions: the title-search corpus (index-served, live fallback). */
 async function listSessions(runtime: SwitchRuntime): Promise<{ ok: boolean; items?: unknown[]; error?: string }> {
   const index = runtime.index
   const sessionQuery = runtime.sessionQuery
-  if (sessionQuery === undefined) {
-    // Fall back to the independent index so the panel still works offline.
-    if (index?.engine.isOpen === true) {
-      return {
-        ok: true,
-        items: index.engine.listIndexedSessions().map(session => ({
-          sessionId: session.sessionId,
-          title: session.title,
-          cwd: session.cwd,
-          updatedAt: session.updatedAt,
-        })),
-      }
+  // Fast path: the independent index caches every session header (title/cwd/
+  // updatedAt). Serving from it keeps the panel instant — the live-preferred
+  // corpus projection (readTitleSnapshots per session) is what used to blow
+  // the client's 10s timeout on large corpora. A refresh sync runs in the
+  // background so newly created sessions appear on the next open.
+  if (index.engine.isOpen && index.engine.countSessions() > 0) {
+    if (sessionQuery !== undefined && index.sync.snapshot().state !== 'syncing') {
+      void index.sync.poll().catch(() => {})
     }
+    return {
+      ok: true,
+      items: index.engine.listIndexedSessions().map(session => ({
+        sessionId: session.sessionId,
+        title: session.title,
+        cwd: session.cwd,
+        updatedAt: session.updatedAt,
+      })),
+    }
+  }
+  if (sessionQuery === undefined) {
     return { ok: false, error: 'sessionQuery 服务不可用，且独立索引尚未建立' }
   }
   try {

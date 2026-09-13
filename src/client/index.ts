@@ -105,7 +105,7 @@ const CSS = `
 .dsws_button{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:6px;height:28px;border:none;border-radius:8px;background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer;padding:0 10px;font-size:12px;line-height:18px;white-space:nowrap}
 .dsws_button:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .dsws_button svg{flex:none}
-.dsws_trigger{position:fixed;z-index:2147483000;width:380px;max-width:calc(100vw - 16px);box-sizing:border-box;background:var(--dsw-specific-tip);border:1px solid var(--dsw-alias-border-l1);border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.16);overflow:hidden;display:flex;flex-direction:column;font-family:Inter,var(--dsw-font-family)}
+.dsws_trigger{position:fixed;z-index:2147483000;left:50%;top:50%;transform:translate(-50%,-50%);width:520px;max-width:calc(100vw - 24px);max-height:min(72vh,640px);box-sizing:border-box;background:var(--dsw-specific-tip);border:1px solid var(--dsw-alias-border-l1);border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.16);overflow:hidden;display:flex;flex-direction:column;font-family:Inter,var(--dsw-font-family)}
 .dsws_toolrow{display:flex;align-items:center;gap:8px;padding:10px 10px 0}
 .dsws_mode{display:inline-flex;align-items:center;gap:2px;flex:none;background:var(--dsw-alias-interactive-bg-hover);border-radius:8px;padding:2px}
 .dsws_modeBtn{height:24px;border:none;background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer;border-radius:6px;padding:0 8px;font-size:12px;font-weight:500;line-height:20px}
@@ -118,7 +118,7 @@ const CSS = `
 .dsws_chip{height:24px;box-sizing:border-box;border:1px solid var(--dsw-alias-border-l2);background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer;border-radius:999px;padding:0 10px;font-size:12px;font-weight:500;line-height:22px;white-space:nowrap}
 .dsws_chip:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .dsws_chipActive{background:var(--dsw-alias-state-business-primary);border-color:var(--dsw-alias-state-business-primary);color:var(--dsw-alias-label-primary)}
-.dsws_list{max-height:min(50vh,420px);overflow-y:auto;margin:8px 0 0;padding:0 6px 8px;list-style:none}
+.dsws_list{flex:1 1 auto;min-height:0;overflow-y:auto;margin:8px 0 0;padding:0 6px 8px;list-style:none}
 .dsws_row{box-sizing:border-box;border-radius:8px;width:100%;padding:7px 8px;cursor:pointer;text-align:left;border:none;background:transparent;color:var(--dsw-alias-label-primary);display:flex;flex-direction:column;gap:2px;min-width:0}
 .dsws_row:hover{background:var(--dsw-alias-interactive-bg-hover)}
 .dsws_rowTitle{display:flex;align-items:center;gap:8px;min-width:0}
@@ -178,12 +178,10 @@ function injectStyles(): () => void {
 /** The floating search panel. */
 function SwitchPanel({
   t,
-  anchor,
   onClose,
   open,
 }: {
   t?: CardLocale
-  anchor: DOMRect
   onClose: () => void
   open: (sessionId: string) => void
 }): ReactElement {
@@ -305,12 +303,6 @@ function SwitchPanel({
       || item.cwd.toLowerCase().includes(normalized))
   }, [sessions, normalized])
 
-  // Position the panel above the trigger, clamped to the viewport.
-  const panelStyle: Record<string, string> = {
-    left: `${Math.max(8, Math.min(anchor.left, window.innerWidth - 388))}px`,
-    top: `${Math.max(8, anchor.top - 8)}px`,
-  }
-
   const children: ReactElement[] = []
   if (sessionsError !== null) {
     children.push(createElement('div', { key: 'err', className: 'dsws_error' }, translate(t, 'panel.sessionsError', { error: sessionsError })))
@@ -398,7 +390,7 @@ function SwitchPanel({
 
   return createPortal(createElement('div', { key: 'switch-root' }, [
     createElement('div', { key: 'backdrop', className: 'dsws_backdrop', onClick: onClose }),
-    createElement('div', { key: 'panel', className: 'dsws_trigger', style: panelStyle, role: 'dialog', 'aria-label': translate(t, 'card.title') }, [
+    createElement('div', { key: 'panel', className: 'dsws_trigger', role: 'dialog', 'aria-label': translate(t, 'card.title') }, [
       createElement('div', { key: 'tools', className: 'dsws_toolrow' }, [
         createElement('div', { key: 'mode', className: 'dsws_mode', role: 'group', 'aria-label': translate(t, 'card.defaultMode') }, [
           createElement('button', {
@@ -444,29 +436,20 @@ function SwitchFooter({
   open,
 }: SwitchFooterProps & { t?: CardLocale; open: (sessionId: string) => void }): ReactElement {
   const [openPanel, setOpenPanel] = useState(false)
-  const buttonRef = useRef<HTMLButtonElement | null>(null)
-  const [anchor, setAnchor] = useState<DOMRect | null>(null)
 
   return createElement('div', { className: 'dsws_root' }, [
     createElement('button', {
       key: 'btn',
-      ref: buttonRef,
       type: 'button',
       className: 'dsws_button',
       title: translate(t, 'card.title'),
       'aria-label': `${translate(t, 'card.title')}（${translate(t, 'panel.titleSearch')} / ${translate(t, 'panel.contentSearch')}）`,
       'aria-expanded': openPanel,
-      onClick: () => {
-        const rect = buttonRef.current?.getBoundingClientRect()
-        if (rect === undefined) return
-        setAnchor(rect)
-        setOpenPanel(true)
-      },
+      onClick: () => { setOpenPanel(true) },
     }, [searchIcon(), wide && createElement('span', { key: 'label' }, translate(t, 'panel.titleSearch'))]),
-    openPanel && anchor !== null && createElement(SwitchPanel, {
+    openPanel && createElement(SwitchPanel, {
       key: 'panel',
       t,
-      anchor,
       onClose: () => { setOpenPanel(false) },
       open: (sessionId: string) => {
         setOpenPanel(false)
