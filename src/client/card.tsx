@@ -159,6 +159,8 @@ function StatusPill(props: { state: 'ready' | 'syncing' | 'error' | 'neutral'; l
 /** The independent-index lifecycle block (status + 整理 + snapshot seam). */
 function IndexBlock(props: { t?: SearchSettingsCardProps['t']; openSession?: (sessionId: string) => void }): JSX.Element {
   const [status, setStatus] = useState<HostIndexStatus | null>(null)
+  const [fetchError, setFetchError] = useState<string | null>(null)
+  const [attempt, setAttempt] = useState(0)
   const [note, setNote] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [archiveOpen, setArchiveOpen] = useState(false)
@@ -169,7 +171,15 @@ function IndexBlock(props: { t?: SearchSettingsCardProps['t']; openSession?: (se
     const refresh = (): void => {
       void callHostAny<HostIndexStatus>('index-status', {}).then((res) => {
         if (cancelled) return
-        if (res.ok) setStatus(res as HostIndexStatus)
+        if (res.ok) {
+          setStatus(res as HostIndexStatus)
+          setFetchError(null)
+        } else {
+          // The host half may be older than the client bundle (browser
+          // refresh does not reload the host) — surface it, never spin.
+          setStatus(null)
+          setFetchError(res.error ?? 'index-status 请求失败')
+        }
         const rebuilding = res.rebuild?.state === 'building' || res.rebuild?.state === 'swapping'
         if (rebuilding) timer = window.setTimeout(refresh, 2000)
         else setBusy(false)
@@ -180,7 +190,7 @@ function IndexBlock(props: { t?: SearchSettingsCardProps['t']; openSession?: (se
       cancelled = true
       if (timer !== undefined) window.clearTimeout(timer)
     }
-  }, [])
+  }, [attempt])
 
   const t = props.t
   const rebuilding = status?.rebuild?.state === 'building' || status?.rebuild?.state === 'swapping'
@@ -220,21 +230,25 @@ function IndexBlock(props: { t?: SearchSettingsCardProps['t']; openSession?: (se
 
   const pillState: 'ready' | 'syncing' | 'error' | 'neutral' = rebuilding
     ? 'syncing'
-    : status?.rebuild?.state === 'error'
+    : status?.rebuild?.state === 'error' || fetchError !== null
       ? 'error'
       : status === null || status.available !== true
         ? 'neutral'
         : 'ready'
-  const pillLabel = rebuilding
-    ? translate(t, 'card.index.rebuilding', { done: status?.rebuild?.done ?? 0, total: status?.rebuild?.total || '?' })
-    : status === null
+  const pillLabel = fetchError !== null
+    ? '状态读取失败'
+    : rebuilding
+      ? translate(t, 'card.index.rebuilding', { done: status?.rebuild?.done ?? 0, total: status?.rebuild?.total || '?' })
+      : status === null
       ? translate(t, 'card.index.reading')
       : status.available === true
         ? translate(t, 'card.index.desc', { indexed: status.sync?.indexed ?? '?' })
         : translate(t, 'card.index.empty')
 
-  const statusLine = status === null
-    ? translate(t, 'card.index.reading')
+  const statusLine = fetchError !== null
+    ? `索引状态读取失败：${fetchError}。请完全重启 dsh web（浏览器刷新不会重载 Host 半）后重试。`
+    : status === null
+      ? translate(t, 'card.index.reading')
     : rebuilding
       ? translate(t, 'card.index.rebuilding', { done: status.rebuild?.done ?? 0, total: status.rebuild?.total || '?' })
       : status.available === true
@@ -331,6 +345,12 @@ function IndexBlock(props: { t?: SearchSettingsCardProps['t']; openSession?: (se
         disabled: blocking || status?.available !== true,
         onClick: onExport,
       }, translate(t, 'card.index.export')),
+      fetchError !== null && createElement('button', {
+        key: 'retryStatus',
+        type: 'button',
+        className: 'dsws_actBtn',
+        onClick: () => { setAttempt(n => n + 1) },
+      }, '重试状态'),
       createElement('button', {
         key: 'viewArchived',
         type: 'button',

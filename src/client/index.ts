@@ -249,7 +249,12 @@ function SwitchPanel({
     const probe = (): void => {
       callHostAny<HostIndexStatus>('index-status', {}).then((res) => {
         if (cancelled) return
-        if (!res.ok) return
+        if (!res.ok) {
+          // Old host half without this route (browser refresh keeps the old
+          // process): show an actionable state instead of a blank panel.
+          setSearchStatus({ available: false, reason: 'unreachable', rebuilding: false, done: 0, total: 0 })
+          return
+        }
         const status = res as HostIndexStatus
         const rebuilding = status.rebuild?.state === 'building' || status.rebuild?.state === 'swapping'
         setSearchStatus({
@@ -376,9 +381,11 @@ function SwitchPanel({
     } else if (searchStatus.available === false) {
       children.push(createElement('div', { key: 'unavailable', className: 'dsws_error' }, [
         createElement('div', { key: 'msg' },
-          searchStatus.reason === 'unavailable'
-            ? translate(t, 'panel.unavailable')
-            : translate(t, 'panel.notBuilt')),
+          searchStatus.reason === 'unreachable'
+            ? '索引状态不可达：Host 半可能是旧进程。请完全重启 dsh web（浏览器刷新不重载 Host）后重试。'
+            : searchStatus.reason === 'unavailable'
+              ? translate(t, 'panel.unavailable')
+              : translate(t, 'panel.notBuilt')),
         createElement('button', {
           key: 'build',
           type: 'button',
