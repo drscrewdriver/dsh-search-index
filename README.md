@@ -1,5 +1,5 @@
 <p align="center">
-  <strong>给 DeepSeek Harness 侧边栏加一个会话内容检索——标题/内容一键切换，还能按用户/回复/工具筛选</strong>
+  <strong>给 DeepSeek Harness 侧边栏加一个自带索引的会话检索——标题/内容一键切换，还能按用户/回复/工具筛选</strong>
 </p>
 <p align="center">
   <strong>中文</strong> · <a href="README.en.md">English</a>
@@ -9,9 +9,11 @@
   <img alt="Public" src="https://img.shields.io/badge/status-public-7da1de?style=flat-square">
 </p>
 
-# dsh-session-search-toggle
+# dsh-search-index
 
-> DSH web 侧边栏**会话搜索增强**：在侧边栏底部新增 **"搜索"** 入口，浮层面板一键在 **标题搜索 ↔ 内容搜索** 间切换；内容模式按**会话聚合**展示标题与命中片段，并按 **用户 / 回复 / 工具** 分类筛选。
+> DSH web 侧边栏**搜索索引**：在侧边栏底部新增 **"搜索"** 入口，浮层面板一键在 **标题搜索 ↔ 内容搜索** 间切换；内容模式按**会话聚合**展示标题与命中片段，并按 **用户 / 回复 / 工具** 分类筛选。自带**独立索引**（不依赖 DSH 官方全文索引），支持增量同步、非破坏性整理与快照导入导出。
+
+> **本包只管搜索与索引。** 会话历史的查看与清理（原"归档会话"面板）已迁至 **`dsh-session-steward`（会话管家）** 的「病案室」页签；本包仍会**读取**官方归档集合以把已归档会话排除出索引，但**不再写入**它——归档集合只有一个写方：会话管家。契约见 `dsh-归档文件格式契约-20260914.md`。
 
 无需修改 dsh 源码、无需提 PR：`dsh plugin` 命令组装 + bundle patch 装配的 cordis 客户端 + 插件宿主半。
 
@@ -24,7 +26,7 @@
 > - **单一产物，运行时自适应**：同一份 `lib/client.js` 在两版都能加载，无版本号字符串分支。客户端 bundle 只 `require` `react` / `react-dom`，两者都在两版共享模块表内。
 > - **store 座位本地实现**：设置行需要一个 store 座位（`StoreHandle` / `StoreInstance`，契约由 `@deepseek-ai/dsh-client-ui-slots` 拥有、两版一致）。原先用 runtime 的 `defineStore`，而该引擎包在两版之间改过名，因此改为约 30 行本地实现——只依赖 `create()` → `{ actions, getSnapshot, subscribe, clearPersisted }`，不再涉及任何版本专属 specifier。
 > - **其余契约两版一致**：`settings.general.item` 槽、`SettingsScope.{getSnapshot,subscribe,set,unset}`、`sessionQuery` 三个查询面在两版签名相同。
-> - 侧边栏入口目前仍处于关闭状态（`sidebar.footer.action` 注册已注释），两版都支持重新启用。
+> - 侧边栏入口已启用：`sidebar.footer.action` 注册一个"搜索"入口（本包不再注册第二个入口，归档入口随会话管家走）。
 
 ## 它能做什么
 
@@ -32,7 +34,7 @@
 - **内容按会话聚合**：内容搜索结果每个会话一行（会话标题 + 最强命中片段 + 类型标签），点击即打开该会话，不刷屏逐条堆消息。
 - **内容类型筛选**：内容模式顶部筛选 chip——**全部 / 用户 / 回复 / 工具**；`工具` 放开 `tool/call` 与 `tool/result` 事件进结果，直接搜到工具调用参数与返回值。
 - **索引可用性探测**：Host 侧 `search-status` 探测 `sessionQuery` 全文索引是否开启；未开启时内容模式给出一句具体配置指引，而非裸报错"内容搜索不可用"。
-- **通用设置行**：设置 → 通用新增 **"会话搜索"** 行——启用开关 + 默认搜索模式（标题/内容），配置即写即生效。
+- **设置卡片**：设置 → 插件新增 **"搜索索引"** 卡片——启用开关、默认搜索模式、独立索引的同步/保留份数/索引目录，以及索引生命周期块（状态、非破坏性整理、快照导出导入）。
 - **点击直达**：搜索结果点击跳转打开对应会话，定位到命中内容所在上下文。
 
 ## 界面预览
@@ -74,19 +76,27 @@
 
 ```sh
 # 方式一：从 GitHub 直装（推荐）——仓库已提交 lib/，无需本地构建
-dsh plugin --profile web add github:drscrewdriver/dsh-session-search-toggle#release-v0.1.0   # 稳定版
-dsh plugin --profile web add github:drscrewdriver/dsh-session-search-toggle#master          # 基线
-dsh plugin --profile web add github:drscrewdriver/dsh-session-search-toggle#feat/type-filter-search  # 最新开发
+dsh plugin --profile web add github:drscrewdriver/dsh-search-index#release-v0.1.0   # 稳定版
+dsh plugin --profile web add github:drscrewdriver/dsh-search-index#master          # 基线
+dsh plugin --profile web add github:drscrewdriver/dsh-search-index#feat/type-filter-search  # 最新开发
 
 # 方式二：本地路径/源码组装（见"开发"章节）
 
 # 重启 dsh web —— 必做！运行中实例不热载 bundle 层
 dsh web
 # 或用随包脚本
-bash ~/.dsh/profiles/web/node_modules/dsh-session-search-toggle/restart-dsh-web.sh
+bash ~/.dsh/profiles/web/node_modules/dsh-search-index/restart-dsh-web.sh
 ```
 
-装完侧边栏底部出现 **"搜索"** 按钮；设置 → 通用出现 **"会话搜索"** 配置行。
+> **从旧名升级**：本包由 `dsh-session-search-toggle` 改名而来（0.2.0-beta.1）。GitHub 会为重命名的仓库保留跳转，旧名仍可解析，但请把 profile 依赖换成新名，避免两个名字长期并存：
+> ```sh
+> dsh plugin --profile web add github:drscrewdriver/dsh-search-index#<branch>
+> dsh plugin --profile web remove dsh-session-search-toggle
+> dsh web   # 重启
+> ```
+> 设置命名空间仍是 `switch-search`（**存储键保持稳定，不做迁移**），因此旧配置在新包下继续生效。
+
+装完侧边栏底部出现 **"搜索"** 按钮；设置 → 插件出现 **"搜索索引"** 卡片。
 
 > ⚠️ **GitHub 网络可达性**：github: 直装需要能连通 github.com；网络受限时请先配置可用代理或镜像加速，否则 add 会在拉取阶段卡住。
 
@@ -141,7 +151,7 @@ src/
 | [dsh-input-traffic](https://github.com/drscrewdriver/dsh-input-traffic) | DSH Web GUI 忙时输入队列：三档交通管制，拖拽重排，会话冻结 |
 | [dsh-thinking-levels](https://github.com/drscrewdriver/dsh-thinking-levels) | 逐轮 reasoning_effort 控制：Auto 智能调度或手动固定档位 |
 | [dsh-seatbelt-sandbox](https://github.com/drscrewdriver/dsh-seatbelt-sandbox) | macOS Seatbelt 沙箱适配器：libsandbox 原生 loader，接替弃用的 sandbox-exec |
-| **[dsh-session-search-toggle](https://github.com/drscrewdriver/dsh-session-search-toggle)** | 侧边栏会话搜索增强：标题/内容切换，按用户/回复/工具筛选 |
+| **[dsh-search-index](https://github.com/drscrewdriver/dsh-search-index)** | 侧边栏会话搜索增强：标题/内容切换，按用户/回复/工具筛选 |
 
 ## License
 

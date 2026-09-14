@@ -21,7 +21,7 @@ import { runInNewContext } from 'node:vm'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const BUNDLE = join(HERE, '..', 'lib', 'client.js')
-const PLUGIN_ID = 'dsh-session-search-toggle'
+const PLUGIN_ID = 'dsh-search-index'
 const NAMESPACE = 'switch-search'
 
 /** Module table the web shell seeds in both target releases (react family only here). */
@@ -121,7 +121,7 @@ const check = (name, fn) => {
   try { fn(); line(`  PASS  ${name}`) } catch (err) { failures++; line(`  FAIL  ${name} — ${err?.message ?? err}`) }
 }
 
-line('=== dsh-session-search-toggle plugin settings card ===')
+line('=== dsh-search-index plugin settings card ===')
 
 const { exports, seen } = loadBundle()
 check('bundle materializes with only baseline specifiers', () => {
@@ -134,11 +134,12 @@ check('registers one settings.plugin.item card bound to the namespace', () => {
   const bindings = []
   const { ctx } = clientCtx(ledger, bindings)
   exports.apply(ctx)
-  assert.equal(ledger.length, 3, `expected search entry + archive entry + plugin card, got ${ledger.length}`)
+  // The archived-sessions viewer moved to dsh-session-steward: this package
+  // registers exactly one sidebar entry (search) plus the settings card.
+  assert.equal(ledger.length, 2, `expected search entry + plugin card, got ${ledger.length}`)
   assert.equal(ledger[0].name, 'sidebar.footer.action', 'the sidebar footer search entry must be registered')
-  assert.equal(ledger[1].name, 'sidebar.footer.action', 'the sidebar archive entry must be registered')
-  assert.equal(ledger[1].id, 'dsh-session-search-toggle-archive')
-  const options = ledger[2]
+  assert.equal(ledger[0].id, PLUGIN_ID)
+  const options = ledger[1]
   assert.equal(options.name, 'settings.plugin.item')
   assert.equal(options.id, NAMESPACE, 'the card must key on the settings namespace (list-kind slots)')
   assert.equal(options.key, NAMESPACE, 'the card must key on the settings namespace (keyed-kind slots)')
@@ -154,8 +155,8 @@ check('card degrades to a read-only default scope without settingsScope', () => 
   const bindings = []
   const { ctx } = clientCtx(ledger, bindings, { withScope: false })
   exports.apply(ctx)
-  assert.equal(ledger.length, 3, `expected search entry + archive entry + plugin card, got ${ledger.length}`)
-  const injected = ledger[2].inject()
+  assert.equal(ledger.length, 2, `expected search entry + plugin card, got ${ledger.length}`)
+  const injected = ledger[1].inject()
   const snap = injected.scope.getSnapshot()
   assert.equal(snap.status, 'ready')
   assert.equal(snap.value.enabled, true, 'degraded scope must surface DEFAULT_CONFIG.enabled')

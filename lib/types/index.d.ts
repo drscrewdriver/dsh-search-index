@@ -1,5 +1,5 @@
 /**
- * dsh-session-search-toggle host half: one fenced HTTP route `/switch-search/api`
+ * dsh-search-index host half: one fenced HTTP route `/switch-search/api`
  * backed by the plugin's OWN full-text index (node:sqlite FTS5, a file this
  * plugin owns — never the official session-query index, which may be absent
  * entirely under its default `openAt: never`).
@@ -23,7 +23,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { SwitchIndexEngine } from './host/engine.ts';
 import { SwitchWatermarkSync } from './host/sync.ts';
 import { createArchiveSource } from './host/archive-source.ts';
-export { createArchiveSource, pruneArchiveFile, type SwitchArchiveDiagnostics } from './host/archive-source.ts';
+export { createArchiveSource, type SwitchArchiveDiagnostics } from './host/archive-source.ts';
 import { type SwitchIndexLayout, type SwitchRebuildState } from './host/rebuild.ts';
 import type { SwitchRawEvent } from './host/extract.ts';
 import { type SwitchSearchConfig } from './config.ts';
@@ -126,7 +126,7 @@ declare module 'cordis' {
     }
 }
 /** Stable plugin name for the cordis row. */
-export declare const name = "dsh-session-search-toggle";
+export declare const name = "dsh-search-index";
 /** Services required before mounting: the web server routes and the trust list. */
 export declare const inject: string[];
 /** Composition-entry schema: what a dsh profile may configure at assembly time. */

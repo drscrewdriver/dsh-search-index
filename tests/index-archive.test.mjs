@@ -127,32 +127,6 @@ test('archive: snapshots carry active sessions only', async () => {
   engine.close()
 })
 
-test('archive: prune removes ids from the storage hub with backup + atomic write', async () => {
-  const { pruneArchiveFile } = await import('../lib/index.mjs')
-  const { writeFileSync, readFileSync, existsSync, readdirSync } = await import('node:fs')
-  const dir = tempDir('prune')
-  const file = join(dir, 'workspace.json')
-  writeFileSync(file, JSON.stringify({
-    unit: { name: 'workspace', version: 1 },
-    global: { archivedSessionIds: ['s-keep-1', 's-drop-1', 's-keep-2', 's-drop-2'] },
-    tables: {},
-  }, null, 2) + '\n')
-
-  const result = pruneArchiveFile(['s-drop-1', 's-drop-2', 's-unknown'], undefined, [file])
-  assert.equal(result.removed, 2)
-  assert.equal(result.remaining, 2)
-  const doc = JSON.parse(readFileSync(file, 'utf8'))
-  assert.deepEqual(doc.global.archivedSessionIds, ['s-keep-1', 's-keep-2'])
-  // backup + no temp residue
-  assert.ok(existsSync(join(dir, readdirSync(dir).find(n => n.startsWith('workspace.json.bak-')))), 'backup exists')
-  assert.ok(!readdirSync(dir).some(n => n.includes('.prune-tmp') || (n.startsWith('.') && n.endsWith('.tmp'))), 'no temp residue')
-
-  // unknown ids only: no write, no backup churn
-  const second = pruneArchiveFile(['s-unknown'], undefined, [file])
-  assert.equal(second.removed, 0)
-  assert.equal(second.remaining, 2)
-})
-
 test('recovery: stale shadow is discarded when the active index survives', async () => {
   const { recoverIndex } = await import('../lib/index.mjs')
   const dir = tempDir('recover-stale')

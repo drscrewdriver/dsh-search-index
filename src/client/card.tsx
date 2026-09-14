@@ -15,14 +15,12 @@
  */
 import { useEffect, useState, useSyncExternalStore, type JSX } from 'react'
 import { createElement } from 'react'
-import { createPortal } from 'react-dom'
 import type { SwitchSearchConfig } from '../config.ts'
 import {
   callHostAny,
   downloadSnapshot,
   type HostIndexStatus,
 } from './host-api.ts'
-import { ArchivePanel } from './archive-panel.tsx'
 import { translate, type LocaleKey } from './locales.ts'
 
 /**
@@ -45,8 +43,6 @@ export interface SearchSettingsCardInjected {
   scope: SwitchCardScope
   /** Optional host dictionary lookup (present when the locale service exists). */
   t?: (key: LocaleKey, params?: Record<string, unknown>) => string
-  /** Lazy session-open face for the archive viewer (resolved at click time). */
-  openSession?: (sessionId: string) => void
 }
 
 /** Full card props. */
@@ -157,13 +153,12 @@ function StatusPill(props: { state: 'ready' | 'syncing' | 'error' | 'neutral'; l
 }
 
 /** The independent-index lifecycle block (status + 整理 + snapshot seam). */
-function IndexBlock(props: { t?: SearchSettingsCardProps['t']; openSession?: (sessionId: string) => void }): JSX.Element {
+function IndexBlock(props: { t?: SearchSettingsCardProps['t'] }): JSX.Element {
   const [status, setStatus] = useState<HostIndexStatus | null>(null)
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)
   const [note, setNote] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [archiveOpen, setArchiveOpen] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -351,13 +346,6 @@ function IndexBlock(props: { t?: SearchSettingsCardProps['t']; openSession?: (se
         className: 'dsws_actBtn',
         onClick: () => { setAttempt(n => n + 1) },
       }, '重试状态'),
-      createElement('button', {
-        key: 'viewArchived',
-        type: 'button',
-        className: 'dsws_actBtn',
-        disabled: busy,
-        onClick: () => { setArchiveOpen(true) },
-      }, translate(t, 'card.index.viewArchived')),
       createElement('label', { key: 'import', className: 'dsws_actBtn' }, [
         translate(t, 'card.index.import'),
         createElement('input', {
@@ -373,10 +361,6 @@ function IndexBlock(props: { t?: SearchSettingsCardProps['t']; openSession?: (se
         }),
       ]),
     ]),
-    archiveOpen && createPortal(createElement(ArchivePanel, {
-      t,
-      onClose: () => { setArchiveOpen(false) },
-    }), document.body),
   ])
 }
 
@@ -395,7 +379,7 @@ export function SearchSettingsCard(props: SearchSettingsCardProps): JSX.Element 
     () => scope.getSnapshot(),
   )
 
-  const body = createCardBody({ t, snapshot, scope, openSession: props.openSession })
+  const body = createCardBody({ t, snapshot, scope })
 
   return createElement('div', {
     style: {
@@ -466,7 +450,6 @@ function createCardBody(props: {
   t?: SearchSettingsCardProps['t']
   snapshot: ReturnType<SwitchCardScope['getSnapshot']>
   scope: SwitchCardScope
-  openSession?: (sessionId: string) => void
 }): JSX.Element[] {
   const t = props.t
   const snapshot = props.snapshot
@@ -557,7 +540,7 @@ function createCardBody(props: {
     }),
   ]
 
-  const indexBlock = IndexBlock({ t, openSession: props.openSession })
+  const indexBlock = IndexBlock({ t })
   children.push(indexBlock)
 
   if (!writable) {

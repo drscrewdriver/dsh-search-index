@@ -1,6 +1,24 @@
 # Changelog
 
-所有重要变更与 bug 修复记录于此。版本遵循语义化版本（`dsh plugin --profile web add dsh-session-search-toggle` 安装）。
+所有重要变更与 bug 修复记录于此。版本遵循语义化版本（`dsh plugin --profile web add github:drscrewdriver/dsh-search-index` 安装）。
+
+## 0.2.0-beta.1 —— 改名 dsh-search-index，会话历史迁出给会话管家
+
+### 破坏性变更
+
+- **包改名**：`dsh-session-search-toggle` → **`dsh-search-index`**（客户端注册 id、cordis patch id、仓库地址同步改名）。设置命名空间**保持 `switch-search` 不变**：它是存储键，改了会丢用户配置，因此刻意不让它跟着产品名走。旧名经 GitHub 重命名跳转仍可解析，但请把 profile 依赖换成新名，避免两名并存。
+- **迁出会话历史域**（归档浏览 + 归档清理，含原侧边栏"归档会话"入口与设置卡里的"查看归档"）→ 新包 **`dsh-session-steward`（会话管家）** 的「病案室」页签。
+- **本包不再写归档集合**：`pruneArchiveFile` 与 `list-archived` / `archive-prune` 两个方法一并移出。本包仍**读**官方归档集合（`readArchiveSet`）把已归档会话排除出索引——归档集合只有一个写方：会话管家。文件格式契约见 `dsh-归档文件格式契约-20260914.md`。
+- **旧方法名保留显式墓碑**：`list-archived` / `archive-prune` 现在返回 **HTTP 410** 与指向 `/session-steward/api/session-history-list|prune` 的明确错误。浏览器刷新不会重载宿主半身，旧的客户端 bundle 必须**大声失败并被告知去哪**，而不是收到静默 404 被读成"归档坏了"。
+
+### 移除
+
+- `src/client/archive-panel.tsx`（迁至会话管家）、`src/host/archive-source.ts` 的写入函数 `pruneArchiveFile`、设置卡里的归档入口与 `IndexBlock` 的 `openSession` 注入面、相关文案键。
+- 随实现一起迁走的还有那条 prune 用例：覆盖跟着**实现**走，已在会话管家侧以 `tests/history.spec.ts`（8 项）重建，避免出现"两个包都没测"的空档。
+
+### 保留
+
+- 独立索引全部能力：增量同步、非破坏性整理（shadow + 原子切换 + 有限归档 `archiveKeep`）、快照导出/导入、索引恢复巡检、状态读取失败的显性化。`archiveKeep` 指的是**索引文件**保留份数，与会话归档无关，因此留在本包。
 
 ## Unreleased
 

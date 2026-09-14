@@ -1,5 +1,5 @@
 /**
- * dsh-session-search-toggle client half.
+ * dsh-search-index client half.
  *
  * Two registrations:
  * - `settings.plugin.item` — the plugin's own settings card (thinking-levels
@@ -20,7 +20,6 @@ import type { Context } from 'cordis'
 import { DEFAULT_CONFIG, SWITCH_SEARCH_SETTINGS_NAMESPACE, type SwitchSearchConfig } from '../config.ts'
 import { callHost, callHostAny, type HostContentHit, type HostIndexStatus, type HostSessionItem } from './host-api.ts'
 import { SearchSettingsCard, type SwitchCardScope } from './card.tsx'
-import { ArchivePanel } from './archive-panel.tsx'
 import { NS, en, translate, zh, type LocaleKey } from './locales.ts'
 
 /** ------------------------------------------------------------------ types */
@@ -191,7 +190,7 @@ function injectStyles(): () => void {
   if (typeof document === 'undefined') return () => {}
   if (document.querySelector('style[data-plugin-css="dsw-session-search-toggle/styles"]') !== null) return () => {}
   const tag = document.createElement('style')
-  tag.dataset.plugin = 'dsh-session-search-toggle'
+  tag.dataset.plugin = 'dsh-search-index'
   tag.dataset.pluginCss = 'dsw-session-search-toggle/styles'
   tag.textContent = CSS
   document.head.appendChild(tag)
@@ -206,12 +205,10 @@ function injectStyles(): () => void {
 function SwitchPanel({
   t,
   onClose,
-  onOpenArchive,
   open,
 }: {
   t?: CardLocale
   onClose: () => void
-  onOpenArchive: () => void
   open: (sessionId: string) => void
 }): ReactElement {
   // Mode memory: the panel reopens in the mode last used in this web session
@@ -461,14 +458,6 @@ function SwitchPanel({
           onClick: () => { setContentType(chip.id) },
         }, translate(t, chip.labelKey)))),
       children,
-      createElement('div', { key: 'foot', className: 'dsws_panelFoot' }, [
-        createElement('button', {
-          key: 'archive',
-          type: 'button',
-          className: 'dsws_linkBtn',
-          onClick: onOpenArchive,
-        }, translate(t, 'panel.archived.entry')),
-      ]),
     ]),
   ]), document.body)
 }
@@ -480,8 +469,6 @@ function SwitchFooter({
   open,
 }: SwitchFooterProps & { t?: CardLocale; open: (sessionId: string) => void }): ReactElement {
   const [openPanel, setOpenPanel] = useState(false)
-  const [openArchive, setOpenArchive] = useState(false)
-  const closeAll = (): void => { setOpenPanel(false); setOpenArchive(false) }
 
   return createElement('div', { className: 'dsws_root' }, [
     createElement('button', {
@@ -496,76 +483,11 @@ function SwitchFooter({
     openPanel && createElement(SwitchPanel, {
       key: 'panel',
       t,
-      onClose: closeAll,
-      onOpenArchive: () => { setOpenPanel(false); setOpenArchive(true) },
+      onClose: () => { setOpenPanel(false) },
       open: (sessionId: string) => {
-        closeAll()
+        setOpenPanel(false)
         open(sessionId)
       },
-    }),
-    openArchive && createElement(ArchivePanel, {
-      key: 'archive',
-      t,
-      onClose: () => { setOpenArchive(false) },
-    }),
-  ])
-}
-
-/** The bottom-bar archive entry: opens the archived-sessions viewer. */
-function SwitchArchiveFooter({
-  t,
-  wide,
-  open,
-}: SwitchFooterProps & { t?: CardLocale; open: (sessionId: string) => void }): ReactElement {
-  const [openArchive, setOpenArchive] = useState(false)
-  return createElement('div', { className: 'dsws_root' }, [
-    createElement('button', {
-      key: 'btn',
-      type: 'button',
-      className: 'dsws_button',
-      title: translate(t, 'panel.archived'),
-      'aria-label': translate(t, 'panel.archived'),
-      'aria-haspopup': 'dialog',
-      'aria-expanded': openArchive,
-      onClick: () => { setOpenArchive(true) },
-    }, [archiveIcon(), wide && createElement('span', { key: 'label' }, translate(t, 'panel.archived'))]),
-    openArchive && createElement(ArchivePanel, {
-      key: 'archive',
-      t,
-      onClose: () => { setOpenArchive(false) },
-    }),
-  ])
-}
-
-/** Inline archive-box icon (same 16px grid as the official settings gear). */
-function archiveIcon(): ReactElement {
-  return createElement('svg', {
-    width: 16,
-    height: 16,
-    viewBox: '0 0 16 16',
-    fill: 'none',
-    'aria-hidden': true,
-  }, [
-    createElement('path', {
-      key: 'lid',
-      d: 'M2 3.5h12v2.2H2z',
-      stroke: 'currentColor',
-      strokeWidth: 1.3,
-      strokeLinejoin: 'round',
-    }),
-    createElement('path', {
-      key: 'box',
-      d: 'M3.2 5.7h9.6v6.1a1 1 0 0 1-1 1H4.2a1 1 0 0 1-1-1z',
-      stroke: 'currentColor',
-      strokeWidth: 1.3,
-      strokeLinejoin: 'round',
-    }),
-    createElement('path', {
-      key: 'slot',
-      d: 'M6.4 8.2h3.2',
-      stroke: 'currentColor',
-      strokeWidth: 1.3,
-      strokeLinecap: 'round',
     }),
   ])
 }
@@ -633,13 +555,13 @@ export const inject = ['slots']
  * @param ctx - client plugin context (slots, optional locale/settingsScope/sessions).
  */
 export function apply(ctx: Context): void {
-  ctx.effect(() => injectStyles(), 'dsh-session-search-toggle: stylesheet')
+  ctx.effect(() => injectStyles(), 'dsh-search-index: stylesheet')
 
   // Register the dictionaries when the locale service exists (optional across
   // target releases); the card falls back to the bundled zh dictionary.
   const locale = ctx.get('locale') as SwitchLocaleService | undefined
   if (locale !== undefined && typeof locale.register === 'function') {
-    ctx.effect(() => locale.register(NS, { zh, en } as never), 'dsh-session-search-toggle: dictionaries')
+    ctx.effect(() => locale.register(NS, { zh, en } as never), 'dsh-search-index: dictionaries')
   }
 
   const slots = ctx.get('slots') as SwitchSlotsService | undefined
@@ -654,17 +576,14 @@ export function apply(ctx: Context): void {
     if (sessions !== undefined && typeof sessions.open === 'function') sessions.open(sessionId)
   }
 
-  // The sidebar footer entries: the search panel (title/content toggle) and
-  // the archive viewer — two bottom-bar buttons beside the official
-  // settings trigger, both opening the centered dialog.
+  // The sidebar footer entry: the search panel (title/content toggle), one
+  // bottom-bar button beside the official settings trigger. The archived-
+  // sessions viewer moved to dsh-session-steward (病案室) — this package no
+  // longer owns any session-history UI.
   slots.inject('sidebar.footer.action', () => slots.register(
-    { name: 'sidebar.footer.action', id: 'dsh-session-search-toggle', order: 10 },
+    { name: 'sidebar.footer.action', id: 'dsh-search-index', order: 10 },
     (props: SwitchFooterProps) => createElement(SwitchFooter, { ...props, open }),
-  ), 'dsh-session-search-toggle: sidebar footer entry')
-  slots.inject('sidebar.footer.action', () => slots.register(
-    { name: 'sidebar.footer.action', id: 'dsh-session-search-toggle-archive', order: 11 },
-    (props: SwitchFooterProps) => createElement(SwitchArchiveFooter, { ...props, open }),
-  ), 'dsh-session-search-toggle: sidebar archive entry')
+  ), 'dsh-search-index: sidebar footer entry')
 
   // The plugin settings card (settings.plugin.item) replaces the old
   // settings.general.item row + local store seat. Both `id` and `key` are
@@ -694,7 +613,7 @@ export function apply(ctx: Context): void {
         openSession: open,
       }
     },
-  }, SearchSettingsCard), 'dsh-session-search-toggle: plugin settings card')
+  }, SearchSettingsCard), 'dsh-search-index: plugin settings card')
 }
 
 // Re-exported dictionary faces for consumers that compose the card directly.

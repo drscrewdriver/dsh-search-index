@@ -1,11 +1,11 @@
-# dsh-session-search-toggle bundle patch
+# dsh-search-index bundle patch
 #
 # When installed through the official CLI —
 #
-#   dsh plugin --profile <name> add dsh-session-search-toggle
+#   dsh plugin --profile <name> add dsh-search-index
 #
-# — the command appends `dsh-session-search-toggle` to the bundle stack, and the
+# — the command appends `dsh-search-index` to the bundle stack, and the
 # profile boot merges THIS patch (a single `insert` of the plugin row).
 - insert:
-    - id: dsh-session-search-toggle
-      name: 'dsh-session-search-toggle'
+    - id: dsh-search-index
+      name: 'dsh-search-index'

@@ -35,8 +35,6 @@ export interface SearchSettingsCardInjected {
     scope: SwitchCardScope;
     /** Optional host dictionary lookup (present when the locale service exists). */
     t?: (key: LocaleKey, params?: Record<string, unknown>) => string;
-    /** Lazy session-open face for the archive viewer (resolved at click time). */
-    openSession?: (sessionId: string) => void;
 }
 /** Full card props. */
 export type SearchSettingsCardProps = SearchSettingsCardInjected;
