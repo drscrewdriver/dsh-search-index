@@ -5,7 +5,7 @@ export const NS = 'switch-search'
 
 /** Simplified Chinese dictionary (the key-set source of truth). */
 export const zh = {
-  'card.title': '会话搜索',
+  'card.title': '搜索索引',
   'card.description': '侧边栏会话搜索增强：标题搜索与内容搜索一键切换。内容搜索使用插件自建索引，不依赖 DSH 官方全文索引。',
   'card.unavailable': '设置命名空间不可用：请确认插件已装配进 profile。',
   'card.readonly': '只读',
@@ -43,7 +43,7 @@ export const zh = {
   'panel.contentSearch': '内容',
   'panel.searchTitle': '搜索会话标题…',
   'panel.searchContent': '搜索会话内容…',
-  'panel.entry': '会话搜索',
+  'panel.entry': '搜索',
   'panel.buildIndex': '建立索引',
   'panel.archived': '归档会话',
   'panel.rebuilding': '正在整理索引… {done}/{total}（整理期间旧索引仍可搜索）',
@@ -75,7 +75,7 @@ export type Dict = Record<LocaleKey, string>
 
 /** English dictionary; missing keys fall back to zh. */
 export const en: Partial<Record<LocaleKey, string>> = {
-  'card.title': 'Session Search',
+  'card.title': 'Search Index',
   'card.description': 'Sidebar session search with title/content mode switching. Content search uses the plugin-owned index and never depends on the official DSH full-text index.',
   'card.unavailable': 'Settings namespace unavailable: make sure the plugin is assembled into the profile.',
   'card.readonly': 'Read-only',
@@ -113,7 +113,7 @@ export const en: Partial<Record<LocaleKey, string>> = {
   'panel.contentSearch': 'Content',
   'panel.searchTitle': 'Search session titles…',
   'panel.searchContent': 'Search session content…',
-  'panel.entry': 'Session search',
+  'panel.entry': 'Search',
   'panel.buildIndex': 'Build index',
   'panel.archived': 'Archived sessions',
   'panel.rebuilding': 'Rebuilding index… {done}/{total} (the old index keeps serving)',
