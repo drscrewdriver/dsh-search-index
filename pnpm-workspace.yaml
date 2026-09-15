@@ -1,0 +1,6 @@
+# pnpm 10+ 默认拦截依赖的安装脚本；这里显式放行本项目真正需要的两个。
+# esbuild：tsdown 的底层打包器，二进制缺失则构建直接失败。
+# better-sqlite3：可选的原生 SQLite 绑定，放行后安装期才会取得预编译产物。
+allowBuilds:
+  better-sqlite3: true
+  esbuild: true
