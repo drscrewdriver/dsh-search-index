@@ -1,13 +1,13 @@
 {
-  "name": "dsh-session-search-toggle",
-  "version": "0.1.1-beta.2",
-  "description": "DSH web 侧边栏会话搜索增强：标题搜索 ↔ 内容搜索一键切换，内容搜索按会话聚合展示标题与命中片段。",
+  "name": "dsh-search-index",
+  "version": "0.2.0-beta.1",
+  "description": "DSH web 侧边栏搜索索引：标题搜索 ↔ 内容搜索一键切换，内容搜索按会话聚合展示标题与命中片段；自带独立索引（不依赖 DSH 官方全文索引），支持增量同步、非破坏性整理与快照导入导出。",
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/drscrewdriver/dsh-session-search-toggle.git"
+    "url": "git+https://github.com/drscrewdriver/dsh-search-index.git"
   },
-  "homepage": "https://github.com/drscrewdriver/dsh-session-search-toggle",
+  "homepage": "https://github.com/drscrewdriver/dsh-search-index",
   "main": "lib/index.mjs",
   "types": "lib/types/index.d.ts",
   "exports": {
@@ -43,6 +43,8 @@
     },
     "client": {
       "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-settings",
         "@deepseek-ai/dsh-client-ui-settings-general"
       ],
       "platform": "web"
@@ -51,7 +53,7 @@
   "scripts": {
     "build": "node -e \"require('fs').rmSync('lib',{recursive:true,force:true})\" && tsc -p tsconfig.build.json && tsdown --config-loader tsx",
     "typecheck": "tsc --noEmit",
-    "test": "node tests/client-store.test.mjs",
+    "test": "node tests/client-store.test.mjs && node tests/index-engine.test.mjs && node tests/index-archive.test.mjs",
     "bundle": "tsdown --config-loader tsx"
   },
   "license": "MIT",
@@ -79,5 +81,8 @@
     "tsdown": "^0.22.2",
     "tsx": "^4.23.12",
     "typescript": "^5.6.0"
+  },
+  "optionalDependencies": {
+    "better-sqlite3": "^11.10.0"
   }
 }

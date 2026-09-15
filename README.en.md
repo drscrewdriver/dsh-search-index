@@ -1,5 +1,5 @@
 <p align="center">
-  <strong>Session content search for the DeepSeek Harness sidebar — one-click toggle between title and content, with user / reply / tool filters</strong>
+  <strong>Session search with its own index for the DeepSeek Harness sidebar — one-click toggle between title and content, with user / reply / tool filters</strong>
 </p>
 <p align="center">
   <a href="README.md">中文</a> · <strong>English</strong>
@@ -9,9 +9,11 @@
   <img alt="Public" src="https://img.shields.io/badge/status-public-7da1de?style=flat-square">
 </p>
 
-# dsh-session-search-toggle
+# dsh-search-index
 
-> Sidebar **session-search enhancement** for DSH web: adds a **"Search"** entry at the sidebar footer whose floating panel toggles between **title search ↔ content search**; content mode groups results **by session** (title + snippet) and filters by **user / reply / tool**.
+> Sidebar **search index** for DSH web: adds a **"Search"** entry at the sidebar footer whose floating panel toggles between **title search ↔ content search**; content mode groups results **by session** (title + snippet) and filters by **user / reply / tool**. Ships its **own index** (independent of DSH's built-in full-text index) with incremental sync, a non-destructive rebuild, and snapshot export/import.
+
+> **This package owns search and the index only.** The session-history viewer (the old "archived sessions" panel) moved to **`dsh-session-steward`**. This package still **reads** the official archive set to keep archived sessions out of the index, but no longer **writes** it — the archive set has exactly one writer: the steward.
 
 A cordis client + host plugin assembled via the `dsh plugin` command and a bundle patch — no dsh source changes, no PR required.
 
@@ -24,7 +26,7 @@ A cordis client + host plugin assembled via the `dsh plugin` command and a bundl
 > - **One artifact, runtime-adaptive**: the same `lib/client.js` loads on both releases with no version-string branching. The client bundle only `require`s `react` / `react-dom`, both of which sit in the shared module table of either release.
 > - **The store seat is implemented locally**: the settings row needs a store seat (`StoreHandle` / `StoreInstance`, a contract owned by `@deepseek-ai/dsh-client-ui-slots` and identical in both releases). It used to come from the runtime's `defineStore`, but that engine package was renamed between releases, so it is now a ~30-line local implementation that only provides `create()` → `{ actions, getSnapshot, subscribe, clearPersisted }` — no release-specific specifier.
 > - **Every other contract is identical across releases**: the `settings.general.item` slot, `SettingsScope.{getSnapshot,subscribe,set,unset}`, and the three `sessionQuery` faces have the same signatures in both.
-> - The sidebar entry is still disabled (`sidebar.footer.action` registration is commented out); both releases support re-enabling it.
+> - The sidebar entry is enabled: this package registers one `sidebar.footer.action` entry ("Search"). It no longer registers a second entry — the archive entry moved to the steward.
 
 ## What it does
 
@@ -32,7 +34,7 @@ A cordis client + host plugin assembled via the `dsh plugin` command and a bundl
 - **Content grouped by session**: each content result is one row (session title + strongest snippet + type tag); clicking opens that session — no per-message flood.
 - **Content-type filter**: filter chips at the top of content mode — **All / User / Reply / Tool**; `Tool` opens `tool/call` and `tool/result` events into the index, so you can search tool call arguments and results directly.
 - **Index availability probe**: the host `search-status` endpoint checks whether the `sessionQuery` full-text index is enabled; when it is not, content mode shows one concrete setup instruction instead of a bare "content search unavailable".
-- **General settings row**: Settings → General gains a **"Session Search"** row — enable toggle + default search mode (title/content), applied on write.
+- **Settings card**: Settings → Plugins gains a **"Search Index"** card — enable toggle, default search mode, sync/retention/index-dir knobs, and the index-lifecycle block (status, non-destructive rebuild, snapshot export/import).
 - **Jump to session**: clicking a result opens that session, landing on the context around the hit.
 
 ## UI preview
@@ -75,19 +77,27 @@ Then restart DSH web. If you do not enable it, the plugin's content mode shows s
 
 ```sh
 # Option 1: install directly from GitHub (recommended) — lib/ is committed, no local build
-dsh plugin --profile web add github:drscrewdriver/dsh-session-search-toggle#release-v0.1.0   # stable
-dsh plugin --profile web add github:drscrewdriver/dsh-session-search-toggle#master          # baseline
-dsh plugin --profile web add github:drscrewdriver/dsh-session-search-toggle#feat/type-filter-search  # latest dev
+dsh plugin --profile web add github:drscrewdriver/dsh-search-index#release-v0.1.0   # stable
+dsh plugin --profile web add github:drscrewdriver/dsh-search-index#master          # baseline
+dsh plugin --profile web add github:drscrewdriver/dsh-search-index#feat/type-filter-search  # latest dev
 
 # Option 2: assemble from a local path / source (see Development)
 
 # Restart dsh web — required! A running instance does not hot-load the bundle layer
 dsh web
 # or use the bundled script
-bash ~/.dsh/profiles/web/node_modules/dsh-session-search-toggle/restart-dsh-web.sh
+bash ~/.dsh/profiles/web/node_modules/dsh-search-index/restart-dsh-web.sh
 ```
 
-After install a **"Search"** button appears at the sidebar footer; Settings → General gains the **"Session Search"** settings row.
+After install a **"Search"** button appears at the sidebar footer; Settings → Plugins gains the **"Search Index"** card.
+
+> **Upgrading from the old name**: this package was renamed from `dsh-session-search-toggle` (0.2.0-beta.1). GitHub keeps redirects for renamed repositories, so the old name still resolves — but switch the profile dependency to the new name rather than letting both names coexist:
+> ```sh
+> dsh plugin --profile web add github:drscrewdriver/dsh-search-index#<branch>
+> dsh plugin --profile web remove dsh-session-search-toggle
+> dsh web   # restart
+> ```
+> The settings namespace stays `switch-search` (**storage key kept stable, no migration**), so existing configuration keeps working under the new name.
 
 > ⚠️ **GitHub reachability**: installing via github: requires access to github.com; if your network is restricted, set up a working proxy or mirror first, otherwise add may stall while fetching.
 
@@ -142,7 +152,7 @@ This project is one of the DSH plugins maintained by [drscrewdriver](https://git
 | [dsh-input-traffic](https://github.com/drscrewdriver/dsh-input-traffic) | Busy-time input queue: three-tier traffic control, drag-to-reorder, session freeze |
 | [dsh-thinking-levels](https://github.com/drscrewdriver/dsh-thinking-levels) | Per-round reasoning_effort control: Auto scheduling or manual wire level |
 | [dsh-seatbelt-sandbox](https://github.com/drscrewdriver/dsh-seatbelt-sandbox) | macOS Seatbelt sandbox adapter: native libsandbox loader replacing deprecated sandbox-exec |
-| **[dsh-session-search-toggle](https://github.com/drscrewdriver/dsh-session-search-toggle)** | Session content search sidebar: title/content toggle, type-filter by user/reply/tool |
+| **[dsh-search-index](https://github.com/drscrewdriver/dsh-search-index)** | Session content search sidebar: title/content toggle, type-filter by user/reply/tool |
 
 ## License
 
