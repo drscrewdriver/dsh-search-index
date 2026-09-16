@@ -21,7 +21,7 @@
 
 **前身：`dsh-session-search-toggle`。** 那个版本依赖 `@deepseek-ai/dsh-client-runtime` 的 `defineStore` 提供设置行座位。DSH 0.1.2 把客户端引擎包改名/重构（`dsh-client-runtime` → `dsh-client-store`），旧写法在新宿主上无法加载——同一个插件没法用一份产物同时兼容两版。
 
-**本版（`dsh-search-index` 0.2.0-beta.4）以 DSH 0.1.2 为主线**，做法是让宿主版本差异彻底消失：
+**本版（`dsh-search-index` 0.2.0-beta.5）以 DSH 0.1.2 为主线**，做法是让宿主版本差异彻底消失：
 
 - **单一产物，运行时自适应**：同一份 `lib/client.js` 在 0.1.1-rc.2 与 0.1.2-rc.1 上都能加载，**没有任何版本号字符串分支**。客户端 bundle 只 `require` `react` / `react-dom`，两者都在两版的共享模块表内。
 - **两个引擎包都不导入**：既不 import `dsh-client-runtime`，也不 import `dsh-client-store`，因此**不受那次改名影响**。
