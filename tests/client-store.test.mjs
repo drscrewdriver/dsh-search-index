@@ -4,8 +4,14 @@
  *
  * What it proves (and what it does NOT):
  * - `lib/client.js` materializes without any release-specific specifier and
- *   registers exactly one `settings.plugin.item` entry (the thinking-levels
- *   pattern: dual `id`+`key`, no `settings.general.item` row, no store seat).
+ *   registers exactly one sidebar entry plus one settings card (dual `id`+`key`,
+ *   no `settings.general.item` row, no store seat).
+ * - The card lands on WHICHEVER settings seat the host declares: `settings.plugin.item`
+ *   on the ≤0.1.2 line, `settings.plugins.tab` on the 0.1.5 line — and only one
+ *   of the two ever fires, because `slots.inject` runs its callback only once
+ *   the named seat is DECLARED. The fake below models that rule; a fake that
+ *   fires every `inject` models a host that declares everything, which no real
+ *   host does, and would hide exactly the regression this covers.
  * - The card's inject factory binds the `switch-search` settings namespace
  *   through the settingsScope service; when that service is absent the card
  *   degrades to a read-only DEFAULT_CONFIG scope instead of crashing.
@@ -74,9 +80,17 @@ function loadBundle() {
   return { exports, seen }
 }
 
+/**
+ * The settings seat each host LINE declares. The two lines are mutually
+ * exclusive: 0.1.5 renamed the seat, it did not add a second one.
+ */
+const HOST_012_SEATS = ['sidebar.footer.action', 'settings.plugin.item']
+const HOST_015_SEATS = ['sidebar.footer.action', 'settings.plugins.tab']
+
 /** Client context that records slot registrations and namespace bindings. */
-function clientCtx(ledger, bindings, { withScope = true } = {}) {
+function clientCtx(ledger, bindings, { withScope = true, declaredSlots = HOST_012_SEATS } = {}) {
   const disposer = () => {}
+  const declared = new Set(declaredSlots)
   let snapshot = {
     status: 'ready',
     value: { enabled: false, defaultMode: 'title' },
@@ -93,7 +107,9 @@ function clientCtx(ledger, bindings, { withScope = true } = {}) {
     unset: async () => {},
   }
   const slots = {
-    inject: (name, fn) => { fn(); return disposer },
+    // Real semantics: the callback fires only once the named seat is DECLARED.
+    // The bundle relies on this for its two-seat (0.1.2 / 0.1.5) registration.
+    inject: (name, fn) => { if (declared.has(name)) fn(); return disposer },
     register: (options) => { ledger.push(options); return disposer },
   }
   return {
@@ -163,6 +179,42 @@ check('card degrades to a read-only default scope without settingsScope', () => 
   assert.equal(snap.value.defaultMode, 'title', 'degraded scope must surface DEFAULT_CONFIG.defaultMode')
   assert.equal(snap.writable, false)
   assert.doesNotThrow(() => injected.scope.subscribe(() => {}))
+})
+
+// ── The 0.1.5 line ────────────────────────────────────────────────────────────
+// 0.1.5 renamed the Plugins settings seat. A bundle that only knows the old
+// name registers nothing there and the card silently disappears — no error the
+// user can see, because an undeclared-seat throw happens inside the inject
+// factory during activation, where an outer try/catch cannot reach it.
+
+check('registers the settings.plugins.tab seat on the 0.1.5 host line', () => {
+  const ledger = []
+  const bindings = []
+  const { ctx } = clientCtx(ledger, bindings, { declaredSlots: HOST_015_SEATS })
+  exports.apply(ctx)
+  assert.equal(ledger.length, 2, `expected search entry + tab card, got ${ledger.length}`)
+  assert.equal(ledger[0].name, 'sidebar.footer.action', 'the sidebar footer search entry must be registered')
+  const options = ledger[1]
+  assert.equal(options.name, 'settings.plugins.tab', 'the card must land on the seat the 0.1.5 host declares')
+  assert.equal(options.id, NAMESPACE, 'the tab key must be the settings namespace')
+  assert.equal(typeof options.order, 'number', 'the tab seat must carry a numeric order')
+  assert.equal(typeof options.label, 'function', 'the tab seat must carry a label THUNK, not a static string')
+  assert.equal(options.label(), '搜索索引', 'the label thunk must resolve the card title from the bundled zh dictionary')
+  assert.equal(typeof options.inject, 'function')
+  assert.ok(options.inject().scope, 'inject must return the bound scope on the tab seat too')
+  assert.deepEqual(bindings, [NAMESPACE], 'the card must bind exactly the switch-search namespace')
+})
+
+check('the two seats are mutually exclusive — the old name does NOT also fire on 0.1.5', () => {
+  const ledger = []
+  const { ctx } = clientCtx(ledger, [], { declaredSlots: HOST_015_SEATS })
+  exports.apply(ctx)
+  const names = ledger.map((o) => o.name)
+  assert.ok(names.includes('settings.plugins.tab'), 'the declared tab seat must be occupied')
+  assert.ok(
+    !names.includes('settings.plugin.item'),
+    `the undeclared legacy seat must NOT be registered; got ${JSON.stringify(names)}`,
+  )
 })
 
 line(`\n${failures === 0 ? 'TEST PASS' : `TEST FAIL (${failures})`}`)
