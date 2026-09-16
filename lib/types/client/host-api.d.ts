@@ -21,7 +21,12 @@ export interface HostSessionItem {
     cwd: string;
     updatedAt: number;
 }
-/** One content-search hit (session-level: title + strongest snippet). */
+/**
+ * One content-search hit (session-level: title + strongest snippet).
+ * `time` belongs to the strongest matching document; `updatedAt` is the
+ * session-level clock and is what recency ordering keys on. Both ship so the
+ * panel can re-sort locally without another round-trip.
+ */
 export interface HostContentHit {
     sessionId: string;
     title: string;
@@ -29,7 +34,10 @@ export interface HostContentHit {
     seq: number;
     type: string;
     time: number;
+    updatedAt: number;
 }
+/** Result ordering accepted by the host `content-search` method. */
+export type HostSortMode = 'relevance' | 'time';
 /** Host watermark-sync state (subset used here). */
 export interface HostSyncState {
     state: string;

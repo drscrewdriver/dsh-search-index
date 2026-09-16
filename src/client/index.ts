@@ -18,7 +18,7 @@ import { createElement, useEffect, useMemo, useRef, useState, type ReactElement 
 import { createPortal } from 'react-dom'
 import type { Context } from 'cordis'
 import { DEFAULT_CONFIG, SWITCH_SEARCH_SETTINGS_NAMESPACE, type SwitchSearchConfig } from '../config.ts'
-import { callHost, callHostAny, type HostContentHit, type HostIndexStatus, type HostSessionItem } from './host-api.ts'
+import { callHost, callHostAny, type HostContentHit, type HostIndexStatus, type HostSessionItem, type HostSortMode } from './host-api.ts'
 import { SearchSettingsCard, type SwitchCardScope } from './card.tsx'
 import { NS, en, translate, zh, type LocaleKey } from './locales.ts'
 
@@ -81,6 +81,47 @@ const CONTENT_TYPE_CHIPS: readonly { id: ContentType; labelKey: LocaleKey }[] = 
   { id: 'tool', labelKey: 'filter.tool' },
 ]
 
+/** Result-ordering chips rendered at the right of the same filter row. */
+const SORT_CHIPS: readonly { id: HostSortMode; labelKey: LocaleKey }[] = [
+  { id: 'relevance', labelKey: 'sort.relevance' },
+  { id: 'time', labelKey: 'sort.time' },
+]
+
+/**
+ * Persisted ordering preference. Unlike `lastPanelMode` this one survives a
+ * page reload — an ordering is a durable preference, not a session mood.
+ */
+const SORT_STORE_KEY = 'dsh-search-index.sortBy'
+
+/** Read the persisted ordering; private mode or a bad value degrades to relevance. */
+function readStoredSort(): HostSortMode {
+  try {
+    return window.localStorage.getItem(SORT_STORE_KEY) === 'time' ? 'time' : 'relevance'
+  } catch {
+    return 'relevance'
+  }
+}
+
+/** Persist the ordering; a storage failure still leaves this session working. */
+function writeStoredSort(next: HostSortMode): void {
+  try {
+    window.localStorage.setItem(SORT_STORE_KEY, next)
+  } catch {
+    // ignore: the choice applies for the rest of this session regardless
+  }
+}
+
+/**
+ * Local re-sort so the page honours the chosen ordering even against an older
+ * host half that ignores `sortBy` and therefore omits `updatedAt` entirely —
+ * in that case the host order is left untouched rather than scrambled to NaN.
+ */
+function sortHits(items: readonly HostContentHit[], sortBy: HostSortMode): HostContentHit[] {
+  if (sortBy !== 'time') return [...items]
+  if (!items.every(item => typeof item.updatedAt === 'number' && Number.isFinite(item.updatedAt))) return [...items]
+  return [...items].sort((a, b) => b.updatedAt - a.updatedAt)
+}
+
 /** The footer-action owner share (structural subset). */
 interface SwitchFooterProps {
   wide: boolean
@@ -115,6 +156,8 @@ const CSS = `
 .dsws_search:focus{border-color:var(--dsw-alias-state-business-primary)}
 .dsws_search::placeholder{color:var(--dsw-alias-label-caption)}
 .dsws_chips{display:flex;align-items:center;gap:6px;padding:8px 10px 0;flex:none}
+.dsws_chipGap{flex:1;min-width:0}
+.dsws_sortGroup{display:flex;align-items:center;gap:6px;flex:none}
 .dsws_chip{height:24px;box-sizing:border-box;border:1px solid var(--dsw-alias-border-l2);background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer;border-radius:999px;padding:0 10px;font-size:12px;font-weight:500;line-height:22px;white-space:nowrap}
 .dsws_chip:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .dsws_chipActive{background:var(--dsw-alias-state-business-primary);border-color:var(--dsw-alias-state-business-primary);color:var(--dsw-alias-label-primary)}
@@ -221,6 +264,11 @@ function SwitchPanel({
   }
   const [query, setQuery] = useState('')
   const [contentType, setContentType] = useState<ContentType>('all')
+  const [sortBy, setSortByState] = useState<HostSortMode>(readStoredSort)
+  const setSortBy = (next: HostSortMode): void => {
+    writeStoredSort(next)
+    setSortByState(next)
+  }
   const [sessions, setSessions] = useState<HostSessionItem[] | null>(null)
   const [sessionsError, setSessionsError] = useState<string | null>(null)
   const [content, setContent] = useState<{ query: string; status: 'idle' | 'loading' | 'ready' | 'error'; items: HostContentHit[]; error?: string }>({
@@ -299,19 +347,29 @@ function SwitchPanel({
     }
     let cancelled = false
     const requestType: ContentType = contentType
-    const requestKey = `${normalized}\u0000${requestType}`
+    const requestKey = `${normalized}\u0000${requestType}\u0000${sortBy}`
     setContent(prev => ({ query: requestKey, status: 'loading', items: prev.query === requestKey ? prev.items : [] }))
     const timer = window.setTimeout(() => {
-      callHost<HostContentHit>('content-search', { query: normalized, limit: 50, types: requestType === 'all' ? undefined : [requestType] }).then((res) => {
+      callHost<HostContentHit>('content-search', {
+        query: normalized,
+        limit: 50,
+        types: requestType === 'all' ? undefined : [requestType],
+        sortBy,
+      }).then((res) => {
         if (cancelled) return
-        setContent({ query: requestKey, status: res.ok ? 'ready' : 'error', items: res.ok ? res.items : [], error: res.ok ? undefined : (res.error ?? '搜索失败') })
+        setContent({
+          query: requestKey,
+          status: res.ok ? 'ready' : 'error',
+          items: res.ok ? sortHits(res.items, sortBy) : [],
+          error: res.ok ? undefined : (res.error ?? '搜索失败'),
+        })
       })
     }, 250)
     return () => {
       cancelled = true
       window.clearTimeout(timer)
     }
-  }, [mode, normalized, contentType])
+  }, [mode, normalized, contentType, sortBy])
 
   // Focus the input on open; reset mode on every open.
   useEffect(() => {
@@ -449,14 +507,27 @@ function SwitchPanel({
           onChange: (e: { target: { value: string } }) => setQuery(e.target.value),
         }),
       ]),
-      mode === 'content' && createElement('div', { key: 'chips', className: 'dsws_chips', role: 'group', 'aria-label': translate(t, 'filter.all') },
-        CONTENT_TYPE_CHIPS.map(chip => createElement('button', {
+      mode === 'content' && createElement('div', { key: 'chips', className: 'dsws_chips', role: 'group', 'aria-label': translate(t, 'filter.all') }, [
+        ...CONTENT_TYPE_CHIPS.map(chip => createElement('button', {
           key: chip.id,
           type: 'button',
           className: `dsws_chip${contentType === chip.id ? ' dsws_chipActive' : ''}`,
           'aria-pressed': contentType === chip.id,
           onClick: () => { setContentType(chip.id) },
-        }, translate(t, chip.labelKey)))),
+        }, translate(t, chip.labelKey))),
+        // Ordering sits on the same row, pushed right: it filters the same
+        // result set the type chips do, so it is not a separate toolbar.
+        createElement('span', { key: 'gap', className: 'dsws_chipGap' }),
+        createElement('span', { key: 'sort', className: 'dsws_sortGroup', role: 'group', 'aria-label': translate(t, 'sort.label') },
+          SORT_CHIPS.map(chip => createElement('button', {
+            key: chip.id,
+            type: 'button',
+            className: `dsws_chip${sortBy === chip.id ? ' dsws_chipActive' : ''}`,
+            'aria-pressed': sortBy === chip.id,
+            title: chip.id === 'time' ? translate(t, 'sort.time.hint') : translate(t, 'sort.relevance.hint'),
+            onClick: () => { setSortBy(chip.id) },
+          }, translate(t, chip.labelKey)))),
+      ]),
       children,
     ]),
   ]), document.body)

@@ -49,6 +49,8 @@ The settings namespace stays `switch-search` (**storage key kept stable, no migr
 - **Title ↔ content toggle**: two ways to search from one entry — "Title" filters by session title / working-directory substring live; "Content" searches message bodies through **this plugin's own index**.
 - **Content grouped by session**: each content result is one row (session title + strongest snippet + type tag); clicking opens that session — no per-message flood.
 - **Content-type filter**: filter chips at the top of content mode — **All / User / Reply / Tool**; `Tool` opens `tool/call` and `tool/result` events into the index, so you can search tool call arguments and results directly.
+- **Result ordering**: **Relevance / Time** on the right of the same row — "Time" orders by **session last activity**, newest first; the choice persists locally across reloads. Hits carry both the document timestamp and the session clock, so a client can re-sort on its own.
+- **Realtime titles**: the host subscribes to `session/event`, so a rename (`session/title`) folds into the index immediately instead of waiting for the next sync (30s by default).
 - **Settings card**: Settings → Plugins gains a **"Search Index"** card — enable toggle, default search mode, sync/retention/index-dir knobs, and the index-lifecycle block (status, non-destructive rebuild, snapshot export/import).
 - **Jump to session**: clicking a result opens that session, landing on the context around the hit.
 

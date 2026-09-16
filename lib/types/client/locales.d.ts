@@ -62,6 +62,11 @@ export declare const zh: {
     readonly 'filter.user': "用户";
     readonly 'filter.reply': "回复";
     readonly 'filter.tool': "工具";
+    readonly 'sort.label': "结果排序";
+    readonly 'sort.relevance': "相关度";
+    readonly 'sort.time': "时间";
+    readonly 'sort.relevance.hint': "按匹配强度排序（默认）。";
+    readonly 'sort.time.hint': "按会话最后活动时间倒序，更新的排前面；同一时间再按匹配强度。";
     readonly 'type.user/message': "用户";
     readonly 'type.assistant/message': "回复";
     readonly 'type.tool/call': "工具调用";

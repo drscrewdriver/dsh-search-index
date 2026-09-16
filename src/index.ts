@@ -20,7 +20,7 @@
 import type { Context } from 'cordis'
 import z from '@deepseek-ai/schemastery'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { SwitchIndexEngine, type SwitchIndexContentType } from './host/engine.ts'
+import { SwitchIndexEngine, type SwitchIndexContentType, type SwitchSearchSort } from './host/engine.ts'
 import { SwitchWatermarkSync, type SwitchSyncState } from './host/sync.ts'
 import { createArchiveSource, type SwitchArchiveDiagnostics } from './host/archive-source.ts'
 // The archive-set WRITER (prune) moved to dsh-session-steward: this package
@@ -222,6 +222,16 @@ const DEFAULT_LIMIT = 20
 /** Environment override for the independent index directory. */
 const INDEX_DIR_ENV = 'DSH_SWITCH_SEARCH_DIR'
 
+/**
+ * The log-only event a rename (or an automatic title) lands as. It is appended
+ * to the session log, so it also bumps the session watermark — which is why the
+ * poll would already catch it, one interval later.
+ */
+const TITLE_EVENT_TYPE = 'session/title'
+
+/** Rename bursts coalesce into one title fold (an auto-title pass fires several). */
+const TITLE_FLUSH_MS = 250
+
 /** Normalize a Host-header authority, or undefined when unparsable. */
 function parseAuthority(authority: string): URL | undefined {
   try {
@@ -368,18 +378,25 @@ async function listSessions(runtime: SwitchRuntime): Promise<{ ok: boolean; item
   }
 }
 
-/** content-search: session-grouped hits from the independent index. */
+/**
+ * content-search: session-grouped hits from the independent index.
+ * `sortBy: 'time'` orders by session recency (`updatedAt`), anything else by
+ * relevance; the host orders before truncating so the page is honest.
+ */
 async function contentSearch(
   runtime: SwitchRuntime,
   payload: unknown,
 ): Promise<{ ok: boolean; items?: unknown[]; error?: string }> {
-  const record = payload as { query?: unknown; limit?: unknown; types?: unknown } | null
+  const record = payload as { query?: unknown; limit?: unknown; types?: unknown; sortBy?: unknown } | null
   const query = typeof record?.query === 'string' ? record.query.trim() : ''
   if (query === '') return { ok: false, error: '缺少 query' }
   const requestedLimit = typeof record?.limit === 'number' && Number.isSafeInteger(record.limit)
     ? record.limit
     : DEFAULT_LIMIT
   const limit = Math.min(Math.max(1, requestedLimit), 100)
+  // Unknown or absent ordering degrades to relevance — never to an error, so an
+  // old client half talking to a new host half keeps working.
+  const sortBy: SwitchSearchSort = record?.sortBy === 'time' ? 'time' : 'relevance'
   let types: readonly SwitchIndexContentType[]
   if (Array.isArray(record?.types) && record.types.length > 0) {
     types = record.types.filter((entry): entry is SwitchIndexContentType =>
@@ -394,7 +411,7 @@ async function contentSearch(
   try {
     return {
       ok: true,
-      items: index.engine.search({ query, types, limit }),
+      items: index.engine.search({ query, types, limit, sortBy }),
     }
   } catch (err) {
     return { ok: false, error: String(err instanceof Error ? err.message : err) }
@@ -644,6 +661,42 @@ export function apply(ctx: Context): void {
     }, Math.max(5_000, intervalMs))
   }
 
+  // Realtime titles. A rename appends the log-only `session/title` event, which
+  // reaches the index one poll later (default 30s). Folding the title straight
+  // off the append feed removes that latency without a full pass. The listener
+  // is deliberately trivial — this feed carries EVERY appended event, streaming
+  // chunks included — and never throws, because it runs inside the host's
+  // fire-and-forget append publication.
+  let pendingTitleIds = new Set<string>()
+  let titleTimer: ReturnType<typeof setTimeout> | undefined
+  const flushPendingTitles = (): void => {
+    titleTimer = undefined
+    const ids = [...pendingTitleIds]
+    pendingTitleIds = new Set()
+    if (ids.length === 0) return
+    void state.sync.refreshTitles(ids).catch(() => {})
+  }
+  ctx.effect(() => {
+    const bus = ctx as unknown as {
+      on?: (name: string, listener: (session: { id?: unknown }, event: { type?: unknown }) => void) => () => void
+    }
+    if (typeof bus.on !== 'function') return () => {}
+    try {
+      return bus.on('session/event', (session, event) => {
+        if (event?.type !== TITLE_EVENT_TYPE) return
+        if (current().autoSync === false) return
+        const id = session?.id
+        if (typeof id !== 'string' || id === '') return
+        pendingTitleIds.add(id)
+        if (titleTimer !== undefined) return
+        titleTimer = setTimeout(flushPendingTitles, TITLE_FLUSH_MS)
+      })
+    } catch {
+      // No event bus on this host: the poll stays the fallback path.
+      return () => {}
+    }
+  }, 'dsh-search-index: realtime titles')
+
   const initialConfig = current()
   void (async () => {
     try {
@@ -660,6 +713,7 @@ export function apply(ctx: Context): void {
 
   ctx.effect(() => () => {
     if (syncTimer !== undefined) clearInterval(syncTimer)
+    if (titleTimer !== undefined) clearTimeout(titleTimer)
     engine.close()
   }, 'dsh-search-index: index lifecycle')
 

@@ -22,7 +22,7 @@ import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
-const { SwitchIndexEngine, rebuildIndex, importIntoIndex, DEFAULT_INDEX_LAYOUT } = await import('../lib/index.mjs')
+const { SwitchIndexEngine, SwitchWatermarkSync, rebuildIndex, importIntoIndex, DEFAULT_INDEX_LAYOUT } = await import('../lib/index.mjs')
 
 /** One temp workspace per run; each test gets its own directory. */
 function tempDir(label) {
@@ -78,6 +78,58 @@ test('engine: ingest + session-grouped search with snippet', async () => {
   engine.close()
 })
 
+test('engine: sortBy=time orders by session recency before the limit slice', async () => {
+  const dir = tempDir('sort')
+  const engine = new SwitchIndexEngine({ path: join(dir, 'index.sqlite') })
+  await engine.open()
+  // Deliberately inverted fixtures: the OLD session is the relevance winner
+  // (the term appears eight times) and the NEW session is the relevance loser
+  // (the term appears once, diluted in a long passage). Any assertion that the
+  // newest session comes first therefore proves recency ordering, not luck.
+  engine.upsertSession({
+    sessionId: 's-old', version: 1, title: '旧但高相关', cwd: '/tmp', updatedAt: 100,
+    events: [
+      userMessage(0, 'needlefish needlefish needlefish needlefish needlefish needlefish needlefish needlefish'),
+    ],
+  })
+  engine.upsertSession({
+    sessionId: 's-new', version: 1, title: '新但低相关', cwd: '/tmp', updatedAt: 900,
+    events: [
+      userMessage(0, 'a much longer passage that mentions needlefish exactly once amid plenty of other unrelated filler words meant to dilute its term frequency substantially'),
+    ],
+  })
+
+  const query = 'needlefish'
+  const byRelevance = engine.search({ query, types: ['all'], limit: 10 })
+  assert.equal(byRelevance.length, 2)
+  assert.equal(byRelevance[0].sessionId, 's-old', 'relevance keeps the historical ordering')
+
+  const byTime = engine.search({ query, types: ['all'], limit: 10, sortBy: 'time' })
+  assert.deepEqual(byTime.map(hit => hit.sessionId), ['s-new', 's-old'])
+
+  // Ordering must happen before the slice: a post-slice re-sort would only
+  // shuffle an already relevance-truncated top-1 and still return s-old.
+  const topRelevance = engine.search({ query, types: ['all'], limit: 1 })
+  const topTime = engine.search({ query, types: ['all'], limit: 1, sortBy: 'time' })
+  assert.equal(topRelevance[0].sessionId, 's-old')
+  assert.equal(topTime[0].sessionId, 's-new')
+
+  // `updatedAt` is the session clock and is not the hit's document timestamp.
+  assert.equal(topTime[0].updatedAt, 900)
+  assert.equal(topTime[0].time, 1000, 'document time is independent of session recency')
+  assert.equal(byRelevance[0].updatedAt, 100)
+
+  // An unknown ordering degrades to relevance rather than throwing.
+  const bogus = engine.search({ query, types: ['all'], sortBy: 'nonsense' })
+  assert.deepEqual(bogus.map(hit => hit.sessionId), byRelevance.map(hit => hit.sessionId))
+
+  // Recency ordering is strictly non-increasing in the session clock.
+  const clocks = byTime.map(hit => hit.updatedAt)
+  assert.deepEqual(clocks, [...clocks].sort((a, b) => b - a))
+
+  engine.close()
+})
+
 test('engine: upsert replaces documents for the same session', async () => {
   const dir = tempDir('upsert')
   const engine = new SwitchIndexEngine({ path: join(dir, 'index.sqlite') })
@@ -125,6 +177,57 @@ test('rebuild: old index stays queryable mid-build, archives swap in', async () 
   assert.ok(!existsSync(join(dir, layout.building)), 'shadow file consumed')
   engine.close()
   assert.ok(readFileSync(join(dir, 'index.sqlite')).length > 0)
+})
+
+test('sync: refreshTitles folds a rename without a full pass', async () => {
+  const dir = tempDir('titles')
+  const engine = new SwitchIndexEngine({ path: join(dir, 'index.sqlite') })
+  await engine.open()
+  let title = '旧标题'
+  let version = 1
+  let reads = 0
+  const sessionQuery = {
+    listSessions: async () => [{ header: { id: 't1', version, createdAt: 7, cwd: '/w' } }],
+    readSession: async () => {
+      reads += 1
+      return { session: { id: 't1', version, createdAt: 7, cwd: '/w' }, events: [userMessage(0, '可搜索的正文')] }
+    },
+    readTitleSnapshots: async (ids) => ids.map(id => ({
+      status: 'fulfilled',
+      value: { session: { id, version, createdAt: 7, cwd: '/w' }, title: { title } },
+    })),
+  }
+  const sync = new SwitchWatermarkSync(engine, sessionQuery)
+  await sync.poll()
+  assert.equal(reads, 1, 'the first pass ingests the log')
+  assert.equal(engine.getSession('t1').title, '旧标题')
+
+  // The rename: a `session/title` append. The event listener folds the title
+  // straight away instead of waiting a full poll interval (default 30s).
+  title = '新标题'
+  await sync.refreshTitles(['t1'])
+  assert.equal(engine.getSession('t1').title, '新标题', 'rename lands immediately')
+  assert.equal(reads, 1, 'a title refresh never re-reads the log')
+  assert.equal(engine.getSession('t1').version, 1, 'a title refresh leaves the watermark alone')
+
+  // Unknown ids are a no-op, not an error: the event can beat the first ingest.
+  await sync.refreshTitles(['never-indexed'])
+  assert.deepEqual(engine.listIndexedSessions().map(row => row.sessionId), ['t1'])
+
+  // Content stays searchable, and hits now carry the folded title.
+  const hits = engine.search({ query: '可搜索的正文', types: ['all'] })
+  assert.equal(hits[0].title, '新标题')
+
+  // Real sequence: the same rename also bumped the version, so the next poll
+  // re-ingests the log (which clears the title) and re-folds it. The refresh
+  // must never leave a worse title behind than the poll path alone would.
+  version = 2
+  await sync.poll()
+  assert.equal(reads, 2, 'the bumped version forces one re-read')
+  assert.equal(engine.getSession('t1').title, '新标题', 'the poll re-fold converges on the same title')
+  assert.equal(engine.getSession('t1').version, 2)
+
+  engine.close()
 })
 
 test('rebuild: broken session is isolated, rest indexed', async () => {

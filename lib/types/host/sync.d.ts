@@ -81,6 +81,17 @@ export declare class SwitchWatermarkSync {
     /** Current progress snapshot (cloned). */
     snapshot(): SwitchSyncState;
     /**
+     * Fold titles for an explicit id set without running a full pass.
+     *
+     * Used by the `session/title` event listener so a rename lands immediately
+     * rather than at the next poll. It deliberately leaves watermarks alone: a
+     * title-only refresh can never make the index claim content it has not read,
+     * and the next poll still re-ingests the session off its bumped version.
+     * Safe for unknown ids — the header write is a no-op when no row exists.
+     * @param sessionIds - sessions whose titles should be re-folded.
+     */
+    refreshTitles(sessionIds: readonly string[]): Promise<void>;
+    /**
      * Run one incremental pass (or await the running one).
      * @returns the state after the pass completes.
      */

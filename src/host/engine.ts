@@ -32,9 +32,23 @@ export interface SwitchSearchHit {
   title: string
   seq: number
   type: string
+  /** Timestamp of the strongest matching document. Per-hit, not per-session. */
   time: number
+  /**
+   * Session-level last-activity timestamp. Distinct from `time`: a session
+   * may hold an old best match yet have moved one minute ago. This is the
+   * field recency ordering and any client-side re-sort must key on.
+   */
+  updatedAt: number
   snippet: string
 }
+
+/**
+ * Result ordering for one search.
+ * - `relevance` (default) — weighted BM25, the historical behaviour.
+ * - `time` — session recency first, relevance as the tie-break.
+ */
+export type SwitchSearchSort = 'relevance' | 'time'
 
 /** Coarse type-filter buckets mapped onto raw session event types. */
 export type SwitchIndexContentType = 'all' | 'user' | 'reply' | 'tool'
@@ -411,13 +425,14 @@ export class SwitchIndexEngine {
    * One statement: the FTS match is bounded by rank in a subquery (its rowid
    * aligns with docs.doc_id), then the type/surface filters join in — no
    * second round-trip, no large IN parameter lists.
-   * @param request - query text, coarse type filter, page size.
-   * @returns hits ranked by strongest per-session match.
+   * @param request - query text, coarse type filter, page size, ordering.
+   * @returns hits ordered by `sortBy` (relevance by default).
    */
   search(request: {
     query: string
     types?: readonly SwitchIndexContentType[]
     limit?: number
+    sortBy?: SwitchSearchSort
   }): SwitchSearchHit[] {
     const db = this.requireDb()
     const match = sanitizeFtsQuery(request.query)
@@ -427,7 +442,7 @@ export class SwitchIndexEngine {
     const placeholders = types.map(() => '?').join(', ')
     const docs = db.prepare(`
       SELECT d.doc_id AS docId, d.session_id AS sessionId, d.seq, d.type, d.time, d.text,
-             s.title, f.rank AS ftsRank
+             s.title, s.updated_at AS updatedAt, f.rank AS ftsRank
       FROM (
         SELECT rowid, rank FROM docs_fts WHERE docs_fts MATCH ? ORDER BY rank LIMIT ?
       ) f
@@ -442,6 +457,7 @@ export class SwitchIndexEngine {
       time: number
       text: string
       title: string
+      updatedAt: number
       ftsRank: number
     }[]
     // Group by session; strongest hit = best weighted rank (bm25 rank is
@@ -453,8 +469,18 @@ export class SwitchIndexEngine {
       const best = bestBySession.get(doc.sessionId)
       if (best === undefined || score > best.score) bestBySession.set(doc.sessionId, { doc, score })
     }
-    return [...bestBySession.values()]
-      .sort((a, b) => b.score - a.score)
+    const grouped = [...bestBySession.values()]
+    if (request.sortBy === 'time') {
+      // Recency is a session-level concern, so it keys on `updatedAt` — not on
+      // a hit's `time`, which only says when the best-matching document was
+      // written. Relevance is the tie-break so equal timestamps stay sane.
+      // Ordering happens before the slice: sorting the page afterwards would
+      // only reorder an already relevance-truncated top-N.
+      grouped.sort((a, b) => (b.doc.updatedAt - a.doc.updatedAt) || (b.score - a.score))
+    } else {
+      grouped.sort((a, b) => b.score - a.score)
+    }
+    return grouped
       .slice(0, limit)
       .map(({ doc }) => ({
         sessionId: doc.sessionId,
@@ -462,6 +488,7 @@ export class SwitchIndexEngine {
         seq: doc.seq,
         type: doc.type,
         time: doc.time,
+        updatedAt: Number(doc.updatedAt ?? 0),
         snippet: buildSnippet(doc.text, request.query),
       }))
   }

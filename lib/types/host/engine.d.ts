@@ -16,9 +16,22 @@ export interface SwitchSearchHit {
     title: string;
     seq: number;
     type: string;
+    /** Timestamp of the strongest matching document. Per-hit, not per-session. */
     time: number;
+    /**
+     * Session-level last-activity timestamp. Distinct from `time`: a session
+     * may hold an old best match yet have moved one minute ago. This is the
+     * field recency ordering and any client-side re-sort must key on.
+     */
+    updatedAt: number;
     snippet: string;
 }
+/**
+ * Result ordering for one search.
+ * - `relevance` (default) — weighted BM25, the historical behaviour.
+ * - `time` — session recency first, relevance as the tie-break.
+ */
+export type SwitchSearchSort = 'relevance' | 'time';
 /** Coarse type-filter buckets mapped onto raw session event types. */
 export type SwitchIndexContentType = 'all' | 'user' | 'reply' | 'tool';
 /**
@@ -140,13 +153,14 @@ export declare class SwitchIndexEngine {
      * One statement: the FTS match is bounded by rank in a subquery (its rowid
      * aligns with docs.doc_id), then the type/surface filters join in — no
      * second round-trip, no large IN parameter lists.
-     * @param request - query text, coarse type filter, page size.
-     * @returns hits ranked by strongest per-session match.
+     * @param request - query text, coarse type filter, page size, ordering.
+     * @returns hits ordered by `sortBy` (relevance by default).
      */
     search(request: {
         query: string;
         types?: readonly SwitchIndexContentType[];
         limit?: number;
+        sortBy?: SwitchSearchSort;
     }): SwitchSearchHit[];
     private requireDb;
 }
