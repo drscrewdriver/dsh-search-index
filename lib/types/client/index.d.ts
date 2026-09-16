@@ -12,6 +12,7 @@ interface SwitchSlotsService {
         order?: number;
         store?: unknown;
         locale?: string;
+        label?: string | (() => string);
         inject?: (actions: unknown) => unknown;
     }, component: unknown): () => void;
 }
@@ -42,6 +43,13 @@ interface SwitchScopeLike<T> {
 interface SwitchLocaleService {
     register(ns: string, dicts: Partial<Record<string, Record<string, string>>>): () => void;
     register(ns: string, localeId: string, dicts: Record<string, string>): () => void;
+    /**
+     * Read-time translator bound to a namespace (host `dsh-client-locale`).
+     * Needed for slot `label` thunks, which the owner re-reads per render so the
+     * tab text follows locale switches without re-registration. Optional: older
+     * hosts may expose `register` only, hence the guarded call site.
+     */
+    bind?(ns: string): (key: string, params?: Record<string, unknown>) => string;
 }
 declare module 'cordis' {
     interface Context {

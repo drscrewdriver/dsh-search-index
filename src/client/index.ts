@@ -35,6 +35,7 @@ interface SwitchSlotsService {
     order?: number
     store?: unknown
     locale?: string
+    label?: string | (() => string)
     inject?: (actions: unknown) => unknown
   }, component: unknown): () => void
 }
@@ -66,6 +67,13 @@ interface SwitchScopeLike<T> {
 interface SwitchLocaleService {
   register(ns: string, dicts: Partial<Record<string, Record<string, string>>>): () => void
   register(ns: string, localeId: string, dicts: Record<string, string>): () => void
+  /**
+   * Read-time translator bound to a namespace (host `dsh-client-locale`).
+   * Needed for slot `label` thunks, which the owner re-reads per render so the
+   * tab text follows locale switches without re-registration. Optional: older
+   * hosts may expose `register` only, hence the guarded call site.
+   */
+  bind?(ns: string): (key: string, params?: Record<string, unknown>) => string
 }
 
 /** The locale dictionary face the renderer may hand the card as `t`. */
@@ -738,31 +746,66 @@ export function apply(ctx: Context): void {
     (props: SwitchFooterProps) => createElement(SwitchFooter, { ...props, open, scope: entryScope }),
   ), 'dsh-search-index: sidebar footer entry')
 
-  // The plugin settings card (settings.plugin.item) replaces the old
-  // settings.general.item row + local store seat. Both `id` and `key` are
-  // supplied: CLI dsh declares this slot `keyed`, DSH Desktop's bundled
-  // version declares it `list` (thinking-levels pattern).
-  slots.inject('settings.plugin.item', () => slots.register({
-    name: 'settings.plugin.item',
-    id: SWITCH_SEARCH_SETTINGS_NAMESPACE,
-    key: SWITCH_SEARCH_SETTINGS_NAMESPACE,
-    locale: locale !== undefined ? NS : undefined,
-    inject: () => {
-      return {
-        scope: entryScope ?? {
-          getSnapshot: () => ({
-            status: 'ready' as const,
-            value: DEFAULT_CONFIG,
-            revision: undefined,
-            writable: false,
-          }),
-          subscribe: () => () => {},
-          set: async () => {},
-        },
-        openSession: open,
-      }
+  // The plugin settings card, across two host contracts.
+  //
+  // DSH 0.1.5 renamed the Plugins settings seat: `settings.plugin.item`
+  // (keyed; 0.1.2+) is gone, replaced by `settings.plugins.tab` (list; `id` =
+  // tab key, `order`, `label` = registrant-localized tab text the owner reads
+  // per render). Registering into a seat the host does not declare throws
+  // during activation — inside the inject factory, where an outer try/catch
+  // cannot reach it — so registering only the old name loses the card
+  // silently on 0.1.5.
+  //
+  // `slots.inject` only fires its callback once the named seat is DECLARED, so
+  // the two registrations are mutually exclusive at runtime: 0.1.5+ hosts
+  // declare the tab seat, older hosts declare the item seat. No probing, no
+  // outer error swallowing; the factory body still guards its own `register`.
+  //
+  // The item seat is supplied both `id` and `key`: CLI dsh declares it `keyed`
+  // (needs `key`) while DSH Desktop's bundled version declares it `list` (needs
+  // `id`) — the slots service validates only its kind's field, so the pair
+  // keeps the card working in both environments. It is also kept byte-for-byte
+  // as before, so 0.1.2 behavior is unchanged.
+  const tabTitle = typeof locale?.bind === 'function' ? locale.bind(NS) : undefined
+  const cardInject = (): { scope: SwitchCardScope; openSession: (id: string) => void } => ({
+    scope: entryScope ?? {
+      getSnapshot: () => ({
+        status: 'ready' as const,
+        value: DEFAULT_CONFIG,
+        revision: undefined,
+        writable: false,
+      }),
+      subscribe: () => () => {},
+      set: async () => {},
     },
-  }, SearchSettingsCard), 'dsh-search-index: plugin settings card')
+    openSession: open,
+  })
+
+  for (const slotName of ['settings.plugins.tab', 'settings.plugin.item'] as const) {
+    const isTab = slotName === 'settings.plugins.tab'
+    try {
+      slots.inject(slotName, () => {
+        try {
+          return slots.register({
+            name: slotName,
+            id: SWITCH_SEARCH_SETTINGS_NAMESPACE,
+            key: SWITCH_SEARCH_SETTINGS_NAMESPACE,
+            order: isTab ? 100 : undefined,
+            locale: locale !== undefined ? NS : undefined,
+            // Only the tab seat renders a label; the item seat derives its
+            // title from the card itself, so passing one there is a no-op.
+            label: isTab ? () => (tabTitle !== undefined ? tabTitle('card.title') : zh['card.title']) : undefined,
+            inject: cardInject,
+          }, SearchSettingsCard)
+        } catch (err) {
+          console.warn(`[dsh-search-index] ${slotName} 注册失败:`, err)
+          return () => {}
+        }
+      }, `dsh-search-index: plugin settings card (${slotName})`)
+    } catch (err) {
+      console.warn(`[dsh-search-index] ${slotName} 槽位未声明:`, err)
+    }
+  }
 }
 
 // Re-exported dictionary faces for consumers that compose the card directly.
