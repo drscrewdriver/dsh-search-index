@@ -699,6 +699,21 @@ function searchIcon(): ReactElement {
 
 /** ------------------------------------------------------------------ plugin */
 
+/** The child settings seat **under 「插件配置」** — the only settings seat we occupy. */
+export const SETTINGS_CARD_SEAT = 'settings.plugin.item'
+/**
+ * Sibling-tab seat (`settings.plugins.tab`). **Deliberately NOT registered.**
+ *
+ * Kept as a named constant because it is the seat this plugin used to also
+ * occupy — registering both is what made the card appear twice (once next to
+ * 「插件配置」 and once under it). If a future host line drops the child seat, the
+ * right move is to re-derive the target seat from that host's source, not to
+ * register both.
+ */
+export const SETTINGS_SIBLING_SEAT = 'settings.plugins.tab'
+/** How long to let the host declare the child seat before warning (ms). */
+const SEAT_PROBE_MS = 3000
+
 /** Services required before mounting: the slot registry (others optional). */
 export const inject = ['slots']
 
@@ -746,26 +761,30 @@ export function apply(ctx: Context): void {
     (props: SwitchFooterProps) => createElement(SwitchFooter, { ...props, open, scope: entryScope }),
   ), 'dsh-search-index: sidebar footer entry')
 
-  // The plugin settings card, across two host contracts.
+  // The plugin settings card — registered on the **child seat under 「插件配置」**,
+  // and nowhere else.
   //
-  // DSH 0.1.5 renamed the Plugins settings seat: `settings.plugin.item`
-  // (keyed; 0.1.2+) is gone, replaced by `settings.plugins.tab` (list; `id` =
-  // tab key, `order`, `label` = registrant-localized tab text the owner reads
-  // per render). Registering into a seat the host does not declare throws
-  // during activation — inside the inject factory, where an outer try/catch
-  // cannot reach it — so registering only the old name loses the card
-  // silently on 0.1.5.
+  // ⚠️ This used to register on two seats, on the assumption that
+  // 「`slots.inject` only fires once the seat is DECLARED ⇒ the two are mutually
+  // exclusive at runtime」. **Measured false**: the 0.1.2 host declares all three
+  // settings seats at once, so both fired and the card showed up twice — once as
+  // a sibling tab of 「插件配置」 and once as the card under it.
   //
-  // `slots.inject` only fires its callback once the named seat is DECLARED, so
-  // the two registrations are mutually exclusive at runtime: 0.1.5+ hosts
-  // declare the tab seat, older hosts declare the item seat. No probing, no
-  // outer error swallowing; the factory body still guards its own `register`.
+  // Host source (0.1.2, not inference):
+  //   `settings.section`      dsh-client-ui-settings-general:650   top-level nav page (sibling of 插件)
+  //   `settings.plugins.tab`  dsh-client-ui-settings-plugins:1781  a tab page **sibling to 插件配置**
+  //   `settings.plugin.item`  same package :1793, declared at runtime by its
+  //                           `configurable` contribution — the **card under 插件配置**
   //
-  // The item seat is supplied both `id` and `key`: CLI dsh declares it `keyed`
-  // (needs `key`) while DSH Desktop's bundled version declares it `list` (needs
-  // `id`) — the slots service validates only its kind's field, so the pair
-  // keeps the card working in both environments. It is also kept byte-for-byte
-  // as before, so 0.1.2 behavior is unchanged.
+  // So only the last one is registered. Both `id` and `key` are supplied: CLI dsh
+  // declares that seat `keyed` (needs `key`) while DSH Desktop's bundled version
+  // declares it `list` (needs `id`) — the slots service validates only its kind's
+  // field, so the pair keeps the card working in both environments.
+  //
+  // 0.1.5's seat set cannot be verified without a 0.1.5 host. If that line does
+  // not declare the child seat, the card disappears **silently** — which is how
+  // this went unnoticed. So we warn; we do **not** fall back to another seat,
+  // because registering a second seat is exactly what caused the duplicate.
   const tabTitle = typeof locale?.bind === 'function' ? locale.bind(NS) : undefined
   const cardInject = (): { scope: SwitchCardScope; openSession: (id: string) => void } => ({
     scope: entryScope ?? {
@@ -781,8 +800,9 @@ export function apply(ctx: Context): void {
     openSession: open,
   })
 
-  for (const slotName of ['settings.plugins.tab', 'settings.plugin.item'] as const) {
-    const isTab = slotName === 'settings.plugins.tab'
+  const registerCard = (slotName: string): void => {
+    // 只有平级标签页座位需要 `order`/`label`；子级卡片座位由卡片自身渲染标题。
+    const isTab = slotName === SETTINGS_SIBLING_SEAT
     try {
       slots.inject(slotName, () => {
         try {
@@ -806,6 +826,31 @@ export function apply(ctx: Context): void {
       console.warn(`[dsh-search-index] ${slotName} 槽位未声明:`, err)
     }
   }
+
+  // `inject` fires only once the seat is declared, so this flag tells us whether
+  // the child seat actually took.
+  let cardSeatLive = false
+  try {
+    slots.inject(SETTINGS_CARD_SEAT, () => {
+      cardSeatLive = true
+      return () => {}
+    })
+  } catch (err) {
+    console.warn(`[dsh-search-index] ${SETTINGS_CARD_SEAT} 探测失败:`, err)
+  }
+  registerCard(SETTINGS_CARD_SEAT)
+
+  // 响亮诊断：座位若始终没被声明（宿主改名/移除），卡片会**静默消失** ——
+  // 正是这个问题长期没被发现的原因，所以必须在 Console 说出来。
+  // 刻意**不回退**到别的座位：各插件只留一个位置，回退就会重新引入"同一份面板
+  // 出现在两处"的可能（见上方说明）。
+  setTimeout(() => {
+    if (cardSeatLive) return
+    console.warn(
+      `[dsh-search-index] 宿主未声明 ${SETTINGS_CARD_SEAT}：设置里的「搜索索引」卡片不会出现。` +
+        '（0.1.5 的座位集合本机未验证，请在真机上确认。）',
+    )
+  }, SEAT_PROBE_MS)
 }
 
 // Re-exported dictionary faces for consumers that compose the card directly.

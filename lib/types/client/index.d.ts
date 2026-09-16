@@ -60,6 +60,18 @@ declare module 'cordis' {
     }
 }
 /** ------------------------------------------------------------------ plugin */
+/** The child settings seat **under 「插件配置」** — the only settings seat we occupy. */
+export declare const SETTINGS_CARD_SEAT = "settings.plugin.item";
+/**
+ * Sibling-tab seat (`settings.plugins.tab`). **Deliberately NOT registered.**
+ *
+ * Kept as a named constant because it is the seat this plugin used to also
+ * occupy — registering both is what made the card appear twice (once next to
+ * 「插件配置」 and once under it). If a future host line drops the child seat, the
+ * right move is to re-derive the target seat from that host's source, not to
+ * register both.
+ */
+export declare const SETTINGS_SIBLING_SEAT = "settings.plugins.tab";
 /** Services required before mounting: the slot registry (others optional). */
 export declare const inject: string[];
 /**
