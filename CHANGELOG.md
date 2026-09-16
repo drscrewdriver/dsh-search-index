@@ -2,6 +2,22 @@
 
 所有重要变更与 bug 修复记录于此。版本遵循语义化版本（`dsh plugin --profile web add github:drscrewdriver/dsh-search-index` 安装）。
 
+## 0.2.0-beta.4 —— 侧边栏入口与「会话管家」同行自适应
+
+### 变更
+- **让位，而不是独占**：`.dsws_root` 原本是 `flex:none;width:100%`，在 `sidebar.footer.action` 这个 flex 行里独占整行，
+  把相邻的会话管家入口挤到行尾，且 42px 胶囊与对方的图标钮高低不一。改为 `flex:1 1 auto;min-width:0`，按钮 `flex:1;min-width:0`——
+  与官方同一座位的控件（`ui-settings-general` 的 `.trigger{flex:1;min-width:0;height:42px;border-radius:12px;padding:0 10px 0 8px}`）同构。
+  空间不足时先省略标签（`.dsws_buttonLabel` 本就有 ellipsis），不再挤压邻居。
+- **收起轨道对齐官方 36×36**：`wide=false` 时按钮改用 `.dsws_buttonRail`（`36×36`、`border-radius:50%`），
+  根元素加 `.dsws_rootRail` 保持 `flex:none`；对齐 Figma 轨道规范（56px 轨道 / 10px 内边距 / 36×36 控制盒）。
+- **内容左对齐**：去掉 `justify-content:center`，与正下方官方「设置」行的图标同列。
+
+### 未改动
+- 交互、面板、索引、路由、设置命名空间 `switch-search` 一律未动；`enabled` 关掉时整条入口（含 `⌘K` / `Ctrl K`）照旧一起消失。
+- 协同只发生在两插件各自的 CSS 上：本插件不引用会话管家的任何值，也不假设它是否安装。
+- 新增选择器均被代码引用，`tests/client-styles.test.mjs` 的「零孤儿类」继续成立。
+
 ## 0.2.0-beta.1 —— 改名 dsh-search-index，会话历史迁出给会话管家
 
 ### 破坏性变更
