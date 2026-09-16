@@ -88,6 +88,26 @@ const SORT_CHIPS: readonly { id: HostSortMode; labelKey: LocaleKey }[] = [
 ]
 
 /**
+ * The identity of one content-search request, derived from every input that
+ * changes the result set.
+ *
+ * This is the single owner of that identity. The effect that issues the
+ * request and the render path that decides whether the stored result belongs
+ * to the current inputs must both come through here: two hand-written copies
+ * of the same template literal drift apart silently, and the render path then
+ * falls through to its empty `loading` state for every query — results arrive,
+ * parse, and are never shown.
+ *
+ * @param normalized - the trimmed query text.
+ * @param contentType - the active content-type filter.
+ * @param sortBy - the active result ordering.
+ * @returns an opaque key, stable for equal inputs.
+ */
+function contentRequestKey(normalized: string, contentType: ContentType, sortBy: HostSortMode): string {
+  return `${normalized}\u0000${contentType}\u0000${sortBy}`
+}
+
+/**
  * Persisted ordering preference. Unlike `lastPanelMode` this one survives a
  * page reload — an ordering is a durable preference, not a session mood.
  */
@@ -347,7 +367,7 @@ function SwitchPanel({
     }
     let cancelled = false
     const requestType: ContentType = contentType
-    const requestKey = `${normalized}\u0000${requestType}\u0000${sortBy}`
+    const requestKey = contentRequestKey(normalized, requestType, sortBy)
     setContent(prev => ({ query: requestKey, status: 'loading', items: prev.query === requestKey ? prev.items : [] }))
     const timer = window.setTimeout(() => {
       callHost<HostContentHit>('content-search', {
@@ -396,8 +416,8 @@ function SwitchPanel({
   if (sessionsError !== null) {
     children.push(createElement('div', { key: 'err', className: 'dsws_error' }, translate(t, 'panel.sessionsError', { error: sessionsError })))
   }
-  const contentRequestKey = `${normalized}\u0000${contentType}`
-  const activeContent = content.query === contentRequestKey ? content : { query: contentRequestKey, status: 'loading' as const, items: [] }
+  const activeRequestKey = contentRequestKey(normalized, contentType, sortBy)
+  const activeContent = content.query === activeRequestKey ? content : { query: activeRequestKey, status: 'loading' as const, items: [] }
   if (mode === 'title') {
     if (sessions === null) {
       children.push(createElement('div', { key: 'loading', className: 'dsws_status' }, translate(t, 'panel.loadingSessions')))

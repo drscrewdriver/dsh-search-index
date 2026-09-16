@@ -54,7 +54,7 @@
     "build": "node -e \"require('fs').rmSync('lib',{recursive:true,force:true})\" && tsc -p tsconfig.build.json && tsdown --config-loader tsx",
     "prepublishOnly": "npm run build",
     "typecheck": "tsc --noEmit",
-    "test": "node tests/client-store.test.mjs && node tests/index-engine.test.mjs && node tests/index-archive.test.mjs",
+    "test": "node tests/client-store.test.mjs && node tests/client-panel-key.test.mjs && node tests/index-engine.test.mjs && node tests/index-archive.test.mjs",
     "bundle": "tsdown --config-loader tsx"
   },
   "license": "MIT",
