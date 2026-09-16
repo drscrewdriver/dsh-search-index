@@ -21,6 +21,7 @@ import { DEFAULT_CONFIG, SWITCH_SEARCH_SETTINGS_NAMESPACE, type SwitchSearchConf
 import { callHost, callHostAny, type HostContentHit, type HostIndexStatus, type HostSessionItem, type HostSortMode } from './host-api.ts'
 import { SearchSettingsCard, type SwitchCardScope } from './card.tsx'
 import { NS, en, translate, zh, type LocaleKey } from './locales.ts'
+import { LABELS, isInvokeChord } from './platform.ts'
 
 /** ------------------------------------------------------------------ types */
 
@@ -166,7 +167,7 @@ const CSS = `
 .dsws_button{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:8px;height:42px;border:none;border-radius:12px;background:transparent;color:var(--dsw-alias-label-primary);cursor:pointer;padding:0 10px 0 8px;font-family:inherit;font-size:14px;line-height:22px;white-space:nowrap;overflow:hidden;transition:background-color 160ms ease-out,color 160ms ease-out}
 .dsws_button:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .dsws_button svg{flex:none}
-.dsws_trigger{position:fixed;z-index:2147483000;left:50%;top:50%;transform:translate(-50%,-50%);width:520px;max-width:calc(100vw - 24px);max-height:min(72vh,640px);box-sizing:border-box;background:var(--dsw-specific-tip);border:1px solid var(--dsw-alias-border-l1);border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.16);overflow:hidden;display:flex;flex-direction:column;font-family:Inter,var(--dsw-font-family)}
+.dsws_trigger{position:fixed;z-index:2147483000;left:50%;top:50%;transform:translate(-50%,-50%);width:520px;max-width:calc(100vw - 24px);max-height:min(72vh,640px);box-sizing:border-box;background:var(--dsw-specific-tip);border:1px solid var(--dsw-alias-border-l1);border-radius:12px;box-shadow:var(--dsw-shadow-lv3,0 8px 28px rgba(0,0,0,.16));overflow:hidden;display:flex;flex-direction:column;font-family:Inter,var(--dsw-font-family)}
 .dsws_toolrow{display:flex;align-items:center;gap:8px;padding:10px 10px 0}
 .dsws_mode{display:inline-flex;align-items:center;gap:2px;flex:none;background:var(--dsw-alias-interactive-bg-hover);border-radius:8px;padding:2px}
 .dsws_modeBtn{height:24px;border:none;background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer;border-radius:6px;padding:0 8px;font-size:12px;font-weight:500;line-height:20px}
@@ -220,7 +221,12 @@ const CSS = `
 .dsws_progress{height:6px;border-radius:3px;background:var(--dsw-alias-interactive-bg-hover);overflow:hidden}
 .dsws_progressFill{height:100%;border-radius:3px;background:var(--dsw-alias-state-business-primary);transition:width .4s ease}
 .dsws_progressLabel{color:var(--dsw-alias-state-business-primary);font-size:12px;line-height:18px;font-weight:600;font-variant-numeric:tabular-nums}
-.dsws_panelFoot{flex:none;display:flex;align-items:center;gap:8px;padding:8px 10px 10px;border-top:1px solid var(--dsw-alias-border-l2)}
+.dsws_panelFoot{flex:none;display:flex;align-items:center;gap:14px;padding:8px 14px;border-top:1px solid var(--dsw-alias-border-l1);color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:16px}
+.dsws_footItem{display:inline-flex;align-items:center}
+.dsws_footItem>.dsws_kbd{margin-right:5px}
+.dsws_footGap{flex:1;min-width:0}
+.dsws_buttonLabel{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dsws_kbd{flex:none;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;min-width:18px;width:auto;height:18px;padding:0 5px;border:1px solid var(--dsw-alias-border-l2);border-radius:5px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-secondary);font-size:10px;line-height:1;white-space:nowrap;font-variant-numeric:tabular-nums}
 .dsws_linkBtn{height:26px;border:none;background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer;border-radius:6px;padding:0 8px;font:inherit;font-size:12px;line-height:18px}
 .dsws_linkBtn:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .dsws_dialogHead{flex:none;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 12px 0}
@@ -553,6 +559,21 @@ function SwitchPanel({
           }, translate(t, chip.labelKey)))),
       ]),
       children,
+      // The key bar. It advertises only chords that are actually bound: the
+      // invoke chord (see `SwitchFooter`) and Escape (see the effect above).
+      // A key cap for a key nothing listens to is a lie the user has to
+      // discover by pressing it.
+      createElement('div', { key: 'foot', className: 'dsws_panelFoot' }, [
+        createElement('span', { key: 'invoke', className: 'dsws_footItem' }, [
+          createElement('kbd', { key: 'k', className: 'dsws_kbd' }, LABELS.invokeLabel),
+          translate(t, 'panel.footer.invoke'),
+        ]),
+        createElement('span', { key: 'gap', className: 'dsws_footGap' }),
+        createElement('span', { key: 'close', className: 'dsws_footItem' }, [
+          createElement('kbd', { key: 'k', className: 'dsws_kbd' }, LABELS.escLabel),
+          translate(t, 'panel.footer.close'),
+        ]),
+      ]),
     ]),
   ]), document.body)
 }
@@ -565,16 +586,38 @@ function SwitchFooter({
 }: SwitchFooterProps & { t?: CardLocale; open: (sessionId: string) => void }): ReactElement {
   const [openPanel, setOpenPanel] = useState(false)
 
+  // The invoke chord. Bound here, next to the entry, so the shortcut exists
+  // exactly while the entry does: a sidebar button that the `enabled` switch
+  // hid, but a chord that still opened a panel out of nowhere, would be two
+  // answers to "is this plugin on". The match itself lives in `platform.ts`
+  // so the chord and the `⌘K`/`Ctrl K` chip cannot disagree.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      if (!isInvokeChord(event, LABELS.isMac)) return
+      event.preventDefault()
+      setOpenPanel(true)
+    }
+    document.addEventListener('keydown', onKey)
+    return () => { document.removeEventListener('keydown', onKey) }
+  }, [])
+
   return createElement('div', { className: 'dsws_root' }, [
     createElement('button', {
       key: 'btn',
       type: 'button',
       className: 'dsws_button',
-      title: translate(t, 'panel.entry'),
-      'aria-label': `${translate(t, 'panel.entry')}（${translate(t, 'panel.titleSearch')} / ${translate(t, 'panel.contentSearch')}）`,
+      title: `${translate(t, 'panel.entry')}（${LABELS.invokeLabel}）`,
+      'aria-label': `${translate(t, 'panel.entry')}（${translate(t, 'panel.titleSearch')} / ${translate(t, 'panel.contentSearch')}，${LABELS.invokeLabel}）`,
       'aria-expanded': openPanel,
       onClick: () => { setOpenPanel(true) },
-    }, [searchIcon(), wide && createElement('span', { key: 'label' }, translate(t, 'panel.entry'))]),
+    }, [
+      searchIcon(),
+      // The label and the key chip carry the same `wide` condition: a chip
+      // beside an icon-only entry would be the only thing in the collapsed
+      // rail, and `.dsws_button` clips rather than wraps.
+      wide && createElement('span', { key: 'label', className: 'dsws_buttonLabel' }, translate(t, 'panel.entry')),
+      wide && createElement('kbd', { key: 'key', className: 'dsws_kbd' }, LABELS.invokeLabel),
+    ]),
     openPanel && createElement(SwitchPanel, {
       key: 'panel',
       t,

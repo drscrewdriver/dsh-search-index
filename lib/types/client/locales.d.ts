@@ -58,6 +58,8 @@ export declare const zh: {
     readonly 'panel.noText': "(无文本)";
     readonly 'panel.untitled': "(未命名)";
     readonly 'panel.openSession': "打开会话";
+    readonly 'panel.footer.invoke': "唤出";
+    readonly 'panel.footer.close': "关闭";
     readonly 'filter.all': "全部";
     readonly 'filter.user': "用户";
     readonly 'filter.reply': "回复";
