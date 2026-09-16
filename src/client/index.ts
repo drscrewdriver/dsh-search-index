@@ -493,6 +493,10 @@ function SwitchPanel({
         createElement('span', { key: 't', className: 'dsws_rowTitle' }, [
           createElement('span', { key: 'x', className: 'dsws_titleText' }, item.title || translate(t, 'panel.untitled')),
           createElement('span', { key: 'tag', className: 'dsws_tag' }, typeLabel(t, item.type)),
+          // The session clock — the very field the 「时间」 ordering sorts by and
+          // the one the title rows already show. Ordering rows by a time the
+          // rows never display is illegible: you cannot tell what the sort did.
+          createElement('span', { key: 'time', className: 'dsws_tag' }, fmtTime(item.updatedAt)),
         ]),
         createElement('span', { key: 's', className: 'dsws_snippet' }, item.snippet || translate(t, 'panel.noText')),
       ])))))
