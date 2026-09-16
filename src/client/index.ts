@@ -14,7 +14,7 @@
  * the host release lacks them the card falls back to the bundled zh
  * dictionary and the host-composition config layer.
  */
-import { createElement, useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
+import { createElement, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactElement } from 'react'
 import { createPortal } from 'react-dom'
 import type { Context } from 'cordis'
 import { DEFAULT_CONFIG, SWITCH_SEARCH_SETTINGS_NAMESPACE, type SwitchSearchConfig } from '../config.ts'
@@ -194,19 +194,11 @@ const CSS = `
 .dsws_error{color:var(--dsw-alias-state-error-primary);padding:8px;font-size:12px;line-height:18px}
 .dsws_empty{color:var(--dsw-alias-label-tertiary);padding:10px 8px 8px;font-size:12px;line-height:18px}
 .dsws_backdrop{position:fixed;inset:0;z-index:2147482999;background:var(--dsw-alias-bg-mask-1,rgba(0,0,0,.24));backdrop-filter:blur(var(--dsw-mask-blur,4px))}
-.dsws_setRoot{display:flex;flex-direction:column;width:100%}
 .dsws_setRow{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--dsw-alias-border-l2)}
 .dsws_setRow:last-child{border-bottom:none}
 .dsws_setText{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
 .dsws_setTitle{color:var(--dsw-alias-label-primary);font-size:14px;line-height:22px}
 .dsws_setDesc{color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px}
-.dsws_switch{position:relative;width:40px;height:22px;flex:none}
-.dsws_switch>input{position:absolute;inset:0;width:100%;height:100%;opacity:0;margin:0;cursor:pointer}
-.dsws_switch>input:disabled{cursor:not-allowed}
-.dsws_switchTrack{position:absolute;inset:0;background:var(--dsw-alias-bg-module-platform);border:1px solid var(--dsw-alias-border-l2);border-radius:11px;transition:background .15s ease,border-color .15s ease;pointer-events:none}
-.dsws_switch>input:checked+.dsws_switchTrack{background:var(--dsw-alias-state-business-primary);border-color:var(--dsw-alias-state-business-primary)}
-.dsws_switchThumb{position:absolute;top:2px;left:2px;width:16px;height:16px;background:#fff;border-radius:50%;transition:transform .15s ease}
-.dsws_switch>input:checked+.dsws_switchTrack>.dsws_switchThumb{transform:translateX(18px)}
 .dsws_seg{display:inline-flex;align-items:center;gap:2px;background:var(--dsw-alias-interactive-bg-hover);border-radius:8px;padding:2px;flex:none}
 .dsws_segBtn{height:24px;border:none;background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer;border-radius:6px;padding:0 10px;font-size:12px;font-weight:500;line-height:20px}
 .dsws_segBtn:hover{color:var(--dsw-alias-label-primary)}
@@ -215,7 +207,6 @@ const CSS = `
 .dsws_actBtn{height:26px;box-sizing:border-box;border:1px solid var(--dsw-alias-border-l2);background:transparent;color:var(--dsw-alias-label-primary);cursor:pointer;border-radius:8px;padding:0 10px;font-size:12px;line-height:24px;white-space:nowrap}
 .dsws_actBtn:hover{background:var(--dsw-alias-interactive-bg-hover)}
 .dsws_actBtn:disabled{cursor:not-allowed;opacity:.5}
-.dsws_indexLine{color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px}
 .dsws_btnRow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .dsws_progressWrap{display:flex;flex-direction:column;gap:4px;padding:8px 10px 0}
 .dsws_progress{height:6px;border-radius:3px;background:var(--dsw-alias-interactive-bg-hover);overflow:hidden}
@@ -227,18 +218,6 @@ const CSS = `
 .dsws_footGap{flex:1;min-width:0}
 .dsws_buttonLabel{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dsws_kbd{flex:none;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;min-width:18px;width:auto;height:18px;padding:0 5px;border:1px solid var(--dsw-alias-border-l2);border-radius:5px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-secondary);font-size:10px;line-height:1;white-space:nowrap;font-variant-numeric:tabular-nums}
-.dsws_linkBtn{height:26px;border:none;background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer;border-radius:6px;padding:0 8px;font:inherit;font-size:12px;line-height:18px}
-.dsws_linkBtn:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
-.dsws_dialogHead{flex:none;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 12px 0}
-.dsws_dialogTitle{color:var(--dsw-alias-label-primary);font-size:14px;font-weight:600;line-height:22px}
-.dsws_archRow{cursor:default}
-.dsws_archRow:hover{background:transparent}
-.dsws_uuid{font-family:var(--ds-font-family-code,monospace);font-size:11px;user-select:text}
-.dsws_archCheck{flex:none;display:grid;place-items:center;width:18px;height:18px}
-.dsws_archCheck input{width:14px;height:14px;margin:0;cursor:pointer;accent-color:var(--dsw-alias-state-business-primary)}
-.dsws_dangerBtn{border-color:var(--dsw-alias-state-error-primary,var(--dsw-alias-state-warn-label));color:var(--dsw-alias-state-error-primary,var(--dsw-alias-state-warn-label))}
-.dsws_dangerBtn:hover{background:var(--dsw-alias-state-error-tertiary,var(--dsw-alias-state-warn-tertiary))}
-.dsws_editActive{border-color:var(--dsw-alias-state-business-primary);color:var(--dsw-alias-state-business-primary)}
 .dsws_pill{flex:none;display:inline-grid;grid-template-columns:14px max-content;align-items:center;column-gap:4px;height:26px;padding:0 10px;box-sizing:border-box;border:none;border-radius:8px;font-size:12px;font-weight:500;line-height:18px;white-space:nowrap;transition:background-color 160ms ease-out,color 160ms ease-out}
 .dsws_pill .dsws_pillIcon{display:grid;place-items:center;width:14px;height:14px}
 .dsws_pill .dsws_pillLabel{display:grid;text-align:left}
@@ -578,13 +557,37 @@ function SwitchPanel({
   ]), document.body)
 }
 
+/**
+ * Whether the user has the sidebar entry switched on.
+ *
+ * The `enabled` field has existed since the card shipped, but nothing read it:
+ * the switch promised "show the search entry at the bottom of the sidebar" and
+ * controlled nothing at all. Reading it here is the whole fix.
+ *
+ * An absent or unreadable scope keeps the entry visible — a settings service we
+ * cannot read is not a user asking for the feature off, and hiding the entry
+ * would also hide the only way back to the panel.
+ *
+ * @param scope - the bound `switch-search` namespace scope, when available.
+ * @returns `false` only when a readable scope says the entry is switched off.
+ */
+function useEntryEnabled(scope: SwitchCardScope | undefined): boolean {
+  const snapshot = useSyncExternalStore(
+    (listener) => scope?.subscribe(listener) ?? (() => {}),
+    () => scope?.getSnapshot(),
+  )
+  return snapshot?.value?.enabled !== false
+}
+
 /** The footer entry: one icon button that opens the search panel. */
 function SwitchFooter({
   t,
   wide,
   open,
-}: SwitchFooterProps & { t?: CardLocale; open: (sessionId: string) => void }): ReactElement {
+  scope,
+}: SwitchFooterProps & { t?: CardLocale; open: (sessionId: string) => void; scope?: SwitchCardScope }): ReactElement | null {
   const [openPanel, setOpenPanel] = useState(false)
+  const enabled = useEntryEnabled(scope)
 
   // The invoke chord. Bound here, next to the entry, so the shortcut exists
   // exactly while the entry does: a sidebar button that the `enabled` switch
@@ -592,6 +595,7 @@ function SwitchFooter({
   // answers to "is this plugin on". The match itself lives in `platform.ts`
   // so the chord and the `⌘K`/`Ctrl K` chip cannot disagree.
   useEffect(() => {
+    if (!enabled) return undefined
     const onKey = (event: KeyboardEvent): void => {
       if (!isInvokeChord(event, LABELS.isMac)) return
       event.preventDefault()
@@ -599,7 +603,10 @@ function SwitchFooter({
     }
     document.addEventListener('keydown', onKey)
     return () => { document.removeEventListener('keydown', onKey) }
-  }, [])
+  }, [enabled])
+
+  // Hook order is fixed above; the early return sits after every hook.
+  if (!enabled) return null
 
   return createElement('div', { className: 'dsws_root' }, [
     createElement('button', {
@@ -714,31 +721,35 @@ export function apply(ctx: Context): void {
     if (sessions !== undefined && typeof sessions.open === 'function') sessions.open(sessionId)
   }
 
+  // Resolved before the footer entry because that entry is the thing the
+  // `enabled` switch controls: the switch and the entry have to read the same
+  // binding, or the switch silently goes back to controlling nothing.
+  const settingsScope = ctx.get('settingsScope') as SwitchSettingsScope<SwitchSearchConfig> | undefined
+  const entryScope: SwitchCardScope | undefined = settingsScope?.bind<SwitchSearchConfig>({
+    namespace: SWITCH_SEARCH_SETTINGS_NAMESPACE,
+  })
+
   // The sidebar footer entry: the search panel (title/content toggle), one
   // bottom-bar button beside the official settings trigger. The archived-
-  // sessions viewer moved to dsh-session-steward (病案室) — this package no
+  // sessions viewer moved to dsh-session-steward (养老院) — this package no
   // longer owns any session-history UI.
   slots.inject('sidebar.footer.action', () => slots.register(
     { name: 'sidebar.footer.action', id: 'dsh-search-index', order: 10 },
-    (props: SwitchFooterProps) => createElement(SwitchFooter, { ...props, open }),
+    (props: SwitchFooterProps) => createElement(SwitchFooter, { ...props, open, scope: entryScope }),
   ), 'dsh-search-index: sidebar footer entry')
 
   // The plugin settings card (settings.plugin.item) replaces the old
   // settings.general.item row + local store seat. Both `id` and `key` are
   // supplied: CLI dsh declares this slot `keyed`, DSH Desktop's bundled
   // version declares it `list` (thinking-levels pattern).
-  const settingsScope = ctx.get('settingsScope') as SwitchSettingsScope<SwitchSearchConfig> | undefined
   slots.inject('settings.plugin.item', () => slots.register({
     name: 'settings.plugin.item',
     id: SWITCH_SEARCH_SETTINGS_NAMESPACE,
     key: SWITCH_SEARCH_SETTINGS_NAMESPACE,
     locale: locale !== undefined ? NS : undefined,
     inject: () => {
-      const scope: SwitchCardScope | undefined = settingsScope?.bind<SwitchSearchConfig>({
-        namespace: SWITCH_SEARCH_SETTINGS_NAMESPACE,
-      })
       return {
-        scope: scope ?? {
+        scope: entryScope ?? {
           getSnapshot: () => ({
             status: 'ready' as const,
             value: DEFAULT_CONFIG,

@@ -65,6 +65,11 @@ export interface HostIndexStatus {
     dir?: string;
     archives?: string[];
     archivedSessions?: number;
+    /**
+     * Resolution state of the peer plugin that owns archiving. Absent on an
+     * older host half — treated as `unknown`, which renders the neutral hint.
+     */
+    steward?: 'installed' | 'missing' | 'unknown';
     sync?: HostSyncState;
     rebuild?: HostRebuildState;
     error?: string;

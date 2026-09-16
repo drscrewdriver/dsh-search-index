@@ -23,6 +23,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { SwitchIndexEngine, type SwitchIndexContentType, type SwitchSearchSort } from './host/engine.ts'
 import { SwitchWatermarkSync, type SwitchSyncState } from './host/sync.ts'
 import { createArchiveSource, type SwitchArchiveDiagnostics } from './host/archive-source.ts'
+import { detectSteward } from './host/peers.ts'
 // The archive-set WRITER (prune) moved to dsh-session-steward: this package
 // reads the official archive set to exclude archived sessions from the index,
 // and no longer edits it. Single writer, one owner.
@@ -444,6 +445,9 @@ async function indexStatus(runtime: SwitchRuntime): Promise<unknown> {
     ok: true,
     available: index.engine.isOpen && indexed > 0,
     archivedSessions: index.engine.isOpen ? index.engine.countArchived() : 0,
+    // Who owns the archived-session domain, so the card can point at the plugin
+    // that can actually act on the count instead of leaving a bare number.
+    steward: detectSteward(),
     driver: index.engine.driverLabel,
     archive: index.archiveReader.diagnostics() as SwitchArchiveDiagnostics,
     dir: index.layout.dir,

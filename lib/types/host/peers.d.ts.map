@@ -1,0 +1,1 @@
+{"version":3,"file":"peers.d.ts","sourceRoot":"","sources":["../../../src/host/peers.ts"],"names":[],"mappings":"AAsBA,oDAAoD;AACpD,MAAM,MAAM,YAAY,GAAG,WAAW,GAAG,SAAS,GAAG,SAAS,CAAA;AAE9D,yDAAyD;AACzD,eAAO,MAAM,eAAe,wBAAwB,CAAA;AAEpD;;;;;;;;;;;;;;;GAeG;AACH,wBAAgB,SAAS,CAAC,IAAI,EAAE,MAAM,EAAE,IAAI,GAAE,MAAwB,GAAG,YAAY,CAQpF;AAED;;;;GAIG;AACH,wBAAgB,aAAa,IAAI,YAAY,CAE5C"}

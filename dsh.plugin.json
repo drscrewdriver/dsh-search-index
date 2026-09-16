@@ -1,6 +1,6 @@
 {
   "id": "dsh-external/dsh-search-index",
-  "version": "0.2.0-beta.2",
+  "version": "0.2.0-beta.3",
   "main": "./lib/index.mjs",
   "description": "侧边栏搜索索引：标题搜索 ↔ 内容搜索一键切换，内容按会话聚合展示标题与片段。自带独立索引。",
   "engines": {

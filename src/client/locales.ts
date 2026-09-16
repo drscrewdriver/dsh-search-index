@@ -33,6 +33,12 @@ export const zh = {
   'card.index.rebuild': '整理索引',
   'card.index.rebuilding.btn': '整理中…',
   'card.index.rebuild.hint': '非破坏性：构建期间旧索引继续可搜索，完成后原子切换并归档旧索引。',
+  // The archived count used to be a bare number under a card that cannot act on
+  // it. Two wordings, because telling a user to install something they already
+  // have is worse than saying nothing: `archivedMissing` renders only when the
+  // host actually failed to resolve the peer package.
+  'card.index.archivedOwner': '归档会话的浏览与清理由「会话管家」（dsh-session-steward）负责。本插件只读归档集合，把已归档会话排除出索引。',
+  'card.index.archivedMissing': '归档会话的浏览与清理需要「会话管家」（dsh-session-steward），当前未安装。本插件只读归档集合，把已归档会话排除出索引。',
   'card.index.export': '导出快照',
   'card.index.import': '导入快照',
   'card.index.exported': '快照已导出为下载文件。',
@@ -45,7 +51,7 @@ export const zh = {
   'panel.searchContent': '搜索会话内容…',
   'panel.entry': '搜索',
   'panel.buildIndex': '建立索引',
-  'panel.archived': '归档会话',
+  'panel.archived': '已排除 {count} 个已归档会话',
   'panel.rebuilding': '正在整理索引… {done}/{total}（整理期间旧索引仍可搜索）',
   'panel.unavailable': '独立索引服务不可用：Host 未完成初始化。',
   'panel.notBuilt': '独立索引尚未建立：先建立索引即可启用内容搜索（不依赖 DSH 官方全文索引）。',
@@ -110,6 +116,8 @@ export const en: Partial<Record<LocaleKey, string>> = {
   'card.index.rebuild': 'Rebuild index',
   'card.index.rebuilding.btn': 'Rebuilding…',
   'card.index.rebuild.hint': 'Non-destructive: the old index keeps serving while the shadow builds; the swap is atomic and the old index is archived.',
+  'card.index.archivedOwner': 'Browsing and disposing of archived sessions belongs to dsh-session-steward. This plugin only reads the archive set and excludes those sessions from the index.',
+  'card.index.archivedMissing': 'Browsing and disposing of archived sessions needs dsh-session-steward, which is not installed. This plugin only reads the archive set and excludes those sessions from the index.',
   'card.index.export': 'Export snapshot',
   'card.index.import': 'Import snapshot',
   'card.index.exported': 'Snapshot downloaded.',
@@ -122,7 +130,7 @@ export const en: Partial<Record<LocaleKey, string>> = {
   'panel.searchContent': 'Search session content…',
   'panel.entry': 'Search',
   'panel.buildIndex': 'Build index',
-  'panel.archived': 'Archived sessions',
+  'panel.archived': '{count} archived session(s) excluded',
   'panel.rebuilding': 'Rebuilding index… {done}/{total} (the old index keeps serving)',
   'panel.unavailable': 'Independent index service unavailable: Host not initialized.',
   'panel.notBuilt': 'Independent index not built yet: build it once to enable content search (no official FTS index needed).',

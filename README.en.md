@@ -21,7 +21,7 @@ A cordis client + host plugin assembled via the `dsh plugin` command and a bundl
 
 **Predecessor: `dsh-session-search-toggle`.** That version relied on `defineStore` from `@deepseek-ai/dsh-client-runtime` to provide the settings-row seat. DSH 0.1.2 renamed and restructured the client engine packages (`dsh-client-runtime` → `dsh-client-store`), so the old code could not load on the new host — and no single artifact could serve both releases.
 
-**This release (`dsh-search-index` 0.2.0-beta.2) targets DSH 0.1.2 as its main line**, by making the host-version difference disappear entirely:
+**This release (`dsh-search-index` 0.2.0-beta.3) targets DSH 0.1.2 as its main line**, by making the host-version difference disappear entirely:
 
 - **One artifact, runtime-adaptive**: the same `lib/client.js` loads on both 0.1.1-rc.2 and 0.1.2-rc.1 with **no version-string branching anywhere**. The client bundle only `require`s `react` / `react-dom`, both of which sit in the shared module table of either release.
 - **Neither engine package is imported**: it imports neither `dsh-client-runtime` nor `dsh-client-store`, so that rename cannot affect it.
@@ -51,7 +51,7 @@ The settings namespace stays `switch-search` (**storage key kept stable, no migr
 - **Content-type filter**: filter chips at the top of content mode — **All / User / Reply / Tool**; `Tool` opens `tool/call` and `tool/result` events into the index, so you can search tool call arguments and results directly.
 - **Result ordering**: **Relevance / Time** on the right of the same row — "Time" orders by **session last activity**, newest first; the choice persists locally across reloads. Hits carry both the document timestamp and the session clock, so a client can re-sort on its own.
 - **Realtime titles**: the host subscribes to `session/event`, so a rename (`session/title`) folds into the index immediately instead of waiting for the next sync (30s by default).
-- **Settings card**: Settings → Plugins gains a **"Search Index"** card — enable toggle, default search mode, sync/retention/index-dir knobs, and the index-lifecycle block (status, non-destructive rebuild, snapshot export/import).
+- **Settings card**: Settings → Plugins gains a **"Search Index"** card — enable toggle, default search mode, sync/retention/index-dir knobs, and the index-lifecycle block (status, non-destructive rebuild, snapshot export/import). When it reports "N archived session(s) excluded" it also **points at the owner**: browsing and disposing of archived sessions belongs to **dsh-session-steward**, and this plugin only reads the archive set. When that plugin is absent the hint says so — the host decides by resolving it from the plugin's own module graph, and any inconclusive probe falls back to the neutral wording rather than reporting "not installed" for a package it merely could not check.
 - **Invoke key and platform-native key hints**: both the sidebar entry and the panel's key bar show the invoke chord — `⌘K` on macOS, `Ctrl K` on Windows/Linux, decided from the running system; the panel's close key is platform-native too (`esc` on macOS, `Esc` elsewhere). Detection falls back **UA-CH → `navigator.platform` → UA string**, so a privacy mode never demotes a Mac user to the Windows glyphs. The hint and the binding share one owner: the chord printed on the cap is the chord the `keydown` handler matches.
 - **Jump to session**: clicking a result opens that session, landing on the context around the hit.
 

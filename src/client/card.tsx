@@ -315,9 +315,21 @@ function IndexBlock(props: { t?: SearchSettingsCardProps['t'] }): JSX.Element {
         (status?.archivedSessions ?? 0) > 0 && createElement('span', {
           key: 'archived',
           className: 'dsws_pill dsws_pillNeutral',
-        }, `${translate(t, 'panel.archived')} ${status?.archivedSessions}`),
+        }, translate(t, 'panel.archived', { count: status?.archivedSessions ?? 0 })),
       ]),
       createElement('span', { key: 'd', className: 'dsws_setDesc' }, statusLine),
+      // The archived count points at a capability this plugin does not own.
+      // Left bare it read as a broken feature: "there are 72 archived sessions,
+      // where do I manage them?" The wording follows the host's probe — telling
+      // someone to install what they already have is worse than saying nothing,
+      // so only a definite `missing` says so.
+      (status?.archivedSessions ?? 0) > 0 && createElement(
+        'span',
+        { key: 'archHint', className: 'dsws_setDesc' },
+        status?.steward === 'missing'
+          ? translate(t, 'card.index.archivedMissing')
+          : translate(t, 'card.index.archivedOwner'),
+      ),
       rebuildError !== null && rebuildError !== undefined
         && createElement('span', { key: 'err', className: 'dsws_setDesc' }, translate(t, 'card.index.rebuildError', { error: rebuildError })),
       syncFailures > 0 && createElement('span', { key: 'warn', className: 'dsws_setDesc' }, translate(t, 'card.index.failures', { count: syncFailures })),

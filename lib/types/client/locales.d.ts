@@ -31,6 +31,8 @@ export declare const zh: {
     readonly 'card.index.rebuild': "整理索引";
     readonly 'card.index.rebuilding.btn': "整理中…";
     readonly 'card.index.rebuild.hint': "非破坏性：构建期间旧索引继续可搜索，完成后原子切换并归档旧索引。";
+    readonly 'card.index.archivedOwner': "归档会话的浏览与清理由「会话管家」（dsh-session-steward）负责。本插件只读归档集合，把已归档会话排除出索引。";
+    readonly 'card.index.archivedMissing': "归档会话的浏览与清理需要「会话管家」（dsh-session-steward），当前未安装。本插件只读归档集合，把已归档会话排除出索引。";
     readonly 'card.index.export': "导出快照";
     readonly 'card.index.import': "导入快照";
     readonly 'card.index.exported': "快照已导出为下载文件。";
@@ -43,7 +45,7 @@ export declare const zh: {
     readonly 'panel.searchContent': "搜索会话内容…";
     readonly 'panel.entry': "搜索";
     readonly 'panel.buildIndex': "建立索引";
-    readonly 'panel.archived': "归档会话";
+    readonly 'panel.archived': "已排除 {count} 个已归档会话";
     readonly 'panel.rebuilding': "正在整理索引… {done}/{total}（整理期间旧索引仍可搜索）";
     readonly 'panel.unavailable': "独立索引服务不可用：Host 未完成初始化。";
     readonly 'panel.notBuilt': "独立索引尚未建立：先建立索引即可启用内容搜索（不依赖 DSH 官方全文索引）。";

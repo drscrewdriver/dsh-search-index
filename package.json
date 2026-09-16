@@ -1,6 +1,6 @@
 {
   "name": "dsh-search-index",
-  "version": "0.2.0-beta.2",
+  "version": "0.2.0-beta.3",
   "description": "DSH web 侧边栏搜索索引：标题搜索 ↔ 内容搜索一键切换，内容搜索按会话聚合展示标题与命中片段；自带独立索引（不依赖 DSH 官方全文索引），支持增量同步、非破坏性整理与快照导入导出。",
   "type": "module",
   "repository": {
@@ -54,7 +54,7 @@
     "build": "node -e \"require('fs').rmSync('lib',{recursive:true,force:true})\" && tsc -p tsconfig.build.json && tsdown --config-loader tsx",
     "prepublishOnly": "npm run build",
     "typecheck": "tsc --noEmit",
-    "test": "node tests/client-store.test.mjs && node tests/client-panel-key.test.mjs && node --import tsx tests/client-platform.test.mjs && node tests/index-engine.test.mjs && node tests/index-archive.test.mjs",
+    "test": "node tests/client-store.test.mjs && node tests/client-panel-key.test.mjs && node tests/client-styles.test.mjs && node --import tsx tests/client-platform.test.mjs && node --import tsx tests/host-peers.test.mjs && node tests/index-engine.test.mjs && node tests/index-archive.test.mjs",
     "bundle": "tsdown --config-loader tsx"
   },
   "license": "MIT",
