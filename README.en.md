@@ -21,7 +21,7 @@ A cordis client + host plugin assembled via the `dsh plugin` command and a bundl
 
 **Predecessor: `dsh-session-search-toggle`.** That version relied on `defineStore` from `@deepseek-ai/dsh-client-runtime` to provide the settings-row seat. DSH 0.1.2 renamed and restructured the client engine packages (`dsh-client-runtime` → `dsh-client-store`), so the old code could not load on the new host — and no single artifact could serve both releases.
 
-**This release (`dsh-search-index` 0.2.0-beta.3) targets DSH 0.1.2 as its main line**, by making the host-version difference disappear entirely:
+**This release (`dsh-search-index` 0.2.0-beta.5) targets DSH 0.1.2 as its main line**, by making the host-version difference disappear entirely:
 
 - **One artifact, runtime-adaptive**: the same `lib/client.js` loads on both 0.1.1-rc.2 and 0.1.2-rc.1 with **no version-string branching anywhere**. The client bundle only `require`s `react` / `react-dom`, both of which sit in the shared module table of either release.
 - **Neither engine package is imported**: it imports neither `dsh-client-runtime` nor `dsh-client-store`, so that rename cannot affect it.

@@ -2,6 +2,41 @@
 
 所有重要变更与 bug 修复记录于此。版本遵循语义化版本（`dsh plugin --profile web add github:drscrewdriver/dsh-search-index` 安装）。
 
+## 0.2.0-beta.5 —— 窄栏下让「键帽」让位，两个入口的名字都读得全
+
+### 修复（beta.4 实测暴露）
+- **现象**：beta.4 让本入口不再独占整行后，`sidebar.footer.action` 这一行要同时装下
+  「🔍 搜索 Ctrl K」与「🧭 会话管家」。实测两串内容的自然宽度合计 **240px**，
+  而窄栏（约 215–225px）装不下：本插件是 `flex:1`，管家的 wrapper 是 `flex:none`（从不让位），
+  于**全部缺口都压在搜索胶囊上**，而标签是胶囊里唯一可收缩项——它被挤成了一个「搜」。
+- **谁该让位**：键帽是**提示**（入口 tooltip 与面板底部条都重复写着同一个和弦），
+  标签才是入口的**身份**。因此改为让键帽让位：`.dsws_root` 声明 `container-type:inline-size`，
+  自身窄于 132px 时用 `@container` 收起 `.dsws_kbd`（省 43px）。
+- **实测（Chrome，探针复刻两个入口的真实 CSS 与 DOM）**：栏宽 180–230px 时标签 28/28 完整、键帽自动隐藏、
+  两个入口零溢出；≥240px 时键帽恢复显示。改前基线在 220px 处标签只剩 12/28。
+- **轨道形态必须豁免**：`container-type` 同时带来 inline-size 尺寸包含，会让 `flex:none` 的轨道根盒
+  **塌成 0 宽**（实测 root=0 而按钮仍 36px，溢出到盒外）。故 `.dsws_rootRail` 显式回落 `container-type:normal`。
+- **轨道尺寸回到 28×28**：轨道内容盒只有 36px（56px 轨道 − 2×10px 内边距），官方规格的 36×36 控制盒
+  是**单控件每行**的假设；两个入口同处一行时 36+28=64px 溢出 14px。取 28+28=56px，
+  比改动前的 32+28=60px 还窄一点。
+- 键帽内边距 `0 5px` → `0 4px`（自持的 2px）。
+
+## 0.2.0-beta.4 —— 侧边栏入口与「会话管家」同行自适应
+
+### 变更
+- **让位，而不是独占**：`.dsws_root` 原本是 `flex:none;width:100%`，在 `sidebar.footer.action` 这个 flex 行里独占整行，
+  把相邻的会话管家入口挤到行尾，且 42px 胶囊与对方的图标钮高低不一。改为 `flex:1 1 auto;min-width:0`，按钮 `flex:1;min-width:0`——
+  与官方同一座位的控件（`ui-settings-general` 的 `.trigger{flex:1;min-width:0;height:42px;border-radius:12px;padding:0 10px 0 8px}`）同构。
+  空间不足时先省略标签（`.dsws_buttonLabel` 本就有 ellipsis），不再挤压邻居。
+- **收起轨道对齐官方 36×36**：`wide=false` 时按钮改用 `.dsws_buttonRail`（`36×36`、`border-radius:50%`），
+  根元素加 `.dsws_rootRail` 保持 `flex:none`；对齐 Figma 轨道规范（56px 轨道 / 10px 内边距 / 36×36 控制盒）。
+- **内容左对齐**：去掉 `justify-content:center`，与正下方官方「设置」行的图标同列。
+
+### 未改动
+- 交互、面板、索引、路由、设置命名空间 `switch-search` 一律未动；`enabled` 关掉时整条入口（含 `⌘K` / `Ctrl K`）照旧一起消失。
+- 协同只发生在两插件各自的 CSS 上：本插件不引用会话管家的任何值，也不假设它是否安装。
+- 新增选择器均被代码引用，`tests/client-styles.test.mjs` 的「零孤儿类」继续成立。
+
 ## 0.2.0-beta.1 —— 改名 dsh-search-index，会话历史迁出给会话管家
 
 ### 破坏性变更
