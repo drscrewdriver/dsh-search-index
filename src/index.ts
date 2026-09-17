@@ -711,6 +711,9 @@ export function apply(ctx: Context): void {
     }
     await engine.open().catch(() => {})
     log(`index open: driver=${engine.driverLabel} dir=${layout.dir}`)
+    if (engine.driverLabel === 'node:sqlite') {
+      log('tip: optional speedup not active — approve the better-sqlite3 build (add "better-sqlite3@*: true" under allowBuilds in the profile pnpm-workspace.yaml, then reinstall) to speed up index rebuilds; everything works without it')
+    }
     if (initialConfig.autoSync !== false) await state.sync.poll().catch(() => {})
     scheduleSync(initialConfig.syncIntervalMs ?? DEFAULT_CONFIG.syncIntervalMs!)
   })()
