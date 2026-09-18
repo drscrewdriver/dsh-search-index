@@ -1,6 +1,11 @@
 {
   "name": "dsh-search-index",
-  "version": "0.2.0-beta.3",
+  "version": "0.3.0",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public",
+    "tag": "dsh-0.1.2"
+  },
   "description": "DSH web 侧边栏搜索索引：标题搜索 ↔ 内容搜索一键切换，内容搜索按会话聚合展示标题与命中片段；自带独立索引（不依赖 DSH 官方全文索引），支持增量同步、非破坏性整理与快照导入导出。",
   "type": "module",
   "repository": {
