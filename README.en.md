@@ -57,9 +57,10 @@ The settings namespace stays `switch-search` (**storage key kept stable, no migr
 
 ## UI preview
 
-Entry at the sidebar and the setting panel layout:
-<img width="287" height="835" alt="image" src="https://github.com/user-attachments/assets/fc714858-aaf9-4b5b-ad83-a3f1537f6116" />
-<img width="844" height="813" alt="image" src="https://github.com/user-attachments/assets/d3ed5d20-9737-4b9b-a7bb-74162513f7c7" />
+Sidebar entry and the search panel layout:
+
+![sidebar search entry](assets/content-search-example.png)
+![search panel](assets/new-index.png)
 
 ## The independent index: three mechanisms
 
