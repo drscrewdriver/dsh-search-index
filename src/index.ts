@@ -42,7 +42,6 @@ import { exportSnapshot, parseSnapshot } from './host/snapshot.ts'
 import type { SwitchRawEvent } from './host/extract.ts'
 import {
   DEFAULT_CONFIG,
-  SWITCH_SEARCH_SETTINGS_NAMESPACE,
   type SwitchSearchConfig,
 } from './config.ts'
 
@@ -157,61 +156,28 @@ export const name = 'dsh-search-index'
 /** Services required before mounting: the web server routes and the trust list. */
 export const inject = ['webServer', 'webRuntime']
 
-/** Composition-entry schema: what a dsh profile may configure at assembly time. */
-export const Config: z<SwitchSearchConfig> = z.object({
-  enabled: z.boolean().default(true),
-  defaultMode: z.union(['title', 'content']).default('title'),
-  autoSync: z.boolean().default(true),
-  syncIntervalMs: z.number().default(30_000),
-  archiveKeep: z.number().default(2),
+/** Composition-entry schema: what a dsh profile may configure at assembly time.
+ *  0.1.7：volatile 字段即设置表单；`indexDir` 是部署路径，不走页面。 */
+export const Config = z.object({
+  enabled: z.boolean().default(true).volatile(),
+  defaultMode: z.union(['title', 'content']).default('title').volatile(),
+  autoSync: z.boolean().default(true).volatile(),
+  syncIntervalMs: z.number().default(30_000).volatile(),
+  archiveKeep: z.number().default(2).volatile(),
   indexDir: z.string().default(''),
 })
 
-/**
- * Minimal face of the dsh `settings` service (typed locally — the plugin must
- * NOT value-import the official `@deepseek-ai/dsh-settings` package).
- */
-interface SettingsScopeLike {
-  get(): unknown
-  watch(callback: () => void): () => void
-}
-interface SettingsServiceLike {
-  register(ns: string, schema: unknown, options?: { base?: unknown }): SettingsScopeLike
-}
-interface SettingsAwareCtx {
-  inject(deps: readonly string[], fn: (sctx: {
-    settings: SettingsServiceLike
-    effect(cleanup: () => (() => void) | void, label?: string): void
-  }) => void): void
+/** Live reference the 0.1.7 loader hands `apply` for `.volatile()` config fields. */
+interface VolatileRef<T> {
+  get(): T
 }
 
-/**
- * Inline equivalent of the official `installSettingsSection` helper: register
- * the namespace through the `settings` service, layer the composition entry as
- * `base`, and keep the runtime source live. Same pattern as dsh-thinking-levels.
- * @param ctx - host context carrying the settings service.
- * @param ns - settings namespace to register.
- * @param schema - schemastery schema resolving the namespace value.
- * @param entry - composition-entry config used as the `base` layer.
- * @param hooks - source sink and change notification.
- */
-function installSettingsSection<T>(
-  ctx: Context,
-  ns: string,
-  schema: unknown,
-  entry: T,
-  hooks: { setSource: (source: () => T) => void; onChange: () => void },
-): void {
-  ;(ctx as unknown as SettingsAwareCtx).inject(['settings'], (sctx) => {
-    const scope = sctx.settings.register(ns, schema, { base: entry })
-    hooks.setSource(() => scope.get() as T)
-    hooks.onChange()
-    sctx.effect(() => () => {
-      hooks.setSource(() => entry)
-      hooks.onChange()
-    })
-    scope.watch(() => hooks.onChange())
-  })
+/** Resolve one possibly-volatile field: a live ref on 0.1.7+, a plain value otherwise. */
+function readVolatileValue<T>(value: T | VolatileRef<T> | undefined): T | undefined {
+  if (value !== null && typeof value === 'object' && typeof (value as VolatileRef<T>).get === 'function') {
+    return (value as VolatileRef<T>).get()
+  }
+  return value as T | undefined
 }
 
 /** Body size bound of one JSON request (defense against unbounded reads). */
@@ -601,17 +567,21 @@ interface SwitchRuntime {
 }
 
 /**
- * Plugin body: mount the fenced /switch-search/api route, own the independent
- * index lifecycle, and register the settings namespace.
+ * Plugin body: mount the fenced /switch-search/api route and own the independent
+ * index lifecycle.
  * @param ctx - host plugin context (webServer, webRuntime, optional sessionQuery).
+ * @param entry - composition entry (0.1.7: `.volatile()` fields arrive as live refs).
  */
-export function apply(ctx: Context): void {
-  // Register the runtime-adjustable settings namespace (the composition entry
-  // is the base; the settings section layers on top).
-  let current: () => SwitchSearchConfig = () => DEFAULT_CONFIG
-  installSettingsSection(ctx, SWITCH_SEARCH_SETTINGS_NAMESPACE, Config, DEFAULT_CONFIG, {
-    setSource: (source) => { current = source },
-    onChange: () => {},
+export function apply(ctx: Context, entry: Partial<SwitchSearchConfig> = {}): void {
+  // 0.1.7：volatile 字段每次读取解引出最新快照（开关/同步间隔即时生效），
+  // 不再有任何 settings 注册调用。
+  const current = (): SwitchSearchConfig => ({
+    enabled: readVolatileValue(entry.enabled) ?? DEFAULT_CONFIG.enabled,
+    defaultMode: readVolatileValue(entry.defaultMode) ?? DEFAULT_CONFIG.defaultMode,
+    autoSync: readVolatileValue(entry.autoSync) ?? DEFAULT_CONFIG.autoSync,
+    syncIntervalMs: readVolatileValue(entry.syncIntervalMs) ?? DEFAULT_CONFIG.syncIntervalMs,
+    archiveKeep: readVolatileValue(entry.archiveKeep) ?? DEFAULT_CONFIG.archiveKeep,
+    indexDir: readVolatileValue(entry.indexDir) ?? DEFAULT_CONFIG.indexDir,
   })
 
   // Independent index lifecycle: open the engine, run an initial watermark

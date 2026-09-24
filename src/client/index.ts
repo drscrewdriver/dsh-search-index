@@ -1,17 +1,12 @@
 /**
  * dsh-search-index client half.
  *
- * Two registrations:
- * - `settings.plugin.item` — the plugin's own settings card (thinking-levels
- *   pattern, dual `id`+`key` for CLI/Desktop slot kinds): enable switch,
- *   default panel mode, independent-index sync knobs, and the index lifecycle
- *   block (整理 / snapshot export/import). The old `settings.general.item`
- *   row and its local store seat were removed in favor of this card.
+ * One registration:
  * - a `sidebar.footer.action` entry (currently disabled upstream) that opens
  *   the floating title/content search panel.
  *
- * The `locale` and `settingsScope` services are consumed structurally: when
- * the host release lacks them the card falls back to the bundled zh
+ * The `locale` and config services are consumed structurally: when
+ * the host release lacks them the footer falls back to the bundled zh
  * dictionary and the host-composition config layer.
  */
 import { createElement, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactElement } from 'react'
@@ -19,7 +14,7 @@ import { createPortal } from 'react-dom'
 import type { Context } from 'cordis'
 import { DEFAULT_CONFIG, SWITCH_SEARCH_SETTINGS_NAMESPACE, type SwitchSearchConfig } from '../config.ts'
 import { callHost, callHostAny, type HostContentHit, type HostIndexStatus, type HostSessionItem, type HostSortMode } from './host-api.ts'
-import { SearchSettingsCard, type SwitchCardScope } from './card.tsx'
+import type { SwitchCardScope } from './card.tsx'
 import { NS, en, translate, zh, type LocaleKey } from './locales.ts'
 import { LABELS, isInvokeChord } from './platform.ts'
 
@@ -48,6 +43,10 @@ interface SwitchSessionsService {
 /** The client settings-scope service face (structural subset). */
 interface SwitchSettingsScope<T> {
   bind<T>(spec: { namespace: string }): SwitchScopeLike<T>
+}
+/** configForms 服务面（0.1.7：以 profile entry id 取句柄）。 */
+interface SwitchConfigForms<T> {
+  get(entryId: string): SwitchScopeLike<T>
 }
 interface SwitchScopeLike<T> {
   getSnapshot(): {
@@ -711,20 +710,15 @@ function searchIcon(): ReactElement {
 
 /** ------------------------------------------------------------------ plugin */
 
-/** The child settings seat **under 「插件配置」** — the only settings seat we occupy. */
-export const SETTINGS_CARD_SEAT = 'settings.plugin.item'
 /**
  * Sibling-tab seat (`settings.plugins.tab`). **Deliberately NOT registered.**
  *
  * Kept as a named constant because it is the seat this plugin used to also
  * occupy — registering both is what made the card appear twice (once next to
- * 「插件配置」 and once under it). If a future host line drops the child seat, the
- * right move is to re-derive the target seat from that host's source, not to
- * register both.
+ * 「插件配置」 and once under it). 0.1.7 removed the child seat entirely; the
+ * settings form is generated from the host half's `.volatile()` Config fields.
  */
 export const SETTINGS_SIBLING_SEAT = 'settings.plugins.tab'
-/** How long to let the host declare the child seat before warning (ms). */
-const SEAT_PROBE_MS = 3000
 
 /** Services required before mounting: the slot registry (others optional). */
 export const inject = ['slots']
@@ -759,10 +753,14 @@ export function apply(ctx: Context): void {
   // Resolved before the footer entry because that entry is the thing the
   // `enabled` switch controls: the switch and the entry have to read the same
   // binding, or the switch silently goes back to controlling nothing.
+  // 0.1.7：configForms 以 entry id 取句柄；旧宿主回退按命名空间绑定。
+  const configForms = ctx.get('configForms') as SwitchConfigForms<SwitchSearchConfig> | undefined
   const settingsScope = ctx.get('settingsScope') as SwitchSettingsScope<SwitchSearchConfig> | undefined
-  const entryScope: SwitchCardScope | undefined = settingsScope?.bind<SwitchSearchConfig>({
-    namespace: SWITCH_SEARCH_SETTINGS_NAMESPACE,
-  })
+  const entryScope: SwitchCardScope | undefined =
+    configForms?.get('dsh-search-index') ??
+    settingsScope?.bind<SwitchSearchConfig>({
+      namespace: SWITCH_SEARCH_SETTINGS_NAMESPACE,
+    })
 
   // The sidebar footer entry: the search panel (title/content toggle), one
   // bottom-bar button beside the official settings trigger. The archived-
@@ -773,96 +771,9 @@ export function apply(ctx: Context): void {
     (props: SwitchFooterProps) => createElement(SwitchFooter, { ...props, open, scope: entryScope }),
   ), 'dsh-search-index: sidebar footer entry')
 
-  // The plugin settings card — registered on the **child seat under 「插件配置」**,
-  // and nowhere else.
-  //
-  // ⚠️ This used to register on two seats, on the assumption that
-  // 「`slots.inject` only fires once the seat is DECLARED ⇒ the two are mutually
-  // exclusive at runtime」. **Measured false**: the 0.1.2 host declares all three
-  // settings seats at once, so both fired and the card showed up twice — once as
-  // a sibling tab of 「插件配置」 and once as the card under it.
-  //
-  // Host source (0.1.2, not inference):
-  //   `settings.section`      dsh-client-ui-settings-general:650   top-level nav page (sibling of 插件)
-  //   `settings.plugins.tab`  dsh-client-ui-settings-plugins:1781  a tab page **sibling to 插件配置**
-  //   `settings.plugin.item`  same package :1793, declared at runtime by its
-  //                           `configurable` contribution — the **card under 插件配置**
-  //
-  // So only the last one is registered. Both `id` and `key` are supplied: CLI dsh
-  // declares that seat `keyed` (needs `key`) while DSH Desktop's bundled version
-  // declares it `list` (needs `id`) — the slots service validates only its kind's
-  // field, so the pair keeps the card working in both environments.
-  //
-  // 0.1.5's seat set cannot be verified without a 0.1.5 host. If that line does
-  // not declare the child seat, the card disappears **silently** — which is how
-  // this went unnoticed. So we warn; we do **not** fall back to another seat,
-  // because registering a second seat is exactly what caused the duplicate.
-  const tabTitle = typeof locale?.bind === 'function' ? locale.bind(NS) : undefined
-  const cardInject = (): { scope: SwitchCardScope; openSession: (id: string) => void } => ({
-    scope: entryScope ?? {
-      getSnapshot: () => ({
-        status: 'ready' as const,
-        value: DEFAULT_CONFIG,
-        revision: undefined,
-        writable: false,
-      }),
-      subscribe: () => () => {},
-      set: async () => {},
-    },
-    openSession: open,
-  })
-
-  const registerCard = (slotName: string): void => {
-    // 只有平级标签页座位需要 `order`/`label`；子级卡片座位由卡片自身渲染标题。
-    const isTab = slotName === SETTINGS_SIBLING_SEAT
-    try {
-      slots.inject(slotName, () => {
-        try {
-          return slots.register({
-            name: slotName,
-            id: SWITCH_SEARCH_SETTINGS_NAMESPACE,
-            key: SWITCH_SEARCH_SETTINGS_NAMESPACE,
-            order: isTab ? 100 : undefined,
-            locale: locale !== undefined ? NS : undefined,
-            // Only the tab seat renders a label; the item seat derives its
-            // title from the card itself, so passing one there is a no-op.
-            label: isTab ? () => (tabTitle !== undefined ? tabTitle('card.title') : zh['card.title']) : undefined,
-            inject: cardInject,
-          }, SearchSettingsCard)
-        } catch (err) {
-          console.warn(`[dsh-search-index] ${slotName} 注册失败:`, err)
-          return () => {}
-        }
-      }, `dsh-search-index: plugin settings card (${slotName})`)
-    } catch (err) {
-      console.warn(`[dsh-search-index] ${slotName} 槽位未声明:`, err)
-    }
-  }
-
-  // `inject` fires only once the seat is declared, so this flag tells us whether
-  // the child seat actually took.
-  let cardSeatLive = false
-  try {
-    slots.inject(SETTINGS_CARD_SEAT, () => {
-      cardSeatLive = true
-      return () => {}
-    })
-  } catch (err) {
-    console.warn(`[dsh-search-index] ${SETTINGS_CARD_SEAT} 探测失败:`, err)
-  }
-  registerCard(SETTINGS_CARD_SEAT)
-
-  // 响亮诊断：座位若始终没被声明（宿主改名/移除），卡片会**静默消失** ——
-  // 正是这个问题长期没被发现的原因，所以必须在 Console 说出来。
-  // 刻意**不回退**到别的座位：各插件只留一个位置，回退就会重新引入"同一份面板
-  // 出现在两处"的可能（见上方说明）。
-  setTimeout(() => {
-    if (cardSeatLive) return
-    console.warn(
-      `[dsh-search-index] 宿主未声明 ${SETTINGS_CARD_SEAT}：设置里的「搜索索引」卡片不会出现。` +
-        '（0.1.5 的座位集合本机未验证，请在真机上确认。）',
-    )
-  }, SEAT_PROBE_MS)
+  // 0.1.7：旧的插件设置卡席位已被宿主删除 —— 设置表单由 host 侧 `.volatile()`
+  // Config 字段自动生成（本文件不再注册任何设置卡；SearchSettingsCard 组件与
+  // 字典仍从 card.tsx 导出，供直接组合的消费者使用）。
 }
 
 // Re-exported dictionary faces for consumers that compose the card directly.

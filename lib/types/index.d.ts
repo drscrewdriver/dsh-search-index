@@ -129,8 +129,23 @@ declare module 'cordis' {
 export declare const name = "dsh-search-index";
 /** Services required before mounting: the web server routes and the trust list. */
 export declare const inject: string[];
-/** Composition-entry schema: what a dsh profile may configure at assembly time. */
-export declare const Config: z<SwitchSearchConfig>;
+/** Composition-entry schema: what a dsh profile may configure at assembly time.
+ *  0.1.7：volatile 字段即设置表单；`indexDir` 是部署路径，不走页面。 */
+export declare const Config: z<Schemastery.ObjectS<NoInfer<{
+    enabled: z<boolean, boolean, "volatile-defined">;
+    defaultMode: z<"title" | "content", "title" | "content", "volatile-defined">;
+    autoSync: z<boolean, boolean, "volatile-defined">;
+    syncIntervalMs: z<number, number, "volatile-defined">;
+    archiveKeep: z<number, number, "volatile-defined">;
+    indexDir: z<string, string, "defined">;
+}>>, Schemastery.ObjectT<NoInfer<{
+    enabled: z<boolean, boolean, "volatile-defined">;
+    defaultMode: z<"title" | "content", "title" | "content", "volatile-defined">;
+    autoSync: z<boolean, boolean, "volatile-defined">;
+    syncIntervalMs: z<number, number, "volatile-defined">;
+    archiveKeep: z<number, number, "volatile-defined">;
+    indexDir: z<string, string, "defined">;
+}>>, "plain">;
 /** ------------------------------------------------------------------ index service */
 /** The per-activation index service state, carried in the apply closure. */
 export interface SwitchIndexServiceState {
@@ -142,9 +157,10 @@ export interface SwitchIndexServiceState {
     archiveReader: ReturnType<typeof createArchiveSource>;
 }
 /**
- * Plugin body: mount the fenced /switch-search/api route, own the independent
- * index lifecycle, and register the settings namespace.
+ * Plugin body: mount the fenced /switch-search/api route and own the independent
+ * index lifecycle.
  * @param ctx - host plugin context (webServer, webRuntime, optional sessionQuery).
+ * @param entry - composition entry (0.1.7: `.volatile()` fields arrive as live refs).
  */
-export declare function apply(ctx: Context): void;
+export declare function apply(ctx: Context, entry?: Partial<SwitchSearchConfig>): void;
 //# sourceMappingURL=index.d.ts.map

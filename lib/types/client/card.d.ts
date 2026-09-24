@@ -1,5 +1,5 @@
 /**
- * Session-search settings card — the `settings.plugin.item` face of the
+ * Session-search settings card（0.1.7 起不再挂载：设置表单由 host 侧 .volatile() 字段自动生成）。
  * plugin, following the dsh-thinking-levels card pattern.
  *
  * The card binds the `switch-search` settings namespace through the

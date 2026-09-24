@@ -105,7 +105,7 @@ const HOST_CARD_ONLY = ['sidebar.footer.action', 'settings.plugin.item']
 const PROBE_MS = 3000
 
 /** Client context that records slot registrations and namespace bindings. */
-function clientCtx(ledger, bindings, { withScope = true, declaredSlots = HOST_012_SEATS } = {}) {
+function clientCtx(ledger, bindings, { withScope = true, withConfigForms = true, declaredSlots = HOST_012_SEATS } = {}) {
   const disposer = () => {}
   const declared = new Set(declaredSlots)
   let snapshot = {
@@ -134,6 +134,10 @@ function clientCtx(ledger, bindings, { withScope = true, declaredSlots = HOST_01
       effect: (fn) => { const d = fn(); return typeof d === 'function' ? d : disposer },
       on: () => disposer,
       get: (name) => {
+        if (name === 'configForms') {
+          if (!withConfigForms) return undefined
+          return { get: (entryId) => { bindings.push(entryId); return scope } }
+        }
         if (name === 'settingsScope') {
           if (!withScope) return undefined
           return { bind: (spec) => { bindings.push(spec.namespace); return scope } }
@@ -169,58 +173,45 @@ check('bundle materializes with only baseline specifiers', () => {
   assert.equal(typeof exports.apply, 'function', 'client half exports no apply()')
 })
 
-check('registers one settings.plugin.item card bound to the namespace', () => {
+check('registers only the sidebar footer entry; no settings seat on 0.1.7', () => {
   const ledger = []
   const bindings = []
   const { ctx } = clientCtx(ledger, bindings)
   exports.apply(ctx)
-  // The archived-sessions viewer moved to dsh-session-steward: this package
-  // registers exactly one sidebar entry (search) plus the settings card.
-  assert.equal(ledger.length, 2, `expected search entry + plugin card, got ${ledger.length}`)
+  // 0.1.7: the settings card seat is gone; the form comes from the host half's
+  // .volatile() fields. Exactly one sidebar entry remains.
+  assert.equal(ledger.length, 1, `expected only the search entry, got ${ledger.length}`)
   assert.equal(ledger[0].name, 'sidebar.footer.action', 'the sidebar footer search entry must be registered')
   assert.equal(ledger[0].id, PLUGIN_ID)
-  const options = ledger[1]
-  assert.equal(options.name, 'settings.plugin.item')
-  assert.equal(options.id, NAMESPACE, 'the card must key on the settings namespace (list-kind slots)')
-  assert.equal(options.key, NAMESPACE, 'the card must key on the settings namespace (keyed-kind slots)')
-  assert.equal(options.store, undefined, 'the card uses scope injection, not a store seat')
-  assert.equal(typeof options.inject, 'function')
-  const injected = options.inject()
-  assert.ok(injected.scope, 'inject must return the bound scope')
-  assert.deepEqual(bindings, [NAMESPACE], 'the card must bind exactly the switch-search namespace')
 })
 
-check('card degrades to a read-only default scope without settingsScope', () => {
-  const ledger = []
-  const bindings = []
-  const { ctx } = clientCtx(ledger, bindings, { withScope: false })
+check('footer scope prefers configForms and falls back to the legacy binding', () => {
+  const formsLedger = []
+  const formsBindings = []
+  const { ctx } = clientCtx(formsLedger, formsBindings)
   exports.apply(ctx)
-  assert.equal(ledger.length, 2, `expected search entry + plugin card, got ${ledger.length}`)
-  const injected = ledger[1].inject()
-  const snap = injected.scope.getSnapshot()
-  assert.equal(snap.status, 'ready')
-  assert.equal(snap.value.enabled, true, 'degraded scope must surface DEFAULT_CONFIG.enabled')
-  assert.equal(snap.value.defaultMode, 'title', 'degraded scope must surface DEFAULT_CONFIG.defaultMode')
-  assert.equal(snap.writable, false)
-  assert.doesNotThrow(() => injected.scope.subscribe(() => {}))
+  assert.deepEqual(formsBindings, ['dsh-search-index'], 'configForms must be keyed by the profile entry id')
+  const legacyLedger = []
+  const legacyBindings = []
+  const { ctx: legacyCtx } = clientCtx(legacyLedger, legacyBindings, { withConfigForms: false })
+  exports.apply(legacyCtx)
+  assert.deepEqual(legacyBindings, [NAMESPACE], 'without configForms the legacy namespace binding applies')
 })
 
-// ── The 0.1.2 line declares all three settings seats ─────────────────────────
-// This is the regression guard for "the same card shown twice": the seats are
-// NOT mutually exclusive, so any bundle that registers more than one of them
-// puts the card in more than one place on this host.
+// ── The 0.1.2 line declared all three settings seats ─────────────────────────
+// Regression guard for "the same card shown twice": no bundle may register more
+// than one seat, and on 0.1.7 none at all.
 
-check('registers exactly ONE settings seat on the 0.1.2 line — settings.plugin.item', () => {
+check('registers exactly ONE sidebar seat and zero settings seats even on the 0.1.2 line', () => {
   const ledger = []
-  const bindings = []
-  const { ctx } = clientCtx(ledger, bindings, { declaredSlots: HOST_012_SEATS })
+  const { ctx } = clientCtx(ledger, [], { declaredSlots: HOST_012_SEATS })
   exports.apply(ctx)
-  // One sidebar entry (search) + one settings card. Anything more = duplicates.
-  assert.equal(ledger.length, 2, `expected search entry + ONE settings card, got ${ledger.length}: ${JSON.stringify(ledger.map((o) => o.name))}`)
-  const settingsSeats = ledger.filter((o) => String(o.name).startsWith('settings.'))
-  assert.equal(settingsSeats.length, 1, `exactly one settings seat may be occupied; got ${JSON.stringify(settingsSeats.map((o) => o.name))}`)
-  assert.equal(settingsSeats[0].name, 'settings.plugin.item', 'the card belongs under 「插件配置」, not at its level')
-  assert.deepEqual(bindings, [NAMESPACE], 'the card must bind exactly the switch-search namespace')
+  assert.equal(ledger.length, 1, `expected only the search entry, got ${ledger.length}: ${JSON.stringify(ledger.map((o) => o.name))}`)
+  assert.deepEqual(
+    ledger.filter((o) => String(o.name).startsWith('settings.')).map((o) => o.name),
+    [],
+    'no settings seat may be occupied on the 0.1.7 line',
+  )
 })
 
 check('does NOT occupy the sibling tab seat even though the host declares it', () => {
@@ -228,49 +219,14 @@ check('does NOT occupy the sibling tab seat even though the host declares it', (
   const { ctx } = clientCtx(ledger, [], { declaredSlots: HOST_012_SEATS })
   exports.apply(ctx)
   const names = ledger.map((o) => o.name)
-  assert.ok(names.includes('settings.plugin.item'), 'the child seat must be occupied')
-  assert.ok(
-    !names.includes('settings.plugins.tab'),
-    `the sibling tab (same level as 「插件配置」) must NOT also be occupied; got ${JSON.stringify(names)}`,
-  )
+  assert.ok(!names.includes('settings.plugins.tab'), `the sibling tab (same level as 「插件配置」) must NOT be occupied; got ${JSON.stringify(names)}`)
   assert.ok(
     !names.includes('settings.section'),
     `the top-level section must NOT also be occupied; got ${JSON.stringify(names)}`,
   )
 })
 
-// ── A host without the child seat ─────────────────────────────────────────────
-// 0.1.5's seat set cannot be verified locally. If that line lacks the child seat,
-// the card disappears silently — so the bundle must SAY SO, and must not sneak
-// into another seat (that is how the duplicate happened).
-
-check('child seat absent → occupies nothing, but warns on the console after the probe window', async () => {
-  const ledger = []
-  const { ctx } = clientCtx(ledger, [], { declaredSlots: HOST_015_SEATS })
-  const original = console.warn
-  const warns = []
-  console.warn = (...args) => warns.push(args.map(String).join(' '))
-  try {
-    exports.apply(ctx)
-    assert.deepEqual(
-      ledger.filter((o) => String(o.name).startsWith('settings.')).map((o) => o.name),
-      [],
-      'no settings seat may be occupied when the host does not declare any of ours',
-    )
-    await new Promise((r) => setTimeout(r, PROBE_MS + 250))
-    assert.deepEqual(
-      ledger.filter((o) => String(o.name).startsWith('settings.')).map((o) => o.name),
-      [],
-      'the probe must NOT fall back into another seat',
-    )
-    assert.ok(
-      warns.some((w) => w.includes('不会出现')),
-      'a missing settings seat must be loud on the console, never silent',
-    )
-  } finally {
-    console.warn = original
-  }
-})
+// ── The seat-probe warn check retired with the seat itself (0.1.7) ────────────
 
 for (const [name, fn] of checks) {
   try {
