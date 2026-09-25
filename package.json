@@ -1,6 +1,6 @@
 {
   "name": "dsh-search-index",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "publishConfig": {
     "registry": "https://registry.npmjs.org",
     "access": "public",
@@ -40,7 +40,7 @@
   ],
   "engines": {
     "node": ">=20",
-    "dsh": ">=0.1.5-rc.1 <0.2.0-0"
+    "dsh": ">=0.1.5-rc.1 <0.1.6-0"
   },
   "dsh": {
     "bundle": {
@@ -65,10 +65,10 @@
   "license": "MIT",
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-client-locale": ">=0.1.5-rc.1 <0.2.0-0",
-    "@deepseek-ai/dsh-client-ui-settings": ">=0.1.5-rc.1 <0.2.0-0",
-    "@deepseek-ai/dsh-client-ui-settings-general": ">=0.1.5-rc.1 <0.2.0-0",
-    "@deepseek-ai/dsh-client-ui-slots": ">=0.0.1-rc.1 <0.1.0 || >=0.1.0-rc.1 <0.2.0-0",
+    "@deepseek-ai/dsh-client-locale": ">=0.1.5-rc.1 <0.1.6-0",
+    "@deepseek-ai/dsh-client-ui-settings": ">=0.1.5-rc.1 <0.1.6-0",
+    "@deepseek-ai/dsh-client-ui-settings-general": ">=0.1.5-rc.1 <0.1.6-0",
+    "@deepseek-ai/dsh-client-ui-slots": ">=0.0.1-rc.1 <0.1.0 || >=0.1.0-rc.1 <0.1.6-0",
     "@deepseek-ai/schemastery": "^3.18.1",
     "react": "^18.2.0"
   },
