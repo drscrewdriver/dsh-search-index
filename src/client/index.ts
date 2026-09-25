@@ -13,8 +13,10 @@ import { createElement, useEffect, useMemo, useRef, useState, useSyncExternalSto
 import { createPortal } from 'react-dom'
 import type { Context } from 'cordis'
 import { DEFAULT_CONFIG, SWITCH_SEARCH_SETTINGS_NAMESPACE, type SwitchSearchConfig } from '../config.ts'
+// 0.1.7：插件族共用设置节（dsh-thinking-levels 持有并声明 `dsh-family.tab`
+// 子席位；本仓不依赖 ui-slots 类型包，席位键以运行时 children 表为准）。
 import { callHost, callHostAny, type HostContentHit, type HostIndexStatus, type HostSessionItem, type HostSortMode } from './host-api.ts'
-import type { SwitchCardScope } from './card.tsx'
+import { SearchSettingsCard, type SwitchCardScope } from './card.tsx'
 import { NS, en, translate, zh, type LocaleKey } from './locales.ts'
 import { LABELS, isInvokeChord } from './platform.ts'
 
@@ -771,9 +773,24 @@ export function apply(ctx: Context): void {
     (props: SwitchFooterProps) => createElement(SwitchFooter, { ...props, open, scope: entryScope }),
   ), 'dsh-search-index: sidebar footer entry')
 
-  // 0.1.7：旧的插件设置卡席位已被宿主删除 —— 设置表单由 host 侧 `.volatile()`
-  // Config 字段自动生成（本文件不再注册任何设置卡；SearchSettingsCard 组件与
-  // 字典仍从 card.tsx 导出，供直接组合的消费者使用）。
+  // 插件族共用设置 tab（dsh-thinking-levels 的顶级「起子插件设置」节声明该子
+  // 席位）。thinking-levels 缺席时本 inject 静默等待，不阻塞客户端半；设置卡
+  // 随席位于 0.1.7 被宿主删除后在此恢复入口。
+  const familyTab = ctx.get('slots') as { inject: (n: string, f: () => unknown) => unknown } | undefined
+  familyTab?.inject('dsh-family.tab', () => slots.register(
+    {
+      name: 'dsh-family.tab',
+      id: 'dsh-search-index',
+      order: 30,
+      // 账本 label：读期求值，跟随当前 locale（translate 内建 zh/en 兜底）。
+      label: () => translate((ctx.locale as { bind?: (n: string) => CardLocale } | undefined)?.bind?.(NS), 'card.title'),
+      locale: NS,
+    },
+    (props: { t?: CardLocale }) => createElement(SearchSettingsCard, {
+      scope: entryScope as SwitchCardScope,
+      t: props.t,
+    }),
+  ))
 }
 
 // Re-exported dictionary faces for consumers that compose the card directly.
