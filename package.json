@@ -1,6 +1,6 @@
 {
   "name": "dsh-search-index",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "publishConfig": {
     "tag": "dsh-0.1.7"
   },
@@ -38,7 +38,7 @@
   ],
   "engines": {
     "node": ">=20",
-    "dsh": ">=0.1.5-rc.1 <0.2.0-0"
+    "dsh": ">=0.1.7-rc.1 <0.1.8-0"
   },
   "dsh": {
     "bundle": {
@@ -63,10 +63,10 @@
   "license": "MIT",
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-client-locale": ">=0.1.7-rc.1 <0.2.0-0",
-    "@deepseek-ai/dsh-client-ui-settings": ">=0.1.7-rc.1 <0.2.0-0",
-    "@deepseek-ai/dsh-client-ui-settings-general": ">=0.1.7-rc.1 <0.2.0-0",
-    "@deepseek-ai/dsh-client-ui-slots": ">=0.1.7-rc.1 <0.2.0-0",
+    "@deepseek-ai/dsh-client-locale": ">=0.1.7-rc.1 <0.1.8-0",
+    "@deepseek-ai/dsh-client-ui-settings": ">=0.1.7-rc.1 <0.1.8-0",
+    "@deepseek-ai/dsh-client-ui-settings-general": ">=0.1.7-rc.1 <0.1.8-0",
+    "@deepseek-ai/dsh-client-ui-slots": ">=0.1.7-rc.1 <0.1.8-0",
     "@deepseek-ai/schemastery": "^3.18.4",
     "react": "^18.2.0"
   },
