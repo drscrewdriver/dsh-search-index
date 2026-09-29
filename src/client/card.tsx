@@ -385,7 +385,8 @@ function IndexBlock(props: { t?: SearchSettingsCardProps['t'] }): JSX.Element {
 export function SearchSettingsCard(props: SearchSettingsCardProps): JSX.Element {
   const { scope } = props
   const t = props.t
-  const [open, setOpen] = useState(false)
+  // family tab 里默认展开：折叠态在 tab 面板里看起来像「没有设置项」。
+  const [open, setOpen] = useState(true)
   const snapshot = useSyncExternalStore(
     (listener) => scope.subscribe(listener),
     () => scope.getSnapshot(),

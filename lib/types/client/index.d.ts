@@ -69,7 +69,11 @@ declare module 'cordis' {
  * settings form is generated from the host half's `.volatile()` Config fields.
  */
 export declare const SETTINGS_SIBLING_SEAT = "settings.plugins.tab";
-/** Services required before mounting: the slot registry (others optional). */
+/** Services required before mounting: the slot registry + locale (the family
+ * tab label captures the translator eagerly — a lazy `ctx.locale` access inside
+ * the label thunk would be evaluated by the FAMILY HOLDER's render and throw
+ * `cannot get property "locale" without inject` there, killing the whole tab
+ * ledger projection). */
 export declare const inject: string[];
 /**
  * Client plugin body: dictionaries, the plugin settings card, and the

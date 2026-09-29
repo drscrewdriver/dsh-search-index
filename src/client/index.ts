@@ -172,9 +172,16 @@ declare module 'cordis' {
 /** ------------------------------------------------------------------ styles */
 
 const CSS = `
-.dsws_root{box-sizing:border-box;position:relative;display:flex;align-items:center;flex:1 1 auto;min-width:0;container-type:inline-size}
-.dsws_rootRail{flex:none;container-type:normal}
-.dsws_button{box-sizing:border-box;display:inline-flex;align-items:center;flex:1;min-width:0;gap:8px;height:42px;border:none;border-radius:12px;background:transparent;color:var(--dsw-alias-label-primary);cursor:pointer;padding:0 10px 0 8px;font-family:inherit;font-size:14px;line-height:22px;white-space:nowrap;overflow:hidden;transition:background-color 160ms ease-out,color 160ms ease-out}
+/* 侧栏 footer 槽位公约（2026-09-26）：一行多入口（第三方 dsh-context 等）会互相
+   挤占 —— 宿主 .footerActions 是 nowrap flex 行。这里允许容器换行，并把本插件
+   入口钉成独占一整行（flex-basis:100%）；其余入口（含第三方）自然落到后续行。
+   类名用 [class*=] 中段匹配：宿主是 CSS Module 哈希类名（实测形如
+   hHd-Xa_footerActions —— <hash>_<name>，哈希在前），中段跨版本稳定。 */
+[class*="footerActions"]{flex-wrap:wrap;row-gap:2px;height:auto;min-height:0}
+.dsws_root{box-sizing:border-box;position:relative;display:flex;align-items:center;justify-content:center;flex:0 0 100%;width:100%;min-width:0;container-type:inline-size}
+/* 收起轨道：回落自然宽度（根类的 100% 基准只属于宽栏形态），放弃收缩。 */
+.dsws_rootRail{flex:none;width:auto;container-type:normal}
+.dsws_button{box-sizing:border-box;display:inline-flex;align-items:center;flex:0 0 auto;min-width:0;gap:8px;height:42px;border:none;border-radius:12px;background:transparent;color:var(--dsw-alias-label-primary);cursor:pointer;padding:0 10px 0 8px;font-family:inherit;font-size:14px;line-height:22px;white-space:nowrap;overflow:hidden;transition:background-color 160ms ease-out,color 160ms ease-out}
 .dsws_buttonRail{flex:none;width:28px;height:28px;padding:0;gap:0;justify-content:center;border-radius:50%}
 .dsws_button:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .dsws_button svg{flex:none}
@@ -722,8 +729,12 @@ function searchIcon(): ReactElement {
  */
 export const SETTINGS_SIBLING_SEAT = 'settings.plugins.tab'
 
-/** Services required before mounting: the slot registry (others optional). */
-export const inject = ['slots']
+/** Services required before mounting: the slot registry + locale (the family
+ * tab label captures the translator eagerly — a lazy `ctx.locale` access inside
+ * the label thunk would be evaluated by the FAMILY HOLDER's render and throw
+ * `cannot get property "locale" without inject` there, killing the whole tab
+ * ledger projection). */
+export const inject = ['slots', 'locale']
 
 /**
  * Client plugin body: dictionaries, the plugin settings card, and the
@@ -739,6 +750,11 @@ export function apply(ctx: Context): void {
   if (locale !== undefined && typeof locale.register === 'function') {
     ctx.effect(() => locale.register(NS, { zh, en } as never), 'dsh-search-index: dictionaries')
   }
+  // The family-tab label translator, captured EAGERLY: the holder evaluates
+  // `label()` during its own render, and a lazy ctx.locale access there throws
+  // (see the inject note above). `bind` returns a live binder, so locale
+  // switches are still followed.
+  const familyLabel = (locale as unknown as { bind?: (n: string) => CardLocale } | undefined)?.bind?.(NS)
 
   const slots = ctx.get('slots') as SwitchSlotsService | undefined
   if (slots === undefined) return
@@ -769,7 +785,7 @@ export function apply(ctx: Context): void {
   // sessions viewer moved to dsh-session-steward (养老院) — this package no
   // longer owns any session-history UI.
   slots.inject('sidebar.footer.action', () => slots.register(
-    { name: 'sidebar.footer.action', id: 'dsh-search-index', order: 10 },
+    { name: 'sidebar.footer.action', id: 'dsh-search-index', order: 5 },
     (props: SwitchFooterProps) => createElement(SwitchFooter, { ...props, open, scope: entryScope }),
   ), 'dsh-search-index: sidebar footer entry')
 
@@ -783,7 +799,7 @@ export function apply(ctx: Context): void {
       id: 'dsh-search-index',
       order: 30,
       // 账本 label：读期求值，跟随当前 locale（translate 内建 zh/en 兜底）。
-      label: () => translate((ctx.locale as { bind?: (n: string) => CardLocale } | undefined)?.bind?.(NS), 'card.title'),
+      label: () => translate(familyLabel, 'card.title'),
       locale: NS,
     },
     (props: { t?: CardLocale }) => createElement(SearchSettingsCard, {
