@@ -2,7 +2,7 @@
   <strong>Session search with its own index for the DeepSeek Harness sidebar — one-click toggle between title and content, with user / reply / tool filters</strong>
 </p>
 <p align="center">
-  <a href="README.md">中文</a> · <strong>English</strong>
+  <a href="README.md">简体中文</a> · <strong>English</strong> · <a href="README.fr.md">Français</a> · <a href="README.de.md">Deutsch</a> · <a href="README.it.md">Italiano</a> · <a href="README.ru.md">Русский</a> · <a href="README.es.md">Español</a>
 </p>
 <p align="center">
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-263146?style=flat-square"></a>

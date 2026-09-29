@@ -2,7 +2,7 @@
   <strong>给 DeepSeek Harness 侧边栏加一个自带索引的会话检索——标题/内容一键切换，还能按用户/回复/工具筛选</strong>
 </p>
 <p align="center">
-  <strong>中文</strong> · <a href="README.en.md">English</a>
+  <strong>简体中文</strong> · <a href="README.en.md">English</a> · <a href="README.fr.md">Français</a> · <a href="README.de.md">Deutsch</a> · <a href="README.it.md">Italiano</a> · <a href="README.ru.md">Русский</a> · <a href="README.es.md">Español</a>
 </p>
 <p align="center">
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-263146?style=flat-square"></a>
