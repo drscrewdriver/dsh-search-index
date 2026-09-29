@@ -2,6 +2,16 @@
 
 所有重要变更与 bug 修复记录于此。版本遵循语义化版本（`dsh plugin --profile web add github:drscrewdriver/dsh-search-index` 安装）。
 
+## 0.6.0 —— 适配 DSH 0.2.0-rc.1（代码零修改的元数据换代）
+
+- **peer/engines 换代**：4 项 dsh-* peer（`dsh-client-locale` / `dsh-client-ui-settings` / `dsh-client-ui-settings-general` / `dsh-client-ui-slots`）与 `package.json`、`dsh.plugin.json` 两处 `engines.dsh` 一并替换为 `>=0.2.0-rc.1 <0.2.1-0`（rc 窗口锁线，0.2.1 起重新评估）。
+- **代码零修改**：本插件对宿主的消费面为纯 caller（`ctx.get('slots'/'locale'/'configForms')` 软读 + 本地结构接口），0.2.0 相对 0.1.7 未动 slots/settings 契约与席位账本。
+- **devDependencies 换代**：`dsh-client-ui-slots` devDep `^0.1.0-rc.6` → `0.2.0-rc.1`（与新 optional peer 对齐，避免安装树错配）；`@deepseek-ai/cordis` devDep `^4.0.1` → `^4.0.4`（0.2.0-rc.1 系包要求 `~4.0.4`）。
+- **依赖管理**：本仓权威 PM 为 pnpm（`pnpm-workspace.yaml` + pnpm-lock v9）；重生 `pnpm-lock.yaml`，删除陈旧的 `package-lock.json`（停留在 0.5.0 时代）。
+- **文档**：README（中/英）兼容矩阵与主线句更新至 0.2.0；DSH 0.1.7 线由 0.5.7（dist-tag `dsh-0.1.7`，`compat/0.1.7` 分支）继续服务。
+
+> 注：0.2.0-beta.5 至 0.5.7 之间的版本由 DSH 0.1.x 线承担，见 `compat/0.1.7` 分支与 npm dist-tag `dsh-0.1.7`。
+
 ## 0.2.0-beta.5 —— 窄栏下让「键帽」让位，两个入口的名字都读得全
 
 ### 修复（beta.4 实测暴露）

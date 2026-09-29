@@ -21,7 +21,7 @@ A cordis client + host plugin assembled via the `dsh plugin` command and a bundl
 
 **Predecessor: `dsh-session-search-toggle`.** That version relied on `defineStore` from `@deepseek-ai/dsh-client-runtime` to provide the settings-row seat. DSH 0.1.2 renamed and restructured the client engine packages (`dsh-client-runtime` → `dsh-client-store`), so the old code could not load on the new host — and no single artifact could serve both releases.
 
-**This release (`dsh-search-index` 0.2.0-beta.5) targets DSH 0.1.2 as its main line**, by making the host-version difference disappear entirely:
+**This release (`dsh-search-index` 0.6.0) targets DSH 0.2.0 as its main line** (peer `>=0.2.0-rc.1 <0.2.1-0`). Historical host lines are served by separate version lines: DSH 0.1.7 is served by 0.5.7 (npm dist-tag `dsh-0.1.7`, `compat/0.1.7` branch), and earlier 0.1.1/0.1.2 hosts by the legacy artifact, which is frozen. Historical background:
 
 - **One artifact, runtime-adaptive**: the same `lib/client.js` loads on both 0.1.1-rc.2 and 0.1.2-rc.1 with **no version-string branching anywhere**. The client bundle only `require`s `react` / `react-dom`, both of which sit in the shared module table of either release.
 - **Neither engine package is imported**: it imports neither `dsh-client-runtime` nor `dsh-client-store`, so that rename cannot affect it.
@@ -29,10 +29,12 @@ A cordis client + host plugin assembled via the `dsh plugin` command and a bundl
 - **Every other contract is identical across releases**: the `settings.general.item` slot, `SettingsScope.{getSnapshot,subscribe,set,unset}`, and the three `sessionQuery` faces have the same signatures in both.
 
 > **▼ DSH version support**
-> | DSH version | Status | Key difference |
+> | DSH version | Status | Carrier and key difference |
 > | --- | --- | --- |
-> | 0.1.1-rc.2 | ✅ | the store engine lives in `@deepseek-ai/dsh-client-runtime/client` |
-> | 0.1.2-rc.1 | ✅ | the engine was renamed to `@deepseek-ai/dsh-client-store`; this plugin imports neither |
+> | 0.2.0-rc.1 | ✅ | **this release 0.6.0**; peer/engines = `>=0.2.0-rc.1 <0.2.1-0`, zero code changes (pure-caller consumption of the slots/locale/configForms seats) |
+> | 0.1.7-rc.1+ | ✅ | 0.5.7 (dist-tag `dsh-0.1.7`); configForms resolves by entry id, older hosts fall back to settingsScope bound by namespace |
+> | 0.1.1-rc.2 | ✅ (legacy artifact, frozen) | the store engine lives in `@deepseek-ai/dsh-client-runtime/client` |
+> | 0.1.2-rc.1 | ✅ (legacy artifact, frozen) | the engine was renamed to `@deepseek-ai/dsh-client-store`; this plugin imports neither |
 
 **Upgrading from the old name**: this package was renamed from `dsh-session-search-toggle`; the client registration id, the cordis patch id and the repository URL were renamed with it. GitHub keeps redirects for renamed repositories, so the old name still resolves — but switch the profile dependency to the new name rather than letting both coexist:
 

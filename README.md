@@ -21,7 +21,7 @@
 
 **前身：`dsh-session-search-toggle`。** 那个版本依赖 `@deepseek-ai/dsh-client-runtime` 的 `defineStore` 提供设置行座位。DSH 0.1.2 把客户端引擎包改名/重构（`dsh-client-runtime` → `dsh-client-store`），旧写法在新宿主上无法加载——同一个插件没法用一份产物同时兼容两版。
 
-**本版（`dsh-search-index` 0.2.0-beta.5）以 DSH 0.1.2 为主线**，做法是让宿主版本差异彻底消失：
+**本版（`dsh-search-index` 0.6.0）以 DSH 0.2.0 为主线**（peer `>=0.2.0-rc.1 <0.2.1-0`）。历史宿主线的支持由独立版本线承担：DSH 0.1.7 用 0.5.7（npm dist-tag `dsh-0.1.7`，`compat/0.1.7` 分支），更早的 0.1.1/0.1.2 用旧版产物，不再随本版演进。历史背景：
 
 - **单一产物，运行时自适应**：同一份 `lib/client.js` 在 0.1.1-rc.2 与 0.1.2-rc.1 上都能加载，**没有任何版本号字符串分支**。客户端 bundle 只 `require` `react` / `react-dom`，两者都在两版的共享模块表内。
 - **两个引擎包都不导入**：既不 import `dsh-client-runtime`，也不 import `dsh-client-store`，因此**不受那次改名影响**。
@@ -29,10 +29,12 @@
 - **其余契约两版一致**：`settings.general.item` 槽、`SettingsScope.{getSnapshot,subscribe,set,unset}`、`sessionQuery` 三个查询面在两版签名相同。
 
 > **▼ DSH 版本适配**
-> | DSH 版本 | 状态 | 关键差异 |
+> | DSH 版本 | 状态 | 载体与关键差异 |
 > | --- | --- | --- |
-> | 0.1.1-rc.2 | ✅ | store 引擎在 `@deepseek-ai/dsh-client-runtime/client` |
-> | 0.1.2-rc.1 | ✅ | 引擎改名 `@deepseek-ai/dsh-client-store`；本插件两个都不导入 |
+> | 0.2.0-rc.1 | ✅ | **本版 0.6.0**；peer/engines = `>=0.2.0-rc.1 <0.2.1-0`，代码零修改（纯 caller 消费 slots/locale/configForms 席位） |
+> | 0.1.7-rc.1+ | ✅ | 0.5.7（dist-tag `dsh-0.1.7`）；configForms 以 entry id 取句柄，旧宿主回退 settingsScope 按命名空间绑定 |
+> | 0.1.1-rc.2 | ✅（旧版产物，冻结） | store 引擎在 `@deepseek-ai/dsh-client-runtime/client` |
+> | 0.1.2-rc.1 | ✅（旧版产物，冻结） | 引擎改名 `@deepseek-ai/dsh-client-store`；本插件两个都不导入 |
 
 **从旧名升级**：本包由 `dsh-session-search-toggle` 改名而来，客户端注册 id、cordis patch id 与仓库地址同步改名。GitHub 会为重命名的仓库保留跳转，旧名仍可解析，但请把 profile 依赖换成新名，避免两个名字长期并存：
 
