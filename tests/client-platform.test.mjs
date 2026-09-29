@@ -35,7 +35,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { LABELS, detectPlatform, isInvokeChord, platformLabels } from '../src/client/platform.ts'
+import { detectPlatform, isInvokeChord, platformLabels } from '../src/client/platform.ts'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const BUNDLE = join(HERE, '..', 'lib', 'client.js')

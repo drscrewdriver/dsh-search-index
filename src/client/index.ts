@@ -12,7 +12,7 @@
 import { createElement, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactElement } from 'react'
 import { createPortal } from 'react-dom'
 import type { Context } from 'cordis'
-import { DEFAULT_CONFIG, SWITCH_SEARCH_SETTINGS_NAMESPACE, type SwitchSearchConfig } from '../config.ts'
+import { SWITCH_SEARCH_SETTINGS_NAMESPACE, type SwitchSearchConfig } from '../config.ts'
 // 0.1.7：插件族共用设置节（dsh-thinking-levels 持有并声明 `dsh-family.tab`
 // 子席位；本仓不依赖 ui-slots 类型包，席位键以运行时 children 表为准）。
 import { callHost, callHostAny, type HostContentHit, type HostIndexStatus, type HostSessionItem, type HostSortMode } from './host-api.ts'
@@ -43,8 +43,8 @@ interface SwitchSessionsService {
 }
 
 /** The client settings-scope service face (structural subset). */
-interface SwitchSettingsScope<T> {
-  bind<T>(spec: { namespace: string }): SwitchScopeLike<T>
+interface SwitchSettingsScope<C> {
+  bind(spec: { namespace: string }): SwitchScopeLike<C>
 }
 /** configForms 服务面（0.1.7：以 profile entry id 取句柄）。 */
 interface SwitchConfigForms<T> {
@@ -776,7 +776,7 @@ export function apply(ctx: Context): void {
   const settingsScope = ctx.get('settingsScope') as SwitchSettingsScope<SwitchSearchConfig> | undefined
   const entryScope: SwitchCardScope | undefined =
     configForms?.get('dsh-search-index') ??
-    settingsScope?.bind<SwitchSearchConfig>({
+    settingsScope?.bind({
       namespace: SWITCH_SEARCH_SETTINGS_NAMESPACE,
     })
 

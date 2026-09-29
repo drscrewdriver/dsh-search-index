@@ -86,7 +86,7 @@ assert.deepEqual(
 // The `enabled` switch only means something if the entry consumes the same
 // binding the card edits. Two independent `bind()` calls would let the switch
 // and the entry read different namespaces.
-const bindings = indexSource.match(/\.bind<SwitchSearchConfig>\(\{/g) ?? []
+const bindings = indexSource.match(/\.bind(<[^>()]+>)?\(\{/g) ?? []
 assert.equal(
   bindings.length,
   1,

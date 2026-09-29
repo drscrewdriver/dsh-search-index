@@ -21,10 +21,10 @@ interface SwitchSessionsService {
     open(id: string): void;
 }
 /** The client settings-scope service face (structural subset). */
-interface SwitchSettingsScope<T> {
-    bind<T>(spec: {
+interface SwitchSettingsScope<C> {
+    bind(spec: {
         namespace: string;
-    }): SwitchScopeLike<T>;
+    }): SwitchScopeLike<C>;
 }
 interface SwitchScopeLike<T> {
     getSnapshot(): {
