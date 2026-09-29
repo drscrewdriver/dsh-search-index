@@ -98,11 +98,6 @@ const HOST_012_SEATS = [
   'settings.plugins.tab',
   'settings.plugin.item',
 ]
-const HOST_015_SEATS = ['sidebar.footer.action', 'settings.section', 'settings.plugins.tab']
-/** Child seat present, nothing else needed. */
-const HOST_CARD_ONLY = ['sidebar.footer.action', 'settings.plugin.item']
-/** Probe window (mirrors SEAT_PROBE_MS in src/client/index.ts). */
-const PROBE_MS = 3000
 
 /** Client context that records slot registrations and namespace bindings. */
 function clientCtx(ledger, bindings, { withScope = true, withConfigForms = true, declaredSlots = HOST_012_SEATS } = {}) {

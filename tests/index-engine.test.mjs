@@ -18,10 +18,7 @@ import { mkdtempSync, readFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import { dirname } from 'node:path'
-import { fileURLToPath } from 'node:url'
 
-const HERE = dirname(fileURLToPath(import.meta.url))
 const { SwitchIndexEngine, SwitchWatermarkSync, rebuildIndex, importIntoIndex, DEFAULT_INDEX_LAYOUT } = await import('../lib/index.mjs')
 
 /** One temp workspace per run; each test gets its own directory. */

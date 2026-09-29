@@ -13,14 +13,7 @@
  *
  * Types ship from lib/types (tsc -p tsconfig.build.json), not from tsdown.
  */
-import { builtinModules } from 'node:module'
 import type { UserConfig } from 'tsdown'
-
-/** Node builtins must never survive into the browser module-loader factory. */
-const NODE_BUILTINS = new Set([
-  ...builtinModules,
-  ...builtinModules.map(id => `node:${id}`),
-])
 
 /** Module specifiers the web shell shares into the frozen module table. */
 const CLIENT_EXTERNALS = [

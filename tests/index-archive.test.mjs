@@ -19,10 +19,6 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import { dirname } from 'node:path'
-import { fileURLToPath } from 'node:url'
-
-const HERE = dirname(fileURLToPath(import.meta.url))
 const { SwitchIndexEngine, rebuildIndex, exportSnapshot, parseSnapshot, DEFAULT_INDEX_LAYOUT } = await import('../lib/index.mjs')
 
 function tempDir(label) {
