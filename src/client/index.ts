@@ -15,7 +15,7 @@ import type { Context } from 'cordis'
 import { SWITCH_SEARCH_SETTINGS_NAMESPACE, type SwitchSearchConfig } from '../config.ts'
 // 0.1.7：插件族共用设置节（dsh-thinking-levels 持有并声明 `dsh-family.tab`
 // 子席位；本仓不依赖 ui-slots 类型包，席位键以运行时 children 表为准）。
-import { callHost, callHostAny, type HostContentHit, type HostIndexStatus, type HostSessionItem, type HostSortMode } from './host-api.ts'
+import { callHost, callHostAny, openSessionThrough, type HostContentHit, type HostIndexStatus, type HostSessionItem, type HostSortMode, type SwitchSessionsService, type SwitchUiWorkspaceService } from './host-api.ts'
 import { SearchSettingsCard, type SwitchCardScope } from './card.tsx'
 import { NS, en, translate, zh, type LocaleKey } from './locales.ts'
 import { LABELS, isInvokeChord } from './platform.ts'
@@ -37,10 +37,11 @@ interface SwitchSlotsService {
   }, component: unknown): () => void
 }
 
-/** The client sessions service face: open a session from a search result. */
-interface SwitchSessionsService {
-  open(id: string): void
-}
+/**
+ * The client sessions service face: open a session from a search result.
+ * Defined in `host-api.ts` (shared with `openSessionThrough`); re-imported as
+ * a type here for the cordis Context augmentation below.
+ */
 
 /** The client settings-scope service face (structural subset). */
 interface SwitchSettingsScope<C> {
@@ -164,6 +165,7 @@ declare module 'cordis' {
   interface Context {
     slots: SwitchSlotsService
     sessions?: SwitchSessionsService
+    uiWorkspace?: SwitchUiWorkspaceService
     settingsScope?: SwitchSettingsScope<SwitchSearchConfig>
     locale?: SwitchLocaleService
   }
@@ -758,14 +760,16 @@ export function apply(ctx: Context): void {
 
   const slots = ctx.get('slots') as SwitchSlotsService | undefined
   if (slots === undefined) return
-  // Session opening resolves lazily at click time: this plugin applies before
-  // the session-controller client module in the load order, so an eager
-  // ctx.get('sessions') captured undefined and every result click silently
-  // no-op'd. The service is a root-context singleton; by the time a user
-  // clicks a hit it is always mounted.
+  // Session opening resolves through `openSessionThrough` at click time: this
+  // plugin applies before the session-controller / ui-workspace client modules
+  // in the load order, so an eager service lookup captured undefined and every
+  // result click silently no-op'd (see the host-api.ts note). 0.1.7 moved
+  // navigation from `sessions.open` (dropped from the contract) to
+  // `uiWorkspace.openSession`; the old face stays as a legacy-host fallback —
+  // with the old call the guard turned the missing method into a silent
+  // no-op, which is exactly how the jump died on 0.1.7/0.2.0 without a trace.
   const open = (sessionId: string): void => {
-    const sessions = ctx.get('sessions') as SwitchSessionsService | undefined
-    if (sessions !== undefined && typeof sessions.open === 'function') sessions.open(sessionId)
+    openSessionThrough((name) => ctx.get(name), sessionId)
   }
 
   // Resolved before the footer entry because that entry is the thing the

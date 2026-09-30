@@ -1,5 +1,6 @@
 import type { Context } from 'cordis';
 import { type SwitchSearchConfig } from '../config.ts';
+import { type SwitchSessionsService, type SwitchUiWorkspaceService } from './host-api.ts';
 import { NS, translate } from './locales.ts';
 /** ------------------------------------------------------------------ types */
 /** The client slots service face (structural subset used here). */
@@ -16,10 +17,11 @@ interface SwitchSlotsService {
         inject?: (actions: unknown) => unknown;
     }, component: unknown): () => void;
 }
-/** The client sessions service face: open a session from a search result. */
-interface SwitchSessionsService {
-    open(id: string): void;
-}
+/**
+ * The client sessions service face: open a session from a search result.
+ * Defined in `host-api.ts` (shared with `openSessionThrough`); re-imported as
+ * a type here for the cordis Context augmentation below.
+ */
 /** The client settings-scope service face (structural subset). */
 interface SwitchSettingsScope<C> {
     bind(spec: {
@@ -55,6 +57,7 @@ declare module 'cordis' {
     interface Context {
         slots: SwitchSlotsService;
         sessions?: SwitchSessionsService;
+        uiWorkspace?: SwitchUiWorkspaceService;
         settingsScope?: SwitchSettingsScope<SwitchSearchConfig>;
         locale?: SwitchLocaleService;
     }
