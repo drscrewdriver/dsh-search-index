@@ -1,4 +1,4 @@
-/** `switch-search` client dictionaries (zh / en), thinking-levels pattern. */
+/** `switch-search` client dictionaries (zh / en / fr / de / it / ru / es), thinking-levels pattern. */
 /** Dictionary namespace owned by this plugin (the host settings namespace). */
 export declare const NS = "switch-search";
 /** Simplified Chinese dictionary (the key-set source of truth). */
@@ -80,6 +80,16 @@ export type LocaleKey = keyof typeof zh;
 export type Dict = Record<LocaleKey, string>;
 /** English dictionary; missing keys fall back to zh. */
 export declare const en: Partial<Record<LocaleKey, string>>;
+/** French dictionary; missing keys fall back to zh. */
+export declare const fr: Partial<Record<LocaleKey, string>>;
+/** German dictionary; missing keys fall back to zh. */
+export declare const de: Partial<Record<LocaleKey, string>>;
+/** Italian dictionary; missing keys fall back to zh. */
+export declare const it: Partial<Record<LocaleKey, string>>;
+/** Russian dictionary; missing keys fall back to zh. */
+export declare const ru: Partial<Record<LocaleKey, string>>;
+/** Spanish dictionary; missing keys fall back to zh. */
+export declare const es: Partial<Record<LocaleKey, string>>;
 /** All shipped dictionaries by locale id (only built-in ids take the map overload). */
 export declare const dictionaries: Readonly<Record<string, Partial<Dict>>>;
 /** Translate with {param} interpolation; falls back to zh, then the key itself. */
