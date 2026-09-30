@@ -2,6 +2,20 @@
 
 所有重要变更与 bug 修复记录于此。版本遵循语义化版本（`dsh plugin --profile web add github:drscrewdriver/dsh-search-index` 安装）。
 
+## 0.6.1 —— 修复「内容跳转」在 0.1.7/0.2.0 宿主上静默失效
+
+- **现象**：点标题/内容搜索结果，面板关闭但目标会话不打开，console 无任何报错——0.1.7 与 0.2.0 宿主上必现。
+- **根因**：跳转一直调 `sessions.open(id)`，而宿主在 **0.1.5 → 0.1.7 之间**就把会话导航从 `sessions`
+  契约移除（契约注释明言 "navigation belongs to view owners"），改由 `uiWorkspace.openSession(target)`
+  承担。原调用点的 `typeof sessions.open === 'function'` 守卫把缺失方法变成静默 no-op——这正是它
+  不留痕迹的原因。**破坏不是 0.2.0 才发生，0.1.7 上就已失效**；0.6.0「代码零修改」的判断只核对了
+  slots/settings 消费面，漏了 sessions 消费面（与 dsh-arrowkey-nav 同款根因、同一修复方向）。
+- **修复**：会话打开收敛为单点派发 `openSessionThrough`（`src/client/host-api.ts`）：
+  `uiWorkspace.openSession` 优先（0.1.7+），pre-0.1.7 宿主回落 `sessions.open`，两者皆缺维持静默
+  （不炸面板）。新增 `tests/client-open-session.test.mjs` 钉住派发优先级与静默降级。
+- 服务名仍在点击时惰性解析：本插件加载序早于宿主会话/工作区客户端模块，eager 捕获 `undefined`
+  是 0.1.x 时代就踩过的坑（原注释在案），修复沿用点击时解析。
+
 ## 0.6.0 —— 适配 DSH 0.2.0-rc.1（代码零修改的元数据换代）
 
 - **peer/engines 换代**：4 项 dsh-* peer（`dsh-client-locale` / `dsh-client-ui-settings` / `dsh-client-ui-settings-general` / `dsh-client-ui-slots`）与 `package.json`、`dsh.plugin.json` 两处 `engines.dsh` 一并替换为 `>=0.2.0-rc.1 <0.2.1-0`（rc 窗口锁线，0.2.1 起重新评估）。

@@ -76,4 +76,34 @@ export interface HostIndexStatus {
 }
 /** Trigger a browser download of the index snapshot from the host route. */
 export declare function downloadSnapshot(): Promise<void>;
+/**
+ * The client sessions service face. Host lines before 0.1.7 exposed session
+ * navigation here as `open`; the 0.1.7 contract dropped it ("navigation
+ * belongs to view owners") — kept only as the legacy fallback of
+ * `openSessionThrough`.
+ */
+export interface SwitchSessionsService {
+    open(id: string): void;
+}
+/**
+ * The client ui-workspace face: session navigation has been owned by this
+ * service since host 0.1.7 (`openSession`; `SessionTarget = SessionId |
+ * SubagentAddress`, so a bare session id is accepted).
+ */
+export interface SwitchUiWorkspaceService {
+    openSession(target: string): void;
+}
+/**
+ * Open a session from a search hit through whichever face the running host
+ * offers: `uiWorkspace.openSession` first (0.1.7+), the pre-0.1.7
+ * `sessions.open` as fallback. Neither present → silent no-op: a host line
+ * this package does not target must not crash the panel.
+ *
+ * The service names are resolved through `get` at call time, not captured at
+ * apply time: this plugin applies before the session-controller / ui-workspace
+ * client modules in the load order, so an eager lookup captures `undefined`
+ * and every result click silently no-ops. Both are root-context singletons,
+ * so by the time a user clicks a hit they are always mounted.
+ */
+export declare function openSessionThrough(get: (name: string) => unknown, sessionId: string): void;
 //# sourceMappingURL=host-api.d.ts.map
