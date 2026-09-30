@@ -17,7 +17,7 @@ import { SWITCH_SEARCH_SETTINGS_NAMESPACE, type SwitchSearchConfig } from '../co
 // 子席位；本仓不依赖 ui-slots 类型包，席位键以运行时 children 表为准）。
 import { callHost, callHostAny, type HostContentHit, type HostIndexStatus, type HostSessionItem, type HostSortMode } from './host-api.ts'
 import { SearchSettingsCard, type SwitchCardScope } from './card.tsx'
-import { NS, en, translate, zh, type LocaleKey } from './locales.ts'
+import { NS, de, en, es, fr, it, ru, translate, zh, type LocaleKey } from './locales.ts'
 import { LABELS, isInvokeChord } from './platform.ts'
 
 /** ------------------------------------------------------------------ types */
@@ -748,7 +748,7 @@ export function apply(ctx: Context): void {
   // target releases); the card falls back to the bundled zh dictionary.
   const locale = ctx.get('locale') as SwitchLocaleService | undefined
   if (locale !== undefined && typeof locale.register === 'function') {
-    ctx.effect(() => locale.register(NS, { zh, en } as never), 'dsh-search-index: dictionaries')
+    ctx.effect(() => locale.register(NS, { zh, en, fr, de, it, ru, es } as never), 'dsh-search-index: dictionaries')
   }
   // The family-tab label translator, captured EAGERLY: the holder evaluates
   // `label()` during its own render, and a lazy ctx.locale access there throws
