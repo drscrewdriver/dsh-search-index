@@ -43,7 +43,7 @@ interface SwitchScopeLike<T> {
  * value- or type-import a single release of the official locale package).
  */
 interface SwitchLocaleService {
-    register(ns: string, dicts: Partial<Record<string, Record<string, string>>>): () => void;
+    register(ns: string, dicts: Record<string, Record<string, string>>): () => void;
     register(ns: string, localeId: string, dicts: Record<string, string>): () => void;
     /**
      * Read-time translator bound to a namespace (host `dsh-client-locale`).

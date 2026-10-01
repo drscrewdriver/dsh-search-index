@@ -1,4 +1,4 @@
-/** `switch-search` client dictionaries (zh / en), thinking-levels pattern. */
+/** `switch-search` client dictionaries (zh / en / ja / ko / fr / de / it / ru / es), thinking-levels pattern. */
 /** Dictionary namespace owned by this plugin (the host settings namespace). */
 export declare const NS = "switch-search";
 /** Simplified Chinese dictionary (the key-set source of truth). */
@@ -78,10 +78,24 @@ export declare const zh: {
 };
 export type LocaleKey = keyof typeof zh;
 export type Dict = Record<LocaleKey, string>;
-/** English dictionary; missing keys fall back to zh. */
-export declare const en: Partial<Record<LocaleKey, string>>;
-/** All shipped dictionaries by locale id (only built-in ids take the map overload). */
-export declare const dictionaries: Readonly<Record<string, Partial<Dict>>>;
+/** English dictionary. */
+export declare const en: Dict;
+/** Japanese dictionary. */
+export declare const ja: Dict;
+/** Korean dictionary. */
+export declare const ko: Dict;
+/** French dictionary. */
+export declare const fr: Dict;
+/** German dictionary. */
+export declare const de: Dict;
+/** Italian dictionary. */
+export declare const it: Dict;
+/** Russian dictionary. */
+export declare const ru: Dict;
+/** Spanish dictionary. */
+export declare const es: Dict;
+/** All shipped dictionaries by locale id. */
+export declare const dictionaries: Record<string, Record<string, string>>;
 /** Translate with {param} interpolation; falls back to zh, then the key itself. */
 export declare function translate(locale: ((key: LocaleKey, params?: Record<string, unknown>) => string) | undefined, key: LocaleKey, params?: Record<string, unknown>): string;
 //# sourceMappingURL=locales.d.ts.map

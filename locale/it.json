@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Indice di ricerca",
+    "description": "Ricerca sessioni nella barra laterale: commutazione titolo/contenuto, indice indipendente integrato, sincronizzazione incrementale, ricostruzione non distruttiva e importazione/esportazione snapshot."
+  }
+}

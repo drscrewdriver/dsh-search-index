@@ -17,7 +17,7 @@ import { SWITCH_SEARCH_SETTINGS_NAMESPACE, type SwitchSearchConfig } from '../co
 // 子席位；本仓不依赖 ui-slots 类型包，席位键以运行时 children 表为准）。
 import { callHost, callHostAny, openSessionThrough, type HostContentHit, type HostIndexStatus, type HostSessionItem, type HostSortMode, type SwitchSessionsService, type SwitchUiWorkspaceService } from './host-api.ts'
 import { SearchSettingsCard, type SwitchCardScope } from './card.tsx'
-import { NS, en, translate, zh, type LocaleKey } from './locales.ts'
+import { NS, dictionaries, translate, type LocaleKey } from './locales.ts'
 import { LABELS, isInvokeChord } from './platform.ts'
 
 /** ------------------------------------------------------------------ types */
@@ -67,7 +67,7 @@ interface SwitchScopeLike<T> {
  * value- or type-import a single release of the official locale package).
  */
 interface SwitchLocaleService {
-  register(ns: string, dicts: Partial<Record<string, Record<string, string>>>): () => void
+  register(ns: string, dicts: Record<string, Record<string, string>>): () => void
   register(ns: string, localeId: string, dicts: Record<string, string>): () => void
   /**
    * Read-time translator bound to a namespace (host `dsh-client-locale`).
@@ -174,16 +174,29 @@ declare module 'cordis' {
 /** ------------------------------------------------------------------ styles */
 
 const CSS = `
-/* 侧栏 footer 槽位公约（2026-09-26）：一行多入口（第三方 dsh-context 等）会互相
-   挤占 —— 宿主 .footerActions 是 nowrap flex 行。这里允许容器换行，并把本插件
-   入口钉成独占一整行（flex-basis:100%）；其余入口（含第三方）自然落到后续行。
+/* 侧栏 footer 槽位公约（2026-09-26；2026-10-01 收紧行距并强制居中）：一行多
+   入口（第三方 dsh-context 等）会互相挤占 —— 宿主 .footerActions 是 nowrap
+   flex 行。这里允许容器换行，并把本插件入口钉成独占一整行（flex-basis:100%）；
+   其余入口（含第三方）自然落到后续行。justify-content:center 让行内所有入口
+   （含不占满行的）统一居中；row-gap:0 配合入口自身 32px 高度压缩纵向占位。
    类名用 [class*=] 中段匹配：宿主是 CSS Module 哈希类名（实测形如
    hHd-Xa_footerActions —— <hash>_<name>，哈希在前），中段跨版本稳定。 */
-[class*="footerActions"]{flex-wrap:wrap;row-gap:2px;height:auto;min-height:0}
+[class*="footerActions"]{flex-wrap:wrap;justify-content:center;row-gap:0;height:auto;min-height:0}
+/* —— 第三方矫正：dsh-context「上下文洞察」入口（2026-10-01）——
+   .lc-ov-entry 按"独占整行"设计（width:calc(100% + 4px)、无 justify-content、
+   42px 高、不对称 padding），与本槽位公约（每个入口独占一行、行内居中、32px）
+   冲突，表现为文字靠左、纵向松散。这里按公约强制矫正；:not() 排除收起轨道的
+   36px 圆钮形态。lc-ov-* 是 dsh-context 源码硬编码类名（非构建哈希），跨版本
+   稳定（实测 0.56.1 / 0.60.0 规则一致）。 */
+.lc-ov-entry:not(.lc-ov-entry-rail){width:auto!important;flex:0 0 100%!important;min-width:0!important;justify-content:center!important;height:32px!important;margin:0!important;padding:0 10px!important}
+.lc-ov-entry-label{flex:0 1 auto!important}
 .dsws_root{box-sizing:border-box;position:relative;display:flex;align-items:center;justify-content:center;flex:0 0 100%;width:100%;min-width:0;container-type:inline-size}
 /* 收起轨道：回落自然宽度（根类的 100% 基准只属于宽栏形态），放弃收缩。 */
 .dsws_rootRail{flex:none;width:auto;container-type:normal}
-.dsws_button{box-sizing:border-box;display:inline-flex;align-items:center;flex:0 0 auto;min-width:0;gap:8px;height:42px;border:none;border-radius:12px;background:transparent;color:var(--dsw-alias-label-primary);cursor:pointer;padding:0 10px 0 8px;font-family:inherit;font-size:14px;line-height:22px;white-space:nowrap;overflow:hidden;transition:background-color 160ms ease-out,color 160ms ease-out}
+/* 高度 32px（内容 22px 行高 + 上下各 5px）：宿主默认 42px 的上下裕度在
+   多行堆叠后过于松散；左右内边距对称（10px/10px），否则整行居中时按钮内容
+   会因不对称 padding 向左偏 1px。 */
+.dsws_button{box-sizing:border-box;display:inline-flex;align-items:center;flex:0 0 auto;min-width:0;gap:8px;height:32px;border:none;border-radius:12px;background:transparent;color:var(--dsw-alias-label-primary);cursor:pointer;padding:0 10px;font-family:inherit;font-size:14px;line-height:22px;white-space:nowrap;overflow:hidden;transition:background-color 160ms ease-out,color 160ms ease-out}
 .dsws_buttonRail{flex:none;width:28px;height:28px;padding:0;gap:0;justify-content:center;border-radius:50%}
 .dsws_button:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .dsws_button svg{flex:none}
@@ -750,7 +763,7 @@ export function apply(ctx: Context): void {
   // target releases); the card falls back to the bundled zh dictionary.
   const locale = ctx.get('locale') as SwitchLocaleService | undefined
   if (locale !== undefined && typeof locale.register === 'function') {
-    ctx.effect(() => locale.register(NS, { zh, en } as never), 'dsh-search-index: dictionaries')
+    ctx.effect(() => locale.register(NS, dictionaries), 'dsh-search-index: dictionaries')
   }
   // The family-tab label translator, captured EAGERLY: the holder evaluates
   // `label()` during its own render, and a lazy ctx.locale access there throws

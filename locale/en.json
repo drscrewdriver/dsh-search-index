@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Search Index",
+    "description": "Sidebar session search with title/content switching, plugin-owned independent index, incremental sync, non-destructive rebuild and snapshot import/export."
+  }
+}

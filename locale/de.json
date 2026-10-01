@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Suchindex",
+    "description": "Sidebar-Sitzungssuche: Titel-/Inhaltsumschaltung, plugin-eigener unabhängiger Index, inkrementelle Synchronisierung, zerstörungsfreier Neuaufbau und Snapshot-Import/-Export."
+  }
+}
