@@ -1,6 +1,6 @@
 {
   "name": "dsh-search-index",
-  "version": "0.6.3",
+  "version": "0.6.4",
   "publishConfig": {
     "tag": "dsh-0.2.0"
   },
