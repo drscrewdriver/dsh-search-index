@@ -824,6 +824,22 @@ export function apply(ctx: Context): void {
       t: props.t,
     }),
   ))
+
+  // Plugins 页配置卡（`plugins.bundle.config`，key = 包名，dsh-tidy-display
+  // 已实证该模式）：0.1.7 宿主的 Plugins 页不自动渲染 volatile 配置表单，
+  // bundle 详情页只渲染在该席位注册、key 与包名相等的条目。组件与 family
+  // tab 完全同一张 `SearchSettingsCard`，scope 复用上方已解析的
+  // `entryScope`（configForms 优先、settingsScope 软回退）——不另建第二份
+  // 绑定；页面 owner props 是 `{ view, form }` 不带 `t`，故回退到 family
+  // tab label 同款的期求译器 `familyLabel`（translate 内建 zh 字典再兜底）。
+  // `settings.plugins.tab` 仍故意不注册（见上），两处设置面不重复。
+  slots.inject('plugins.bundle.config', () => slots.register(
+    { name: 'plugins.bundle.config', key: 'dsh-search-index' },
+    (props: { t?: CardLocale }) => createElement(SearchSettingsCard, {
+      scope: entryScope as SwitchCardScope,
+      t: props.t ?? familyLabel,
+    }),
+  ), 'dsh-search-index: plugins page config card')
 }
 
 // Re-exported dictionary faces for consumers that compose the card directly.
