@@ -2,6 +2,12 @@
 
 所有重要变更与 bug 修复记录于此。版本遵循语义化版本（`dsh plugin --profile web add github:drscrewdriver/dsh-search-index` 安装）。
 
+## 0.6.2 —— 侧栏 footer 收紧行距并强制居中（含第三方入口矫正）
+
+- **容器行**：`sidebar.footer.action` 槽位公约升级——`justify-content:center` 统一居中行内所有入口（含第三方），`row-gap` 2px → 0。
+- **本插件入口**：按钮高 42px → 32px（上下裕度 10px → 5px），左右 padding 对称化 `0 10px`（消除整行居中时的 1px 视觉偏心）。两行 footer 总高 86px → 64px；收起轨道形态不变。
+- **第三方矫正**：dsh-context「上下文洞察」（`.lc-ov-entry`，按独占整行设计、内容靠左）以 `!important` 强制对齐公约：独占一行、行内居中、32px 高；`:not(.lc-ov-entry-rail)` 排除收起轨道的 36px 圆钮。类名为 dsh-context 源码硬编码、跨版本稳定（实测 0.56.1 / 0.60.0）。
+
 ## 0.6.1 —— 修复「内容跳转」在 0.1.7/0.2.0 宿主上静默失效
 
 - **现象**：点标题/内容搜索结果，面板关闭但目标会话不打开，console 无任何报错——0.1.7 与 0.2.0 宿主上必现。
