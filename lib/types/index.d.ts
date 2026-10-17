@@ -41,7 +41,9 @@ interface SwitchWebServer {
         handler: (req: IncomingMessage, res: ServerResponse) => void | Promise<void>;
     }): () => void;
 }
-/** The web runtime service face: bind-derived trusted authorities. */
+/** The web runtime service face: bind-derived trusted authorities.
+ *  0.2.1-a.2 起宿主把服务 `webRuntime` 更名为 `webStartup`；两代宿主通吃，
+ *  读取面走双名回退链（见 apply 内 trustedRuntime）。 */
 interface SwitchWebRuntime {
     trustedHosts: readonly string[];
 }
@@ -120,14 +122,18 @@ interface SwitchWorkspaceRegistry {
 declare module 'cordis' {
     interface Context {
         webServer: SwitchWebServer;
-        webRuntime: SwitchWebRuntime;
+        /** 0.2.1-a.2+ 主名（本插件 inject 的服务）。 */
+        webStartup: SwitchWebRuntime;
+        /** 旧代宿主（≤0.2.0）遗留名，仅作双名回退链的兜底。 */
+        webRuntime?: SwitchWebRuntime;
         sessionQuery?: SwitchSessionQuery;
         workspaceRegistry?: SwitchWorkspaceRegistry;
     }
 }
 /** Stable plugin name for the cordis row. */
 export declare const name = "dsh-search-index";
-/** Services required before mounting: the web server routes and the trust list. */
+/** Services required before mounting: the web server routes and the trust list.
+ *  0.2.1-a.2 起 webRuntime 更名 webStartup；注入主名 webStartup，读取面走双名回退链。 */
 export declare const inject: string[];
 /** Composition-entry schema: what a dsh profile may configure at assembly time.
  *  0.1.7：volatile 字段即设置表单；`indexDir` 是部署路径，不走页面。 */
@@ -159,7 +165,7 @@ export interface SwitchIndexServiceState {
 /**
  * Plugin body: mount the fenced /switch-search/api route and own the independent
  * index lifecycle.
- * @param ctx - host plugin context (webServer, webRuntime, optional sessionQuery).
+ * @param ctx - host plugin context (webServer, webStartup/webRuntime, optional sessionQuery).
  * @param entry - composition entry (0.1.7: `.volatile()` fields arrive as live refs).
  */
 export declare function apply(ctx: Context, entry?: Partial<SwitchSearchConfig>): void;

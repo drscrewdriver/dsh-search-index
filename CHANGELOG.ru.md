@@ -2,6 +2,11 @@
 
 Все важные изменения и исправления ошибок фиксируются здесь. Версии следуют семантическому версионированию (установка: `dsh plugin --profile web add github:drscrewdriver/dsh-search-index`).
 
+## 0.6.5 — Адаптация к DSH 0.2.1-rc.1 (шов webStartup)
+
+- **Падение при загрузке**: начиная с 0.2.1-a.2 хост удалил сервис `webRuntime`, переименовав его в `webStartup`. Эта версия внедряет `webStartup` и читает через цепочку отката по двум именам (`ctx.webStartup ?? ctx.webRuntime`); поведение на 0.2.0 без изменений.
+- **Нормализация манифестов**: `engines.dsh`, четыре peer-пакета `@deepseek-ai/dsh-client-*` и `dsh.plugin.json` — все шесть точек записи точным перечислением `0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1` (без интервалов и `-0`-сентинелов); двойной манифест под одним номером 0.6.5; devDep `dsh-client-ui-slots` на `0.2.1-rc.1`.
+
 ## 0.6.0 — Адаптация к DSH 0.2.0-rc.1 (смена поколения метаданных без единой правки кода)
 
 - **Смена поколения peer/engines**: 4 dsh-*-peer (`dsh-client-locale` / `dsh-client-ui-settings` / `dsh-client-ui-settings-general` / `dsh-client-ui-slots`) и оба вхождения `engines.dsh` в `package.json` и `dsh.plugin.json` разом заменены на `>=0.2.0-rc.1 <0.2.1-0` (окно rc зафиксировано, переоценка с 0.2.1).

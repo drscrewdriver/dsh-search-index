@@ -2,6 +2,11 @@
 
 所有重要变更与 bug 修复记录于此。版本遵循语义化版本（`dsh plugin --profile web add github:drscrewdriver/dsh-search-index` 安装）。
 
+## 0.6.5 —— 适配 DSH 0.2.1-rc.1（webStartup 接缝修复）
+
+- **装载即运行炸**：宿主 0.2.1-a.2 起删除服务 `webRuntime`、更名 `webStartup`。本版 `inject` 注入主名 `webStartup`，读取面走双名回退链（`ctx.webStartup ?? ctx.webRuntime`），0.2.0 旧代行为不变。
+- **清单归一**：`engines.dsh`、四个 `@deepseek-ai/dsh-client-*` peer 与 `dsh.plugin.json` 六处统一为精确枚举 `0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1`（清除区间/`-0` 哨兵）；双清单同号 0.6.5（修正 manifest 滞留 0.6.2 的漂移）；devDep `dsh-client-ui-slots` 换代 `0.2.1-rc.1`。
+
 ## 0.6.2 —— 侧栏 footer 收紧行距并强制居中（含第三方入口矫正）
 
 - **容器行**：`sidebar.footer.action` 槽位公约升级——`justify-content:center` 统一居中行内所有入口（含第三方），`row-gap` 2px → 0。

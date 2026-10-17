@@ -21,7 +21,7 @@ Nessuna modifica al codice sorgente di dsh, nessuna PR da aprire: un client cord
 
 **Predecessore: `dsh-session-search-toggle`.** Quella versione si affidava al `defineStore` di `@deepseek-ai/dsh-client-runtime` per fornire il posto della riga delle impostazioni. DSH 0.1.2 ha rinominato/ristrutturato i pacchetti motore del client (`dsh-client-runtime` → `dsh-client-store`); il vecchio codice non poteva più caricarsi sul nuovo host — e un solo plugin non poteva coprire entrambe le versioni con un unico artefatto.
 
-**La versione attuale (`dsh-search-index` 0.6.0) ha come linea principale DSH 0.2.0** (peer `>=0.2.0-rc.1 <0.2.1-0`). Le linee di host storiche sono servite da linee di versioni distinte: DSH 0.1.7 è servito da 0.5.7 (dist-tag npm `dsh-0.1.7`, ramo `compat/0.1.7`); gli host 0.1.1/0.1.2 più vecchi usano l'artefatto storico, che non evolve più con questa versione. Contesto storico:
+**La versione attuale (`dsh-search-index` 0.6.5) ha come linea principale DSH 0.2.0–0.2.1-rc.1** (peer `0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1`). Le linee di host storiche sono servite da linee di versioni distinte: DSH 0.1.7 è servito da 0.5.7 (dist-tag npm `dsh-0.1.7`, ramo `compat/0.1.7`); gli host 0.1.1/0.1.2 più vecchi usano l'artefatto storico, che non evolve più con questa versione. Contesto storico:
 
 - **Un solo artefatto, adattivo a runtime**: lo stesso `lib/client.js` si carica sia su 0.1.1-rc.2 sia su 0.1.2-rc.1, **senza alcun ramo su stringhe di versione**. Il bundle client fa `require` solo di `react` / `react-dom`, entrambi presenti nella tabella di moduli condivisa delle due versioni.
 - **Nessuno dei due pacchetti motore viene importato**: né `dsh-client-runtime` né `dsh-client-store` — la rinomina quindi **non può colpirlo**.
@@ -31,7 +31,8 @@ Nessuna modifica al codice sorgente di dsh, nessuna PR da aprire: un client cord
 > **▼ Supporto delle versioni di DSH**
 > | Versione DSH | Stato | Vettore e differenza chiave |
 > | --- | --- | --- |
-> | 0.2.0-rc.1 | ✅ | **versione attuale 0.6.0**; peer/engines = `>=0.2.0-rc.1 <0.2.1-0`, zero modifiche al codice (consumo puramente caller dei posti slots/locale/configForms) |
+> | 0.2.0-rc.1 | ✅ | **versione attuale 0.6.5**; peer/engines = `0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1`, zero modifiche al codice (consumo puramente caller dei posti slots/locale/configForms) |
+> | 0.2.1-rc.1 | ✅ | **versione attuale 0.6.5**; da 0.2.1-a.2 l'host ha rinominato `webRuntime` in `webStartup` — questa versione inietta `webStartup` con catena di fallback a doppio nome |
 > | 0.1.7-rc.1+ | ✅ | 0.5.7 (dist-tag `dsh-0.1.7`); configForms risolve l'handle tramite entry id, gli host più vecchi ricadono su settingsScope vincolato per namespace |
 > | 0.1.1-rc.2 | ✅ (artefatto storico, congelato) | il motore store si trova in `@deepseek-ai/dsh-client-runtime/client` |
 > | 0.1.2-rc.1 | ✅ (artefatto storico, congelato) | il motore è stato rinominato `@deepseek-ai/dsh-client-store`; questo plugin non importa nessuno dei due |
