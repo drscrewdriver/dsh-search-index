@@ -61,7 +61,9 @@ interface SwitchWebServer {
   }): () => void
 }
 
-/** The web runtime service face: bind-derived trusted authorities. */
+/** The web runtime service face: bind-derived trusted authorities.
+ *  0.2.1-a.2 起宿主把服务 `webRuntime` 更名为 `webStartup`；两代宿主通吃，
+ *  读取面走双名回退链（见 apply 内 trustedRuntime）。 */
 interface SwitchWebRuntime {
   trustedHosts: readonly string[]
 }
@@ -144,7 +146,10 @@ interface SwitchWorkspaceRegistry {
 declare module 'cordis' {
   interface Context {
     webServer: SwitchWebServer
-    webRuntime: SwitchWebRuntime
+    /** 0.2.1-a.2+ 主名（本插件 inject 的服务）。 */
+    webStartup: SwitchWebRuntime
+    /** 旧代宿主（≤0.2.0）遗留名，仅作双名回退链的兜底。 */
+    webRuntime?: SwitchWebRuntime
     sessionQuery?: SwitchSessionQuery
     workspaceRegistry?: SwitchWorkspaceRegistry
   }
@@ -153,8 +158,9 @@ declare module 'cordis' {
 /** Stable plugin name for the cordis row. */
 export const name = 'dsh-search-index'
 
-/** Services required before mounting: the web server routes and the trust list. */
-export const inject = ['webServer', 'webRuntime']
+/** Services required before mounting: the web server routes and the trust list.
+ *  0.2.1-a.2 起 webRuntime 更名 webStartup；注入主名 webStartup，读取面走双名回退链。 */
+export const inject = ['webServer', 'webStartup']
 
 /** Composition-entry schema: what a dsh profile may configure at assembly time.
  *  0.1.7：volatile 字段即设置表单；`indexDir` 是部署路径，不走页面。 */
@@ -569,7 +575,7 @@ interface SwitchRuntime {
 /**
  * Plugin body: mount the fenced /switch-search/api route and own the independent
  * index lifecycle.
- * @param ctx - host plugin context (webServer, webRuntime, optional sessionQuery).
+ * @param ctx - host plugin context (webServer, webStartup/webRuntime, optional sessionQuery).
  * @param entry - composition entry (0.1.7: `.volatile()` fields arrive as live refs).
  */
 export function apply(ctx: Context, entry: Partial<SwitchSearchConfig> = {}): void {
@@ -623,6 +629,10 @@ export function apply(ctx: Context, entry: Partial<SwitchSearchConfig> = {}): vo
     registry: () => ({ archivedSessionIds: archiveReader.read().ids }),
     log,
   }
+
+  // 双名回退链：0.2.1-a.2 起宿主服务 webRuntime 更名 webStartup；注入主名
+  // webStartup 在新代必有，旧代（≤0.2.0）回退 webRuntime，两代通吃。
+  const trustedRuntime: SwitchWebRuntime = ctx.webStartup ?? ctx.webRuntime!
 
   let syncTimer: ReturnType<typeof setInterval> | undefined
   const scheduleSync = (intervalMs: number): void => {
@@ -698,7 +708,7 @@ export function apply(ctx: Context, entry: Partial<SwitchSearchConfig> = {}): vo
     kind: 'prefix',
     path: '/switch-search/api',
     handler: async (req, res) => {
-      if (!isTrustedApiRequest(req, ctx.webRuntime.trustedHosts)) {
+      if (!isTrustedApiRequest(req, trustedRuntime.trustedHosts)) {
         writeJson(res, 403, { ok: false, error: 'forbidden' })
         return
       }

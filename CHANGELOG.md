@@ -2,6 +2,14 @@
 
 所有重要变更与 bug 修复记录于此。版本遵循语义化版本（`dsh plugin --profile web add github:drscrewdriver/dsh-search-index` 安装）。
 
+## 0.5.11 —— 适配 DSH 0.2.1-rc.1（webStartup 修 + 线域外扩）
+
+### 修复
+- **装载即运行炸**：宿主 0.2.1-a.2 起删除服务 `webRuntime`、更名 `webStartup`。本插件 `inject` 改为注入主名 `webStartup`，读取面走双名回退链（`ctx.webStartup ?? ctx.webRuntime`），两代宿主通吃；旧代仍从 `webRuntime` 取绑定派生的可信 authority，行为不变。
+### 清单
+- `engines.dsh`、四个 `@deepseek-ai/dsh-client-*` peer、`dsh.plugin.json` 六处统一重写为精确枚举 `0.1.7-rc.1 || 0.1.7-rc.2 || 0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1`（TRIM5，与历史 0.1.7 线域连续外扩；禁区间/caret/`-0` 哨兵）。
+- devDep `@deepseek-ai/dsh-client-ui-slots` 由宽 caret 旧线换代到 `0.2.1-rc.1`；`publishConfig` 钉 registry 并将 tag 换为新线（发布仍需显式 `--tag`）。
+
 ## 0.2.0-beta.5 —— 窄栏下让「键帽」让位，两个入口的名字都读得全
 
 ### 修复（beta.4 实测暴露）

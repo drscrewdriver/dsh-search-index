@@ -136,6 +136,7 @@ src/
 
 ## 兼容性与隐私
 
+- 支持 DSH 0.1.7-rc.1、0.1.7-rc.2、0.2.0-rc.1、0.2.0-rc.2、0.2.1-rc.1（枚举 peer，逐 rc 实测白名单；alpha/beta 不在支持范围）。0.2.1-a.2 起宿主服务 `webRuntime` 更名 `webStartup`，本插件注入主名 `webStartup` 并保留双名回退链，两代宿主通吃。
 - 需要已安装 DeepSeek Harness 并使用 web profile；**不改任何官方源码**。索引是本插件自己的文件，官方 `session-query-sqlite` 开不开都不影响本插件。
 - 配置仅存于 DSH settings 命名空间与浏览器浮层状态；不读取、不上传会话内容以外的数据。
 - 宿主/客户端契约类型在 `src/*.ts` 本地结构声明（npm 上 dsh client 包链不完整），构建时以 harness 源码核实为准。

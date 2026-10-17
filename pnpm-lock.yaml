@@ -9,21 +9,21 @@ importers:
   .:
     dependencies:
       '@deepseek-ai/dsh-client-locale':
-        specifier: '>=0.1.7-rc.1 <0.1.8-0'
+        specifier: 0.1.7-rc.1 || 0.1.7-rc.2 || 0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1
         version: 0.1.7-rc.2(@deepseek-ai/cordis@4.0.1)
       '@deepseek-ai/dsh-client-ui-settings':
-        specifier: '>=0.1.7-rc.1 <0.1.8-0'
+        specifier: 0.1.7-rc.1 || 0.1.7-rc.2 || 0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1
         version: 0.1.7-rc.2(@deepseek-ai/cordis@4.0.1)
       '@deepseek-ai/dsh-client-ui-settings-general':
-        specifier: '>=0.1.7-rc.1 <0.1.8-0'
+        specifier: 0.1.7-rc.1 || 0.1.7-rc.2 || 0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1
         version: 0.1.7-rc.2(@deepseek-ai/cordis@4.0.1)
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: ^4.0.1
         version: 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)
       '@deepseek-ai/dsh-client-ui-slots':
-        specifier: ^0.1.0-rc.6
-        version: 0.1.0-rc.8(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.8(@deepseek-ai/cordis@4.0.1))
+        specifier: 0.2.1-rc.1
+        version: 0.2.1-rc.1(@deepseek-ai/cordis@4.0.1)
       '@deepseek-ai/schemastery':
         specifier: ^3.18.4
         version: 3.18.4
@@ -121,19 +121,10 @@ packages:
     peerDependencies:
       '@deepseek-ai/cordis': ~4.0.4
 
-  '@deepseek-ai/dsh-client-ui-slots@0.1.0-rc.8':
-    resolution: {integrity: sha512-mwmSDuUG2BTcmPSL/o6esCYmjiwlW+uV3+ZZKIHzCxNVZ0AFMsfPQNZLhNSC2SYYw3SuIPb2R1W9DorB++KVyQ==}
+  '@deepseek-ai/dsh-client-ui-slots@0.2.1-rc.1':
+    resolution: {integrity: sha512-1Y5OukNdsi6Evbwqavc5KcgWoscm/Kn0ZaQxo8VVPpCRTsuIESQ41ceZCqWWW/cWC1TmRGURd6K2BXJVuYEyqA==}
     peerDependencies:
-      '@deepseek-ai/cordis': ^4.0.1
-      '@deepseek-ai/dsh-invariants': ^0.1.0-rc.8
-
-  '@deepseek-ai/dsh-invariants@0.1.0-rc.8':
-    resolution: {integrity: sha512-u0lYqyxOYwfsVnbsfGXZos5vFvA4cqFnBEW3/ezgljNwkYwzeUP/Y5wjPnQjP+ZzBn3CnVeIF6s2N2Vk3iA5mQ==}
-    peerDependencies:
-      '@deepseek-ai/cordis': ^4.0.1
-
-  '@deepseek-ai/schemastery@3.18.1':
-    resolution: {integrity: sha512-Qn0FCSwCQnpnj6SB31I6i2sIKgKWnkbJM8O0EU91Gv2UsYVvtZTl6IA0sCwk2e2MZf5S8w5hpq9QkeVvK9qwxg==}
+      '@deepseek-ai/cordis': ~4.0.5
 
   '@deepseek-ai/schemastery@3.18.4':
     resolution: {integrity: sha512-SSXO6tYuyrIqKVbmOnIq0s+riUywYzouFMcnBluHF9n4KMo2G8HvEzhCYj6pj2617/glOjbJuVInJ9hfONsjkg==}
@@ -1313,14 +1304,14 @@ snapshots:
     dependencies:
       '@deepseek-ai/cordis': 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)
       '@deepseek-ai/cordis-plugin-loader': 1.0.2(@deepseek-ai/cordis@4.0.1)
-      '@deepseek-ai/cosmokit': 1.8.2
+      '@deepseek-ai/cosmokit': 1.8.5
       js-yaml: 4.3.2
     optional: true
 
   '@deepseek-ai/cordis-plugin-loader@1.0.2(@deepseek-ai/cordis@4.0.1)':
     dependencies:
       '@deepseek-ai/cordis': 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)
-      '@deepseek-ai/cosmokit': 1.8.2
+      '@deepseek-ai/cosmokit': 1.8.5
     optional: true
 
   '@deepseek-ai/cordis@4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)':
@@ -1350,20 +1341,9 @@ snapshots:
       '@deepseek-ai/cordis': 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)
       '@deepseek-ai/schemastery': 3.18.4
 
-  '@deepseek-ai/dsh-client-ui-slots@0.1.0-rc.8(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.8(@deepseek-ai/cordis@4.0.1))':
+  '@deepseek-ai/dsh-client-ui-slots@0.2.1-rc.1(@deepseek-ai/cordis@4.0.1)':
     dependencies:
       '@deepseek-ai/cordis': 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)
-      '@deepseek-ai/dsh-invariants': 0.1.0-rc.8(@deepseek-ai/cordis@4.0.1)
-
-  '@deepseek-ai/dsh-invariants@0.1.0-rc.8(@deepseek-ai/cordis@4.0.1)':
-    dependencies:
-      '@deepseek-ai/cordis': 4.0.1(@deepseek-ai/cordis-plugin-include@1.0.6)(@deepseek-ai/cordis-plugin-loader@1.0.2)
-      '@deepseek-ai/schemastery': 3.18.1
-
-  '@deepseek-ai/schemastery@3.18.1':
-    dependencies:
-      '@deepseek-ai/cosmokit': 1.8.2
-      '@standard-schema/spec': 1.1.0
 
   '@deepseek-ai/schemastery@3.18.4':
     dependencies:

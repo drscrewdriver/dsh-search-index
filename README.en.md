@@ -136,6 +136,7 @@ src/
 
 ## Compatibility and privacy
 
+- Supports DSH 0.1.7-rc.1, 0.1.7-rc.2, 0.2.0-rc.1, 0.2.0-rc.2, 0.2.1-rc.1 (enumerated peers, per-rc tested whitelist; alpha/beta are not in the supported range). From host 0.2.1-a.2 the `webRuntime` service was renamed `webStartup`; this plugin injects the primary name `webStartup` and keeps a dual-name fallback chain, so it works on both host generations.
 - Requires DeepSeek Harness with the web profile; **no official source is modified**. The index is this plugin's own file, so whether the official `session-query-sqlite` is enabled makes no difference to this plugin.
 - Configuration lives only in the DSH settings namespace and browser panel state; it reads/upload nothing beyond session-search data.
 - Host/client contract types are declared structurally in `src/*.ts` (the npm dsh client chain is incomplete) and mirror the harness sources at build-verification time.

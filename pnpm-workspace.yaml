@@ -4,3 +4,5 @@
 allowBuilds:
   better-sqlite3: true
   esbuild: true
+minimumReleaseAgeExclude:
+  - '@deepseek-ai/dsh-client-ui-slots@0.2.1-rc.1'
