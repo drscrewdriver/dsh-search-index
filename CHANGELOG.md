@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.6 (2026-10-18)
+
+- hosts: 追加 0.2.1-rc.2 声明面枚举（34/34 @deepseek-ai/* 宿主 peer 逐包 npm 实测 rc.2 在版；本插件不触 ctx.web provider 与 conversation.input.model.label 槽，代码零改动，纯元数据发版；农场 rc.2 格挂账待命）
+
 所有重要变更与 bug 修复记录于此。版本遵循语义化版本（`dsh plugin --profile web add github:drscrewdriver/dsh-search-index` 安装）。
 
 ## 0.6.5 —— 适配 DSH 0.2.1-rc.1（webStartup 接缝修复）
