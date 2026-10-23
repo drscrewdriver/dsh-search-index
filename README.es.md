@@ -21,7 +21,7 @@ Sin modificar el código fuente de dsh y sin PR: un cliente cordis más la mitad
 
 **Predecesor: `dsh-session-search-toggle`.** Aquella versión se apoyaba en el `defineStore` de `@deepseek-ai/dsh-client-runtime` para obtener el asiento de la fila de ajustes. DSH 0.1.2 renombró y reestructuró los paquetes motor del cliente (`dsh-client-runtime` → `dsh-client-store`), y el código antiguo ya no podía cargarse en el nuevo anfitrión — un solo plugin no podía cubrir ambas versiones con un único artefacto.
 
-**La versión actual (`dsh-search-index` 0.6.6) toma DSH 0.2.0–0.2.1-rc.2 como línea principal** (peer `0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1 || 0.2.1-rc.2`). Las líneas de anfitriones históricos se atienden con líneas de versiones separadas: DSH 0.1.7 lo atiende la 0.5.7 (dist-tag npm `dsh-0.1.7`, rama `compat/0.1.7`); los anfitriones 0.1.1/0.1.2 más antiguos usan el artefacto antiguo, que ya no evoluciona con esta versión. Antecedentes históricos:
+**La versión actual (`dsh-search-index` 0.6.6) toma DSH 0.2.0–0.2.1-rc.2 como línea principal** (peer `0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3`). Las líneas de anfitriones históricos se atienden con líneas de versiones separadas: DSH 0.1.7 lo atiende la 0.5.7 (dist-tag npm `dsh-0.1.7`, rama `compat/0.1.7`); los anfitriones 0.1.1/0.1.2 más antiguos usan el artefacto antiguo, que ya no evoluciona con esta versión. Antecedentes históricos:
 
 - **Un solo artefacto, adaptable en tiempo de ejecución**: el mismo `lib/client.js` se carga tanto en 0.1.1-rc.2 como en 0.1.2-rc.1, **sin ninguna rama por cadenas de versión**. El bundle del cliente solo hace `require` de `react` / `react-dom`, ambos presentes en la tabla de módulos compartida de las dos versiones.
 - **Ninguno de los dos paquetes motor se importa**: ni `dsh-client-runtime` ni `dsh-client-store` — el cambio de nombre, por tanto, **no puede afectarle**.
@@ -31,7 +31,7 @@ Sin modificar el código fuente de dsh y sin PR: un cliente cordis más la mitad
 > **▼ Soporte de versiones de DSH**
 > | Versión de DSH | Estado | Soporte y diferencia clave |
 > | --- | --- | --- |
-> | 0.2.0-rc.1 | ✅ | **this release 0.6.6**; peer/engines = `0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1 || 0.2.1-rc.2`, cero cambios de código (consumo puramente caller de los asientos slots/locale/configForms) |
+> | 0.2.0-rc.1 | ✅ | **this release 0.6.6**; peer/engines = `0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3`, cero cambios de código (consumo puramente caller de los asientos slots/locale/configForms) |
 > | 0.2.1-rc.1 | ✅ | **this release 0.6.6**; desde 0.2.1-a.2 el anfitrión renombró `webRuntime` a `webStartup` — esta versión inyecta `webStartup` con cadena de reserva de doble nombre |
 > | 0.2.1-rc.2 | ✅ | **versión actual 0.6.6**; adenda declarativa de la enumeración (todos los peers del anfitrión verificados en rc.2 vía npm), cero cambios de código |
 > | 0.1.7-rc.1+ | ✅ | 0.5.7 (dist-tag `dsh-0.1.7`); configForms resuelve el handle por entry id, los anfitriones antiguos recaen en settingsScope vinculado por espacio de nombres |

@@ -21,7 +21,7 @@
 
 **前身：`dsh-session-search-toggle`。** 那个版本依赖 `@deepseek-ai/dsh-client-runtime` 的 `defineStore` 提供设置行座位。DSH 0.1.2 把客户端引擎包改名/重构（`dsh-client-runtime` → `dsh-client-store`），旧写法在新宿主上无法加载——同一个插件没法用一份产物同时兼容两版。
 
-**本版（`dsh-search-index` 0.6.6）以 DSH 0.2.0–0.2.1-rc.2 为主线**（peer `0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1 || 0.2.1-rc.2`）。历史宿主线的支持由独立版本线承担：DSH 0.1.7 用 0.5.7（npm dist-tag `dsh-0.1.7`，`compat/0.1.7` 分支），更早的 0.1.1/0.1.2 用旧版产物，不再随本版演进。历史背景：
+**本版（`dsh-search-index` 0.6.6）以 DSH 0.2.0–0.2.1-rc.3 为主线**（peer `0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3`）。历史宿主线的支持由独立版本线承担：DSH 0.1.7 用 0.5.7（npm dist-tag `dsh-0.1.7`，`compat/0.1.7` 分支），更早的 0.1.1/0.1.2 用旧版产物，不再随本版演进。历史背景：
 
 - **单一产物，运行时自适应**：同一份 `lib/client.js` 在 0.1.1-rc.2 与 0.1.2-rc.1 上都能加载，**没有任何版本号字符串分支**。客户端 bundle 只 `require` `react` / `react-dom`，两者都在两版的共享模块表内。
 - **两个引擎包都不导入**：既不 import `dsh-client-runtime`，也不 import `dsh-client-store`，因此**不受那次改名影响**。
@@ -31,9 +31,10 @@
 > **▼ DSH 版本适配**
 > | DSH 版本 | 状态 | 载体与关键差异 |
 > | --- | --- | --- |
-> | 0.2.0-rc.1 | ✅ | **本版 0.6.6**；peer/engines = `0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1 || 0.2.1-rc.2`，代码零修改（纯 caller 消费 slots/locale/configForms 席位） |
+> | 0.2.0-rc.1 | ✅ | **本版 0.6.6**；peer/engines = `0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3`，代码零修改（纯 caller 消费 slots/locale/configForms 席位） |
 > | 0.2.1-rc.1 | ✅ | **本版 0.6.6**；0.2.1-a.2 起宿主把 `webRuntime` 更名 `webStartup`，本版注入 `webStartup` 并走双名回退链 |
 > | 0.2.1-rc.2 | ✅ | **本版 0.6.6**；声明面补票（宿主 peer 全部 npm 实测 rc.2 在版），代码零改动 |
+> | 0.2.1-rc.3 | ✅ | **本版 0.6.6**；声明面补票（rc.3 契约面零断裂：闸门/settings/vendor/缝/会话 V4 零 diff，仅新增三域 More 菜单行槽），代码零改动 |
 > | 0.1.7-rc.1+ | ✅ | 0.5.7（dist-tag `dsh-0.1.7`）；configForms 以 entry id 取句柄，旧宿主回退 settingsScope 按命名空间绑定 |
 > | 0.1.1-rc.2 | ✅（旧版产物，冻结） | store 引擎在 `@deepseek-ai/dsh-client-runtime/client` |
 > | 0.1.2-rc.1 | ✅（旧版产物，冻结） | 引擎改名 `@deepseek-ai/dsh-client-store`；本插件两个都不导入 |
