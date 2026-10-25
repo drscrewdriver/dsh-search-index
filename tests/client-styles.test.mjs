@@ -44,20 +44,16 @@ const sources = new Map(files.map(f => [f, readFileSync(join(CLIENT_DIR, f), 'ut
 
 /** ------------------------------------------------------ one stylesheet owner */
 
-const indexSource = sources.get('index.ts')
-assert.ok(indexSource !== undefined, 'src/client/index.ts must exist')
-
+// The stylesheet lives in whichever client source declares it; exactly one owner
+// across the whole half (a second declaration means two places to keep in sync).
 const CSS_DECL = 'const CSS = `'
-const cssStart = indexSource.indexOf(CSS_DECL)
-assert.ok(cssStart >= 0, 'the stylesheet must be declared as a template literal')
-
-// Exactly one owner: a second template literal holding class rules would mean
-// two places to keep in sync, and the orphan check below would only see one.
-const declarations = indexSource.split(CSS_DECL).length - 1
-assert.equal(declarations, 1, `the stylesheet must have exactly one owner; found ${declarations} declarations`)
-
-const cssEnd = indexSource.indexOf('`', cssStart + CSS_DECL.length)
-const css = indexSource.slice(cssStart, cssEnd)
+const owners = [...sources.entries()].filter(([, src]) => src.includes(CSS_DECL))
+assert.equal(owners.length, 1, `the stylesheet must have exactly one owner; found ${owners.length}`)
+const [cssFile, cssSource] = owners[0]
+const cssStart = cssSource.indexOf(CSS_DECL)
+const cssEnd = cssSource.indexOf('`', cssStart + CSS_DECL.length)
+const css = cssSource.slice(cssStart, cssEnd)
+console.log(`  stylesheet owner: ${cssFile}`)
 
 const classes = new Set()
 for (const m of css.matchAll(/\.(dsws_[A-Za-z0-9_]+)/g)) classes.add(m[1])
@@ -81,27 +77,15 @@ assert.deepEqual(
   `every stylesheet class must be referenced from code; orphaned: ${orphans.join(', ')}`,
 )
 
-/** ------------------------------------------- the settings binding has one owner */
+/** ------------------------------------------- settings binding has one owner */
 
-// The `enabled` switch only means something if the entry consumes the same
-// binding the card edits. Two independent `bind()` calls would let the switch
-// and the entry read different namespaces.
-const bindings = indexSource.match(/\.bind(<[^>()]+>)?\(\{/g) ?? []
-assert.equal(
-  bindings.length,
-  1,
-  `the settings namespace must be bound once and shared; found ${bindings.length} bindings`,
-)
-const consumers = indexSource.match(/entryScope/g) ?? []
-assert.ok(
-  consumers.length >= 3,
-  `the shared binding must reach both the entry and the card; found ${consumers.length} references`,
-)
+// 设置面只允许一条回退链：configForms 原生句柄 → legacy 桥。
+const entrySource = sources.get('index.ts')
+assert.ok(entrySource !== undefined, 'src/client/index.ts must exist')
+const bridgeCalls = entrySource.match(/withBridgeFallback[(]/g) ?? []
+assert.equal(bridgeCalls.length, 1, `one settings binding chain expected; found ${bridgeCalls.length}`)
+const scopeCalls = entrySource.match(/searchBridgeScope[(][)]/g) ?? []
+assert.equal(scopeCalls.length, 1, `legacy bridge scope must be created once; found ${scopeCalls.length}`)
+assert.ok(/enabled !== false/.test(code), 'the entry must consult `enabled` from the shared scope')
 
-// And the entry must actually consult it, rather than only receiving it.
-assert.ok(
-  /snapshot\?\.value\?\.enabled/.test(code),
-  'the sidebar entry must read `enabled` from the shared binding',
-)
-
-console.log(`client-styles: ok (${classes.size} classes, 0 orphans, 1 settings binding)`)
+console.log(`client-styles: ok (${classes.size} classes, 0 orphans, 1 settings chain)`)

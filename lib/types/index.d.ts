@@ -20,19 +20,19 @@
 import type { Context } from 'cordis';
 import z from '@deepseek-ai/schemastery';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { SwitchIndexEngine } from './host/engine.ts';
-import { SwitchWatermarkSync } from './host/sync.ts';
-import { createArchiveSource } from './host/archive-source.ts';
-export { createArchiveSource, type SwitchArchiveDiagnostics } from './host/archive-source.ts';
-import { type SwitchIndexLayout, type SwitchRebuildState } from './host/rebuild.ts';
-import type { SwitchRawEvent } from './host/extract.ts';
+import { SwitchIndexEngine } from './host/index/engine.ts';
+import { SwitchWatermarkSync } from './host/index/sync.ts';
+import { createArchiveSource } from './host/index/archive-source.ts';
+export { createArchiveSource, type SwitchArchiveDiagnostics } from './host/index/archive-source.ts';
+import { type SwitchIndexLayout, type SwitchRebuildState } from './host/index/rebuild.ts';
+import type { SwitchRawEvent } from './host/index/extract.ts';
 import { type SwitchSearchConfig } from './config.ts';
 export { DEFAULT_CONFIG, SWITCH_SEARCH_SETTINGS_NAMESPACE } from './config.ts';
 export type { SwitchSearchConfig } from './config.ts';
-export { SwitchIndexEngine } from './host/engine.ts';
-export { SwitchWatermarkSync } from './host/sync.ts';
-export { rebuildIndex, importIntoIndex, recoverIndex, DEFAULT_INDEX_LAYOUT } from './host/rebuild.ts';
-export { exportSnapshot, parseSnapshot } from './host/snapshot.ts';
+export { SwitchIndexEngine } from './host/index/engine.ts';
+export { SwitchWatermarkSync } from './host/index/sync.ts';
+export { rebuildIndex, importIntoIndex, recoverIndex, DEFAULT_INDEX_LAYOUT } from './host/index/rebuild.ts';
+export { exportSnapshot, parseSnapshot } from './host/index/snapshot.ts';
 /** The webServer service face this plugin uses (structural mirror). */
 interface SwitchWebServer {
     register(route: {
@@ -144,6 +144,8 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
     syncIntervalMs: z<number, number, "volatile-defined">;
     archiveKeep: z<number, number, "volatile-defined">;
     indexDir: z<string, string, "defined">;
+    corpusSource: z<"native" | "drs", "native" | "drs", "volatile-defined">;
+    drsBaseUrl: z<string, string, "volatile-defined">;
 }>>, Schemastery.ObjectT<NoInfer<{
     enabled: z<boolean, boolean, "volatile-defined">;
     defaultMode: z<"title" | "content", "title" | "content", "volatile-defined">;
@@ -151,6 +153,8 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
     syncIntervalMs: z<number, number, "volatile-defined">;
     archiveKeep: z<number, number, "volatile-defined">;
     indexDir: z<string, string, "defined">;
+    corpusSource: z<"native" | "drs", "native" | "drs", "volatile-defined">;
+    drsBaseUrl: z<string, string, "volatile-defined">;
 }>>, "plain">;
 /** ------------------------------------------------------------------ index service */
 /** The per-activation index service state, carried in the apply closure. */
@@ -161,6 +165,14 @@ export interface SwitchIndexServiceState {
     rebuild: SwitchRebuildState;
     /** Official archive-set reader (registry first, storage-hub file fallback). */
     archiveReader: ReturnType<typeof createArchiveSource>;
+    /** 深度同步（DRS 慢速重建 → 本地索引重建）的可见状态；`drsSettled` 记 DRS 是否在 180s 内落定。 */
+    deepSync: {
+        state: 'idle' | 'drs-syncing' | 'rebuilding' | 'done' | 'failed';
+        startedAt?: number;
+        finishedAt?: number;
+        error?: string;
+        drsSettled?: boolean;
+    };
 }
 /**
  * Plugin body: mount the fenced /switch-search/api route and own the independent

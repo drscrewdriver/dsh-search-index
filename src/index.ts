@@ -20,14 +20,14 @@
 import type { Context } from 'cordis'
 import z from '@deepseek-ai/schemastery'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { SwitchIndexEngine, type SwitchIndexContentType, type SwitchSearchSort } from './host/engine.ts'
-import { SwitchWatermarkSync, type SwitchSyncState } from './host/sync.ts'
-import { createArchiveSource, type SwitchArchiveDiagnostics } from './host/archive-source.ts'
-import { detectSteward } from './host/peers.ts'
+import { SwitchIndexEngine, resolveTypes, type SwitchIndexContentType, type SwitchSearchSort } from './host/index/engine.ts'
+import { SwitchWatermarkSync, type SwitchSyncState } from './host/index/sync.ts'
+import { createArchiveSource, type SwitchArchiveDiagnostics } from './host/index/archive-source.ts'
+import { detectSteward } from './host/index/peers.ts'
 // The archive-set WRITER (prune) moved to dsh-session-steward: this package
 // reads the official archive set to exclude archived sessions from the index,
 // and no longer edits it. Single writer, one owner.
-export { createArchiveSource, type SwitchArchiveDiagnostics } from './host/archive-source.ts'
+export { createArchiveSource, type SwitchArchiveDiagnostics } from './host/index/archive-source.ts'
 import {
   DEFAULT_INDEX_LAYOUT,
   importIntoIndex,
@@ -37,9 +37,21 @@ import {
   resolveIndexDir,
   type SwitchIndexLayout,
   type SwitchRebuildState,
-} from './host/rebuild.ts'
-import { exportSnapshot, parseSnapshot } from './host/snapshot.ts'
-import type { SwitchRawEvent } from './host/extract.ts'
+} from './host/index/rebuild.ts'
+import { exportSnapshot, parseSnapshot } from './host/index/snapshot.ts'
+import { extractTitleFromEvents } from './host/index/extract.ts'
+import { DrsCorpusSource, resolveDrsBaseUrl } from './host/index/drs-source.ts'
+import {
+  bridgeOverlay,
+  installLegacySettingsBridge,
+  settingsDescribe,
+  settingsMutate,
+  type BridgeState,
+} from './host/settings-bridge.ts'
+import { existsSync, readFileSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
+import type { SwitchRawEvent } from './host/index/extract.ts'
 import {
   DEFAULT_CONFIG,
   type SwitchSearchConfig,
@@ -47,10 +59,10 @@ import {
 
 export { DEFAULT_CONFIG, SWITCH_SEARCH_SETTINGS_NAMESPACE } from './config.ts'
 export type { SwitchSearchConfig } from './config.ts'
-export { SwitchIndexEngine } from './host/engine.ts'
-export { SwitchWatermarkSync } from './host/sync.ts'
-export { rebuildIndex, importIntoIndex, recoverIndex, DEFAULT_INDEX_LAYOUT } from './host/rebuild.ts'
-export { exportSnapshot, parseSnapshot } from './host/snapshot.ts'
+export { SwitchIndexEngine } from './host/index/engine.ts'
+export { SwitchWatermarkSync } from './host/index/sync.ts'
+export { rebuildIndex, importIntoIndex, recoverIndex, DEFAULT_INDEX_LAYOUT } from './host/index/rebuild.ts'
+export { exportSnapshot, parseSnapshot } from './host/index/snapshot.ts'
 
 /** The webServer service face this plugin uses (structural mirror). */
 interface SwitchWebServer {
@@ -171,6 +183,8 @@ export const Config = z.object({
   syncIntervalMs: z.number().default(30_000).volatile(),
   archiveKeep: z.number().default(2).volatile(),
   indexDir: z.string().default(''),
+  corpusSource: z.union(['native', 'drs']).default('drs').volatile(),
+  drsBaseUrl: z.string().default('').volatile(),
 })
 
 /** Live reference the 0.1.7 loader hands `apply` for `.volatile()` config fields. */
@@ -351,24 +365,42 @@ async function listSessions(runtime: SwitchRuntime): Promise<{ ok: boolean; item
   }
 }
 
+/** 本地日界：'YYYY-MM-DD' → 当日 00:00（nextDay=true 时为次日 00:00，含结束日）。 */
+function dayBoundaryMs(value: unknown, nextDay = false): number | undefined {
+  if (typeof value !== 'string' || value.trim() === '') return undefined
+  const parsed = new Date(`${value.trim()}T00:00:00`)
+  if (Number.isNaN(parsed.getTime())) return undefined
+  const ms = parsed.getTime()
+  return nextDay ? ms + 24 * 60 * 60 * 1000 : ms
+}
+
 /**
- * content-search: session-grouped hits from the independent index.
- * `sortBy: 'time'` orders by session recency (`updatedAt`), anything else by
- * relevance; the host orders before truncating so the page is honest.
+ * content-search: session-grouped hits from DRS (hard dependency).
+ * 检索语义（会话分组/类型加权/表面与归档日期过滤/锚定节选）全部在
+ * dsh-reference-session-collector 投影库侧完成；DRS 不可达 → 显式报错，
+ * **不回退本地索引**（本地引擎只剩会话头元数据面）。
  */
 async function contentSearch(
   runtime: SwitchRuntime,
   payload: unknown,
+  requestHost = '',
 ): Promise<{ ok: boolean; items?: unknown[]; error?: string }> {
-  const record = payload as { query?: unknown; limit?: unknown; types?: unknown; sortBy?: unknown } | null
+  const record = payload as { query?: unknown; limit?: unknown; types?: unknown; sortBy?: unknown; archived?: unknown; expand?: unknown; from?: unknown; to?: unknown } | null
   const query = typeof record?.query === 'string' ? record.query.trim() : ''
   if (query === '') return { ok: false, error: '缺少 query' }
+  // 检索域 chip（全部/活跃/归档）；未知值回退 'all'，新旧客户端互相兼容。
+  const archived: 'active' | 'archived' | 'all'
+    = record?.archived === 'active' ? 'active'
+    : record?.archived === 'archived' ? 'archived'
+    : 'all'
+  // 日期范围（R6）:本地日界,结束日含当天;无效值静默忽略（新旧客户端兼容）。
+  const fromMs = dayBoundaryMs(record?.from)
+  const toMs = record?.to === undefined ? undefined : dayBoundaryMs(record?.to, true)
   const requestedLimit = typeof record?.limit === 'number' && Number.isSafeInteger(record.limit)
     ? record.limit
     : DEFAULT_LIMIT
   const limit = Math.min(Math.max(1, requestedLimit), 100)
-  // Unknown or absent ordering degrades to relevance — never to an error, so an
-  // old client half talking to a new host half keeps working.
+  // Unknown or absent ordering degrades to relevance — never to an error.
   const sortBy: SwitchSearchSort = record?.sortBy === 'time' ? 'time' : 'relevance'
   let types: readonly SwitchIndexContentType[]
   if (Array.isArray(record?.types) && record.types.length > 0) {
@@ -377,36 +409,46 @@ async function contentSearch(
   } else {
     types = ['user', 'reply']
   }
-  const index = runtime.index
-  if (index.engine.isOpen === false) {
-    return { ok: false, error: '独立索引未就绪：请在面板或设置中先建立索引（整理索引）' }
-  }
+  const kinds = resolveTypes(types)
   try {
-    return {
-      ok: true,
-      items: index.engine.search({ query, types, limit, sortBy }),
-    }
+    const items = await runtime.drsSource.searchGrouped({
+      query,
+      kinds,
+      archived,
+      sortBy,
+      limit,
+      // 命中展开（面板「分开显示」开关）：同会话多命中各自成行；非 true 缺省聚合。
+      ...(record?.expand === true ? { expand: true } : {}),
+      ...(requestHost === '' ? {} : { atHost: requestHost }),
+      ...(fromMs === undefined ? {} : { from: fromMs }),
+      ...(toMs === undefined ? {} : { to: toMs }),
+    })
+    return { ok: true, items }
   } catch (err) {
-    return { ok: false, error: String(err instanceof Error ? err.message : err) }
+    return {
+      ok: false,
+      error: `dsh-reference-session-collector 搜索面不可用（硬依赖）：${String(err instanceof Error ? err.message : err)}`,
+    }
   }
 }
 
-/** search-status: probe the independent index readiness and progress. */
-async function searchStatus(runtime: SwitchRuntime): Promise<unknown> {
+/** search-status: 可用性由 DRS 探针裁决（硬依赖）；本地引擎只剩头元数据面。 */
+async function searchStatus(runtime: SwitchRuntime, requestHost = ''): Promise<unknown> {
   const index = runtime.index
   const sync = index.sync.snapshot()
+  const drsUp = await runtime.drsSource.probe(requestHost)
   return {
     ok: true,
-    available: index.engine.isOpen && index.engine.countSessions() > 0,
-    reason: index.engine.isOpen ? undefined : 'not-open',
+    available: drsUp,
+    reason: drsUp ? undefined : 'drs-unavailable',
     indexing: sync.state === 'syncing',
     archivedSessions: index.engine.countArchived(),
     archive: index.archiveReader.diagnostics(),
     sync,
     rebuild: index.rebuild,
+    deepSync: index.deepSync,
   }
 }
-
 /** index-status: full lifecycle surface for the settings row. */
 async function indexStatus(runtime: SwitchRuntime): Promise<unknown> {
   const index = runtime.index
@@ -426,6 +468,7 @@ async function indexStatus(runtime: SwitchRuntime): Promise<unknown> {
     archives: await listArchives(index.layout).catch(() => []),
     sync: { ...sync, indexed } satisfies SwitchSyncState,
     rebuild: index.rebuild,
+    deepSync: index.deepSync,
   }
 }
 
@@ -475,6 +518,62 @@ async function indexRebuild(runtime: SwitchRuntime): Promise<{ ok: boolean; star
     }
   })
   index.rebuild = { state: 'building', done: 0, total: 0, startedAt: Date.now(), finishedAt: 0, failures: [] }
+  return { ok: true, started: true }
+}
+
+/**
+ * index-deep-sync：**深度同步**按钮的后端。
+ * 1) 触发 DRS 后台慢速同步（POST `?op=sync`），轮询 op=status 直到 DRS 落定：
+ *    新 DRS 看 `syncing`（真实在跑旗标）；旧 DRS 无该字段时退回 `last_sync.busy`；
+ * 2) 再跑本地索引的非破坏性重建（整理），让标题/头部面跟上最新语料。
+ * 全程后台执行，进度经 index-status 的 deepSync 面暴露；并发调用直接拒绝。
+ * @param runtime - 运行时依赖。
+ * @param requestHost - 调用方 Host（同源直连 DRS，端口动态分配）。
+ */
+async function indexDeepSync(
+  runtime: SwitchRuntime,
+  requestHost = '',
+): Promise<{ ok: boolean; started?: boolean; error?: string }> {
+  const index = runtime.index
+  if (index.deepSync.state === 'drs-syncing' || index.deepSync.state === 'rebuilding') {
+    return { ok: false, error: '深度同步已在进行中' }
+  }
+  const sleepMs = (ms: number): Promise<void> => new Promise((resolve) => { setTimeout(resolve, ms) })
+  index.deepSync = { state: 'drs-syncing', startedAt: Date.now() }
+  void (async () => {
+    try {
+      const trigger = await runtime.drsSource.triggerSync(requestHost)
+      if (!trigger.ok) throw new Error(`触发 DRS 同步失败：${trigger.error ?? 'unknown'}`)
+      const deadline = Date.now() + 180_000
+      // 触发即回的契约下 DRS 可能 2s 内就扫完（71 会话实测 ~20ms）：至少轮询一轮，
+      // 新 DRS 以 syncing===true 判在跑，旧 DRS 无该字段时退回 last_sync.busy===false。
+      let settled = false
+      while (Date.now() < deadline) {
+        await sleepMs(2000)
+        const detail = await runtime.drsSource.statusDetail(requestHost)
+        const syncing = detail?.['syncing']
+        if (typeof syncing === 'boolean') {
+          settled = !syncing
+        } else {
+          const lastSync = detail?.['last_sync'] as { busy?: unknown } | undefined
+          settled = lastSync !== undefined && lastSync.busy === false
+        }
+        if (settled) break
+      }
+      index.deepSync = { state: 'rebuilding', startedAt: index.deepSync.startedAt }
+      const started = await indexRebuild(runtime)
+      if (!started.ok) throw new Error(started.error ?? '本地索引重建未能启动')
+      while (index.rebuild.state === 'building' || index.rebuild.state === 'swapping') await sleepMs(1500)
+      index.deepSync = { state: 'done', startedAt: index.deepSync.startedAt, finishedAt: Date.now(), drsSettled: settled }
+    } catch (err) {
+      index.deepSync = {
+        state: 'failed',
+        startedAt: index.deepSync.startedAt,
+        finishedAt: Date.now(),
+        error: String(err instanceof Error ? err.message : err),
+      }
+    }
+  })()
   return { ok: true, started: true }
 }
 
@@ -554,6 +653,8 @@ export interface SwitchIndexServiceState {
   rebuild: SwitchRebuildState
   /** Official archive-set reader (registry first, storage-hub file fallback). */
   archiveReader: ReturnType<typeof createArchiveSource>
+  /** 深度同步（DRS 慢速重建 → 本地索引重建）的可见状态；`drsSettled` 记 DRS 是否在 180s 内落定。 */
+  deepSync: { state: 'idle' | 'drs-syncing' | 'rebuilding' | 'done' | 'failed'; startedAt?: number; finishedAt?: number; error?: string; drsSettled?: boolean }
 }
 
 /**
@@ -565,6 +666,8 @@ export interface SwitchIndexServiceState {
 interface SwitchRuntime {
   sessionQuery: SwitchSessionQuery | undefined
   index: SwitchIndexServiceState
+  /** DRS 直连客户端（T7.3 硬依赖：内容分组检索唯一来源 + 可用性探针）。 */
+  drsSource: DrsCorpusSource
   config: () => SwitchSearchConfig
   /** Lazy official archive-set source (registry first, file fallback). */
   registry: () => { archivedSessionIds: readonly string[] }
@@ -581,14 +684,30 @@ interface SwitchRuntime {
 export function apply(ctx: Context, entry: Partial<SwitchSearchConfig> = {}): void {
   // 0.1.7：volatile 字段每次读取解引出最新快照（开关/同步间隔即时生效），
   // 不再有任何 settings 注册调用。
-  const current = (): SwitchSearchConfig => ({
-    enabled: readVolatileValue(entry.enabled) ?? DEFAULT_CONFIG.enabled,
-    defaultMode: readVolatileValue(entry.defaultMode) ?? DEFAULT_CONFIG.defaultMode,
-    autoSync: readVolatileValue(entry.autoSync) ?? DEFAULT_CONFIG.autoSync,
-    syncIntervalMs: readVolatileValue(entry.syncIntervalMs) ?? DEFAULT_CONFIG.syncIntervalMs,
-    archiveKeep: readVolatileValue(entry.archiveKeep) ?? DEFAULT_CONFIG.archiveKeep,
-    indexDir: readVolatileValue(entry.indexDir) ?? DEFAULT_CONFIG.indexDir,
-  })
+  const current = (): SwitchSearchConfig => {
+    const { search } = bridgeOverlay(settingsBridge)
+    const bool = (key: string, v: boolean): boolean => (typeof search[key] === 'boolean' ? (search[key] as boolean) : v)
+    const num = (key: string, v: number): number =>
+      typeof search[key] === 'number' && Number.isFinite(search[key] as number) ? (search[key] as number) : v
+    const str = (key: string, v: string): string => (typeof search[key] === 'string' ? (search[key] as string) : v)
+    const mode = (v: 'title' | 'content'): 'title' | 'content' =>
+      search['defaultMode'] === 'title' || search['defaultMode'] === 'content' ? (search['defaultMode'] as 'title' | 'content') : v
+    const corpus = (v: 'native' | 'drs'): 'native' | 'drs' =>
+      search['corpusSource'] === 'native' || search['corpusSource'] === 'drs' ? (search['corpusSource'] as 'native' | 'drs') : v
+    return {
+      enabled: bool('enabled', readVolatileValue(entry.enabled) ?? DEFAULT_CONFIG.enabled),
+      defaultMode: mode(readVolatileValue(entry.defaultMode) ?? DEFAULT_CONFIG.defaultMode),
+      autoSync: bool('autoSync', readVolatileValue(entry.autoSync) ?? DEFAULT_CONFIG.autoSync),
+      syncIntervalMs: num('syncIntervalMs', readVolatileValue(entry.syncIntervalMs) ?? DEFAULT_CONFIG.syncIntervalMs),
+      archiveKeep: num('archiveKeep', readVolatileValue(entry.archiveKeep) ?? DEFAULT_CONFIG.archiveKeep),
+      indexDir: str('indexDir', readVolatileValue(entry.indexDir) ?? DEFAULT_CONFIG.indexDir),
+      corpusSource: corpus(readVolatileValue(entry.corpusSource) ?? DEFAULT_CONFIG.corpusSource),
+      drsBaseUrl: str('drsBaseUrl', readVolatileValue(entry.drsBaseUrl) ?? DEFAULT_CONFIG.drsBaseUrl),
+    }
+  }
+
+  // Legacy 设置桥（≤0.1.5）：同步建 holder，桥面在 ctx.inject(['settings']) 回调里咬合。
+  const settingsBridge: BridgeState = installLegacySettingsBridge(ctx)
 
   // Independent index lifecycle: open the engine, run an initial watermark
   // sync, and keep polling. All of it is background work; HTTP stays instant.
@@ -606,6 +725,33 @@ export function apply(ctx: Context, entry: Partial<SwitchSearchConfig> = {}): vo
     } catch { /* logging must never break the host */ }
   }
   const archiveReader = createArchiveSource(() => ctx.get('workspaceRegistry'))
+
+  // 投影缓存标题第三源：官方逐会话缓存文件 record.rows.title.val（读不到/畸形一律空串）。
+  const readProjectionTitle = (sessionId: string): string => {
+    try {
+      const path = join(process.env['DSH_HOME'] ?? join(homedir(), '.dsh'), 'storages', 'session_projcache', 'sessions', `${sessionId}.json`)
+      if (!existsSync(path)) return ''
+      const parsed = JSON.parse(readFileSync(path, 'utf8')) as {
+        record?: { rows?: { title?: { val?: unknown } } }
+      }
+      const value = parsed.record?.rows?.title?.val
+      return typeof value === 'string' ? value : ''
+    } catch {
+      return ''
+    }
+  }
+
+  const trustedRuntime: SwitchWebRuntime = ctx.webStartup ?? ctx.webRuntime!
+
+  // DRS 语料源（T7.1/T7.3 硬依赖）：corpusSource='drs' 时索引语料改从
+  // dsh-reference-session-collector 投影库取；Host 头回显首个 trustedHosts 条目
+  // （DRS 信任门是精确匹配，条目省略端口时 URL 带端口会失配）。
+  const trustedHosts = trustedRuntime.trustedHosts
+  const drsSource = new DrsCorpusSource({
+    baseUrl: resolveDrsBaseUrl(config.drsBaseUrl, trustedHosts),
+    hostHeader: trustedHosts !== undefined && trustedHosts.length > 0 ? trustedHosts[0] : undefined,
+    log,
+  })
   const state: SwitchIndexServiceState = {
     engine,
     archiveReader,
@@ -618,13 +764,15 @@ export function apply(ctx: Context, entry: Partial<SwitchSearchConfig> = {}): vo
       readTitleSnapshots: sessionQuery === undefined
         ? undefined
         : (ids) => sessionQuery.readTitleSnapshots(ids),
-    }, () => ({ archivedSessionIds: archiveReader.read().ids }), log),
+    }, () => ({ archivedSessionIds: archiveReader.read().ids }), log, undefined, readProjectionTitle, config.corpusSource === 'native' ? undefined : drsSource),
     layout,
     rebuild: { state: 'idle', done: 0, total: 0, startedAt: 0, finishedAt: 0, failures: [] },
+    deepSync: { state: 'idle' },
   }
   const runtime: SwitchRuntime = {
     sessionQuery,
     index: state,
+    drsSource,
     config: () => current(),
     registry: () => ({ archivedSessionIds: archiveReader.read().ids }),
     log,
@@ -632,8 +780,6 @@ export function apply(ctx: Context, entry: Partial<SwitchSearchConfig> = {}): vo
 
   // 双名回退链：0.2.1-a.2 起宿主服务 webRuntime 更名 webStartup；注入主名
   // webStartup 在新代必有，旧代（≤0.2.0）回退 webRuntime，两代通吃。
-  const trustedRuntime: SwitchWebRuntime = ctx.webStartup ?? ctx.webRuntime!
-
   let syncTimer: ReturnType<typeof setInterval> | undefined
   const scheduleSync = (intervalMs: number): void => {
     if (syncTimer !== undefined) clearInterval(syncTimer)
@@ -725,6 +871,31 @@ export function apply(ctx: Context, entry: Partial<SwitchSearchConfig> = {}): vo
         return
       }
       try {
+        // 设置桥方法不受子域闸管——关掉 enabled 后仍必须能读配置。
+        if (method === 'settings-describe') {
+          if (settingsBridge.bridge !== undefined) {
+            writeJson(res, 200, settingsDescribe(settingsBridge))
+            return
+          }
+          // modern 宿主（0.1.7+，无 legacy settings 服务）：按命名空间只读投影。
+          writeJson(res, 200, {
+            ok: true,
+            namespaces: { 'switch-search': { ...current() } },
+            writable: false,
+            revision: settingsBridge.revision,
+          })
+          return
+        }
+        if (method === 'settings-mutate') {
+          const payload = await readJsonBody(req)
+          writeJson(res, 200, await settingsMutate(settingsBridge, payload))
+          return
+        }
+        // 子域闸：enabled=false 时其余方法显式拒绝（不留空壳）。
+        if (current().enabled === false) {
+          writeJson(res, 200, { ok: false, error: `子域已关闭（enabled=false）：${method} 未注册` })
+          return
+        }
         if (method === 'index-export') {
           await indexExport(runtime, res)
           return
@@ -741,15 +912,23 @@ export function apply(ctx: Context, entry: Partial<SwitchSearchConfig> = {}): vo
           return
         }
         if (method === 'content-search') {
-          writeJson(res, 200, await contentSearch(runtime, payload))
+          // 同源转发臂：DSR 由宿主进程自身提供（/api/dsh-reference-session-collector），
+          // 端口是动态分配的——必须把调用方 Host 透传下去，否则会落到 8080 缺省口。
+          writeJson(res, 200, await contentSearch(runtime, payload, String(req.headers.host ?? '')))
           return
         }
         if (method === 'search-status' || method === 'index-status') {
-          writeJson(res, 200, method === 'search-status' ? await searchStatus(runtime) : await indexStatus(runtime))
+          const host = String(req.headers.host ?? '')
+          writeJson(res, 200, method === 'search-status' ? await searchStatus(runtime, host) : await indexStatus(runtime))
           return
         }
         if (method === 'index-rebuild') {
           writeJson(res, 200, await indexRebuild(runtime))
+          return
+        }
+        if (method === 'index-deep-sync') {
+          // 深度同步：先让 DRS 慢扫修好自己的投影库，再把本地索引整理一遍（同源 Host 透传）。
+          writeJson(res, 200, await indexDeepSync(runtime, String(req.headers.host ?? '')))
           return
         }
         if (method === 'list-archived' || method === 'archive-prune') {

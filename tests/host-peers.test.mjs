@@ -28,7 +28,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
-import { STEWARD_PACKAGE, detectSteward, probePeer } from '../src/host/peers.ts'
+import { STEWARD_PACKAGE, detectSteward, probePeer } from '../src/host/index/peers.ts'
 
 const STATES = new Set(['installed', 'missing', 'unknown'])
 

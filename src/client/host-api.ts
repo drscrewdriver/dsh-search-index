@@ -65,6 +65,11 @@ export interface HostSessionItem {
   title: string
   cwd: string
   updatedAt: number
+  /**
+   * 归档标记（R1 合表语义）。旧宿主半缺省该字段时按 undefined 处理——
+   * 归档筛选 chip 对 undefined 行按「活跃」对待，与旧数据形状兼容。
+   */
+  archived?: boolean
 }
 
 /**
@@ -117,9 +122,50 @@ export interface HostIndexStatus {
    * older host half — treated as `unknown`, which renders the neutral hint.
    */
   steward?: 'installed' | 'missing' | 'unknown'
+  /**
+   * 直接删除入口开关（功能①，管家 session-steward.directDelete）：true 时
+   * 面板结果行渲染行内删除按钮。旧宿主半无此字段 = undefined = 不渲染。
+   */
+  directDelete?: boolean
   sync?: HostSyncState
   rebuild?: HostRebuildState
+  /** 深度同步（DRS 慢速重建 → 本地索引重建）的可见状态。 */
+  deepSync?: { state: 'idle' | 'drs-syncing' | 'rebuilding' | 'done' | 'failed'; startedAt?: number; finishedAt?: number; error?: string }
   error?: string
+}
+
+/**
+ * POST to the STEWARD fenced route (`/session-steward/api`) — the batch
+ * management console (archive / unarchive / purge) rides the steward subdomain,
+ * per the merged package's route contract (session-* methods stay there).
+ */
+export function callSteward<T>(method: string, body: unknown, timeout = FETCH_TIMEOUT): Promise<Partial<T> & { ok: boolean; error?: string }> {
+  const controller = typeof AbortController === 'undefined' ? undefined : new AbortController()
+  const timer = typeof setTimeout === 'function'
+    ? setTimeout(() => { controller?.abort() }, timeout)
+    : undefined
+  return fetch(`/manage-session/api/${method}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+    signal: controller?.signal,
+  })
+    .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
+    .catch((err: unknown) => ({
+      ok: false,
+      error: err instanceof DOMException && err.name === 'AbortError' ? '请求超时' : String(err instanceof Error ? err.message : err),
+    }))
+    .finally(() => {
+      if (timer !== undefined) clearTimeout(timer)
+    })
+}
+
+/**
+ * 深度同步：让 DRS 慢速重扫修好自己的投影库，再把本地索引整理一遍。
+ * 后台执行，进度看 index-status 的 deepSync 面。
+ */
+export async function deepSyncIndex(): Promise<{ ok: boolean; started?: boolean; error?: string }> {
+  return await callHostAny<{ started?: boolean }>('index-deep-sync', {}) as { ok: boolean; started?: boolean; error?: string }
 }
 
 /** Trigger a browser download of the index snapshot from the host route. */

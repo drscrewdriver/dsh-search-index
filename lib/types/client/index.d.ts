@@ -1,88 +1,30 @@
-import type { Context } from 'cordis';
-import { type SwitchSearchConfig } from '../config.ts';
-import { type SwitchSessionsService, type SwitchUiWorkspaceService } from './host-api.ts';
-import { NS, translate } from './locales.ts';
-/** ------------------------------------------------------------------ types */
-/** The client slots service face (structural subset used here). */
-interface SwitchSlotsService {
-    inject(key: string, callback: () => () => void, label?: string): () => void;
-    register(options: {
-        name: string;
-        id?: string;
-        key?: string;
-        order?: number;
-        store?: unknown;
-        locale?: string;
-        label?: string | (() => string);
-        inject?: (actions: unknown) => unknown;
-    }, component: unknown): () => void;
-}
 /**
- * The client sessions service face: open a session from a search result.
- * Defined in `host-api.ts` (shared with `openSessionThrough`); re-imported as
- * a type here for the cordis Context augmentation below.
- */
-/** The client settings-scope service face (structural subset). */
-interface SwitchSettingsScope<C> {
-    bind(spec: {
-        namespace: string;
-    }): SwitchScopeLike<C>;
-}
-interface SwitchScopeLike<T> {
-    getSnapshot(): {
-        status: 'loading' | 'ready' | 'unavailable';
-        value: T | undefined;
-        revision: number | undefined;
-        writable: boolean;
-    };
-    subscribe(listener: () => void): () => void;
-    set(field: string, value: unknown): Promise<void>;
-}
-/**
- * The client locale service face (structural mirror; the plugin must not
- * value- or type-import a single release of the official locale package).
- */
-interface SwitchLocaleService {
-    register(ns: string, dicts: Partial<Record<string, Record<string, string>>>): () => void;
-    register(ns: string, localeId: string, dicts: Record<string, string>): () => void;
-    /**
-     * Read-time translator bound to a namespace (host `dsh-client-locale`).
-     * Needed for slot `label` thunks, which the owner re-reads per render so the
-     * tab text follows locale switches without re-registration. Optional: older
-     * hosts may expose `register` only, hence the guarded call site.
-     */
-    bind?(ns: string): (key: string, params?: Record<string, unknown>) => string;
-}
-declare module 'cordis' {
-    interface Context {
-        slots: SwitchSlotsService;
-        sessions?: SwitchSessionsService;
-        uiWorkspace?: SwitchUiWorkspaceService;
-        settingsScope?: SwitchSettingsScope<SwitchSearchConfig>;
-        locale?: SwitchLocaleService;
-    }
-}
-/** ------------------------------------------------------------------ plugin */
-/**
- * Sibling-tab seat (`settings.plugins.tab`). **Deliberately NOT registered.**
+ * dsh-search-index 客户端半身：入口双形态 + 设置卡 + 字典/样式。
  *
- * Kept as a named constant because it is the seat this plugin used to also
- * occupy — registering both is what made the card appear twice (once next to
- * 「插件配置」 and once under it). 0.1.7 removed the child seat entirely; the
- * settings form is generated from the host half's `.volatile()` Config fields.
+ * **017 分代**（用户定标）：
+ * - 宿主声明了 `sidebar.workspaces.session.menu.item`（0.1.7 线实证存在，0.1.5 线没有）
+ *   且 `main` 席位在场 → 走「官方插件页式」：`sidebar.panellist` 行（order 5，落在
+ *   「插件」0 之后、「会话管理」6 之前）+ `main` 整页（key = `dsh-search-index`），
+ *   点行 / `Ctrl+K` → `layout.selectPanel`；
+ * - 否则（< 0.1.7）→ 原样弹窗：`sidebar.footer.action` 入口（order 5）+ `SwitchPanel`
+ *   dialog 形态；`Ctrl+K` 由入口组件自己绑定。
+ *
+ * 两形态互斥：席位探测用 `inject`（声明即回调），接线期不 sync，就绪后一次性决定；
+ * 席位后到时就地撤掉另一形态。`enabled=false` 时整对注销。
  */
-export declare const SETTINGS_SIBLING_SEAT = "settings.plugins.tab";
-/** Services required before mounting: the slot registry + locale (the family
- * tab label captures the translator eagerly — a lazy `ctx.locale` access inside
- * the label thunk would be evaluated by the FAMILY HOLDER's render and throw
- * `cannot get property "locale" without inject` there, killing the whole tab
- * ledger projection). */
+import type { Context } from 'cordis';
+import { NS, translate, type LocaleKey } from './locales.ts';
+export { NS as SWITCH_SEARCH_LOCALE_NAMESPACE, translate };
+export type { LocaleKey };
+/** 客户端插件声明的注入面。 */
 export declare const inject: string[];
+/** 底栏入口的 props（宿主给的结构子集）。 */
+export interface SwitchFooterProps {
+    wide?: boolean;
+}
 /**
- * Client plugin body: dictionaries, the plugin settings card, and the
- * (disabled upstream) footer search panel entry.
- * @param ctx - client plugin context (slots, optional locale/settingsScope/sessions).
+ * 客户端插件主体。
+ * @param ctx - 客户端上下文（slots、可选 locale / configForms / layout / conversation）。
  */
 export declare function apply(ctx: Context): void;
-export { NS as SWITCH_SEARCH_LOCALE_NAMESPACE, translate };
 //# sourceMappingURL=index.d.ts.map

@@ -176,7 +176,8 @@ function IndexBlock(props: { t?: SearchSettingsCardProps['t'] }): JSX.Element {
           setFetchError(res.error ?? 'index-status 请求失败')
         }
         const rebuilding = res.rebuild?.state === 'building' || res.rebuild?.state === 'swapping'
-        if (rebuilding) timer = window.setTimeout(refresh, 2000)
+        const deep = res.deepSync?.state
+        if (rebuilding || deep === 'drs-syncing' || deep === 'rebuilding') timer = window.setTimeout(refresh, 2000)
         else setBusy(false)
       })
     }
@@ -318,6 +319,13 @@ function IndexBlock(props: { t?: SearchSettingsCardProps['t'] }): JSX.Element {
         }, translate(t, 'panel.archived', { count: status?.archivedSessions ?? 0 })),
       ]),
       createElement('span', { key: 'd', className: 'dsws_setDesc' }, statusLine),
+      // DRS 可用性（硬依赖）：内容检索的唯一来源；不可用时给出原因，不让人猜。
+      createElement('span', { key: 'drs', className: 'dsws_setDesc' },
+        status === null
+          ? translate(t, 'card.drsStatus.reading')
+          : status.available === true
+            ? translate(t, 'card.drsStatus.up')
+            : translate(t, 'card.drsStatus.down', { reason: status.reason ?? 'drs-unavailable' })),
       // The archived count points at a capability this plugin does not own.
       // Left bare it read as a broken feature: "there are 72 archived sessions,
       // where do I manage them?" The wording follows the host's probe — telling
@@ -345,6 +353,29 @@ function IndexBlock(props: { t?: SearchSettingsCardProps['t'] }): JSX.Element {
         disabled: blocking,
         onClick: onRebuild,
       }, rebuilding ? translate(t, 'card.index.rebuilding.btn') : translate(t, 'card.index.rebuild')),
+      createElement('button', {
+        key: 'deepSync',
+        type: 'button',
+        className: 'dsws_actBtn',
+        disabled: blocking || status?.deepSync?.state === 'drs-syncing' || status?.deepSync?.state === 'rebuilding',
+        title: translate(t, 'card.deepSync.hint'),
+        onClick: () => {
+          setBusy(true)
+          setNote(null)
+          void callHostAny('index-deep-sync', {}).then((res) => {
+            if (!res.ok) {
+              setBusy(false)
+              setNote(res.error ?? translate(t, 'card.action.failed', { error: 'unknown' }))
+              return
+            }
+            setAttempt(a => a + 1)
+          })
+        },
+      }, status?.deepSync?.state === 'drs-syncing'
+        ? translate(t, 'card.deepSync.drs')
+        : status?.deepSync?.state === 'rebuilding'
+          ? translate(t, 'card.deepSync.rebuilding')
+          : translate(t, 'card.deepSync.btn')),
       createElement('button', {
         key: 'export',
         type: 'button',
@@ -548,6 +579,37 @@ function createCardBody(props: {
         onChange: (e: { target: { value: string } }) => {
           const count = Number(e.target.value)
           if (Number.isFinite(count) && count >= 0) void scope.set('archiveKeep', Math.round(count))
+        },
+      }),
+    }),
+    createElement(Row, {
+      key: 'corpus',
+      title: translate(t, 'card.corpusSource'),
+      desc: translate(t, 'card.corpusSource.desc'),
+      control: createElement('div', { className: 'dsws_seg', role: 'group' },
+        (['drs', 'native'] as const).map(source => createElement('button', {
+          key: source,
+          type: 'button',
+          className: `dsws_segBtn${(value.corpusSource ?? 'drs') === source ? ' dsws_segBtnActive' : ''}`,
+          'aria-pressed': (value.corpusSource ?? 'drs') === source,
+          disabled: !writable,
+          onClick: () => { void scope.set('corpusSource', source) },
+        }, source === 'drs' ? translate(t, 'card.mode.drs') : translate(t, 'card.mode.native')))),
+    }),
+    createElement(Row, {
+      key: 'drsBaseUrl',
+      title: translate(t, 'card.drsBaseUrl'),
+      desc: translate(t, 'card.drsBaseUrl.desc'),
+      control: createElement('input', {
+        type: 'text',
+        disabled: !writable,
+        defaultValue: value.drsBaseUrl ?? '',
+        placeholder: 'http://127.0.0.1:8080',
+        style: { width: '220px', boxSizing: 'border-box' },
+        className: 'dsws_search',
+        onBlur: (e: { target: { value: string } }) => { void scope.set('drsBaseUrl', e.target.value) },
+        onKeyDown: (e: { key: string; currentTarget: { blur: () => void } }) => {
+          if (e.key === 'Enter') e.currentTarget.blur()
         },
       }),
     }),

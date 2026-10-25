@@ -1,161 +1,133 @@
-<p align="center">
-  <strong>Session search with its own index for the DeepSeek Harness sidebar — one-click toggle between title and content, with user / reply / tool filters</strong>
-</p>
-<p align="center">
-  <a href="README.md">简体中文</a> · <strong>English</strong> · <a href="README.fr.md">Français</a> · <a href="README.de.md">Deutsch</a> · <a href="README.it.md">Italiano</a> · <a href="README.ru.md">Русский</a> · <a href="README.es.md">Español</a>
-</p>
-<p align="center">
-  <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-263146?style=flat-square"></a>
-  <img alt="Public" src="https://img.shields.io/badge/status-public-7da1de?style=flat-square">
-</p>
+# dsh-search-index (Session Search)
 
-# dsh-search-index
+A DSH plugin: **title + content full-text search over sessions**, backed by its own FTS5
+index. Content search is a **hard dependency** on `dsh-reference-session-collector` (DRS).
 
-> Sidebar **search index** for DSH web: adds a **"Search"** entry at the sidebar footer whose floating panel toggles between **title search ↔ content search**; content mode groups results **by session** (title + snippet) and filters by **user / reply / tool**. Ships its **own index** (independent of DSH's built-in full-text index) with incremental sync, a non-destructive rebuild, and snapshot export/import.
+- **Title mode** — matches session titles as you type;
+- **Content mode** — session-grouped hits (title + anchored snippet) with type filters
+  (user / reply / tool), domain (all / active / archived), date range, ordering
+  (relevance / time) and "expand hits";
+- **Hit locating** — opening a hit lands on the target line (diagnostic badges ⏳/✓/✗);
+- **Index lifecycle** — incremental watermark sync, non-destructive rebuild (shadow build +
+  atomic swap + bounded archives), deep sync (DRS slow rescan + rebuild), JSON Lines
+  snapshot export / import.
 
-> **This package owns search and the index only.** The session-history viewer (the old "archived sessions" panel) moved to **`dsh-session-steward`**. This package still **reads** the official archive set to keep archived sessions out of the index, but no longer **writes** it — the archive set has exactly one writer: the steward.
+> **DRS is a hard dependency**: grouping, type weighting, surface and archive-date filters and
+> anchored snippets are all computed inside the `dsh-reference-session-collector` projection DB.
+> When DRS is unreachable, content search fails **explicitly** and does **not** fall back to the
+> local index (the local engine only keeps session-header metadata); `search-status` answers
+> `available:false, reason:'drs-unavailable'`.
 
-A cordis client + host plugin assembled via the `dsh plugin` command and a bundle patch — no dsh source changes, no PR required.
+## Index self-healing: rebuild vs deep sync
 
-## Predecessor and this release
+The panel footer and the settings card each carry two buttons; they fix different layers:
 
-**Predecessor: `dsh-session-search-toggle`.** That version relied on `defineStore` from `@deepseek-ai/dsh-client-runtime` to provide the settings-row seat. DSH 0.1.2 renamed and restructured the client engine packages (`dsh-client-runtime` → `dsh-client-store`), so the old code could not load on the new host — and no single artifact could serve both releases.
+| Button | What it does | What it fixes |
+|---|---|---|
+| **Rebuild index** (`index-rebuild`) | Rebuilds the local FTS index from the host `sessionQuery` (shadow build → atomic swap → bounded archives) | dirty / incomplete local index, stale titles |
+| **Deep sync (drsc)** (`index-deep-sync`) | ① `POST {op:'sync'}` makes DRS slowly rescan its projection DB, polling `last_sync.busy=false` (180 s cap); ② then runs a rebuild | **hits that fail to locate** (stale DRS projection: `seq`/`on_surface` no longer match the rendered text) |
 
-**This release (`dsh-search-index` 0.6.6) targets DSH 0.2.0–0.2.1-rc.3 as its main line** (peer `0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3`). Historical host lines are served by separate version lines: DSH 0.1.7 is served by 0.5.7 (npm dist-tag `dsh-0.1.7`, `compat/0.1.7` branch), and earlier 0.1.1/0.1.2 hosts by the legacy artifact, which is frozen. Historical background:
+Locating never reads the local index: it takes the hit's `seq`, asks DRS `op=session` for that
+row and matches `search_text` / `surface_text` against the GUI. So "clicking a hit goes nowhere"
+is only cured by deep sync — rebuilds never touch the DRS projection. Progress rides
+`index-status.deepSync` (`idle → drs-syncing → rebuilding → done | failed`). Neither button
+runs concurrently; pressing deep sync while a rebuild is running fails fast, so wait it out or
+press deep sync alone.
 
-- **One artifact, runtime-adaptive**: the same `lib/client.js` loads on both 0.1.1-rc.2 and 0.1.2-rc.1 with **no version-string branching anywhere**. The client bundle only `require`s `react` / `react-dom`, both of which sit in the shared module table of either release.
-- **Neither engine package is imported**: it imports neither `dsh-client-runtime` nor `dsh-client-store`, so that rename cannot affect it.
-- **The store seat is implemented locally**: the settings row needs a store seat (`StoreHandle` / `StoreInstance`, a contract owned by `@deepseek-ai/dsh-client-ui-slots` and identical in both releases). It used to come from `defineStore`; it is now a ~30-line local implementation that only provides `create()` → `{ actions, getSnapshot, subscribe, clearPersisted }` — no release-specific specifier.
-- **Every other contract is identical across releases**: the `settings.general.item` slot, `SettingsScope.{getSnapshot,subscribe,set,unset}`, and the three `sessionQuery` faces have the same signatures in both.
+## Entry: two forms by host generation
 
-> **▼ DSH version support**
-> | DSH version | Status | Carrier and key difference |
-> | --- | --- | --- |
-> | 0.2.0-rc.1 | ✅ | **this release 0.6.6**; peer/engines = `0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3`, zero code changes (pure-caller consumption of the slots/locale/configForms seats) |
-> | 0.2.1-rc.1 | ✅ | **this release 0.6.6**; from 0.2.1-a.2 the host renamed `webRuntime` to `webStartup` — this release injects `webStartup` with a dual-name fallback chain |
-> | 0.2.1-rc.2 | ✅ | **this release 0.6.6**; declaration-level enum addendum (all host peers npm-verified on rc.2), zero code changes |
-> | 0.2.1-rc.3 | ✅ | **this release 0.6.6**; declaration-level enum addendum (rc.3 contract plane zero breakage: gate/settings/vendor/seams/session V4 all zero diff, only three new More-menu row slots), zero code changes |
-> | 0.1.7-rc.1+ | ✅ | 0.5.7 (dist-tag `dsh-0.1.7`); configForms resolves by entry id, older hosts fall back to settingsScope bound by namespace |
-> | 0.1.1-rc.2 | ✅ (legacy artifact, frozen) | the store engine lives in `@deepseek-ai/dsh-client-runtime/client` |
-> | 0.1.2-rc.1 | ✅ (legacy artifact, frozen) | the engine was renamed to `@deepseek-ai/dsh-client-store`; this plugin imports neither |
+| Host | Form | Registration / interaction |
+|---|---|---|
+| **≥ 0.1.7** | "Plugins-page style" **full page** | `sidebar.panellist` row (id `dsh-search-index`, order 5 — after Plugins(0), before Session Manager(6)) + a `main` page with the same key; clicking the row or `Ctrl/⌘+K` → `layout.selectPanel('dsh-search-index')`; the page's Close returns to the conversation |
+| **< 0.1.7** | **sidebar dialog** (unchanged) | `sidebar.footer.action` entry (order 5) + `SwitchPanel` dialog (backdrop / Esc / `Ctrl/⌘+K`); no panellist/main |
 
-**Upgrading from the old name**: this package was renamed from `dsh-session-search-toggle`; the client registration id, the cordis patch id and the repository URL were renamed with it. GitHub keeps redirects for renamed repositories, so the old name still resolves — but switch the profile dependency to the new name rather than letting both coexist:
+**Generation signal**: the `sidebar.workspaces.session.menu.item` seat plus `main`
+(absent on 0.1.5, present from 0.1.7). The two forms are mutually exclusive: decided once when
+the seats are ready, and the other form is removed in place if a seat shows up later;
+`enabled=false` tears the pair down.
 
-```sh
-dsh plugin --profile web add github:drscrewdriver/dsh-search-index#master
-dsh plugin --profile web remove dsh-session-search-toggle
-dsh web   # restart
+<!-- hosts-sync:begin -->
+<!-- Single source: package.json engines.dsh (18-host enumeration, same as hosts.mjs) -->
+Supports DSH 0.1.0-rc.2, 0.1.0-rc.3, 0.1.0-rc.6, 0.1.0-rc.7, 0.1.0-rc.8, 0.1.1-rc.1, 0.1.1-rc.2, 0.1.2-rc.1, 0.1.5-rc.1, 0.1.5-rc.2, 0.1.5-rc.3, 0.1.7-rc.1, 0.1.7-rc.2, 0.2.0-rc.1, 0.2.0-rc.2, 0.2.1-rc.1, 0.2.1-rc.2, 0.2.1-rc.3 (enumerated peers; 9 of these rc versions have a farm-cell smoke — matrix below).
+<!-- hosts-sync:end -->
+
+## Compatibility matrix (0.7.7 measured)
+
+Each rc was installed into its farm cell (`_host-farm/cells/<rc>`), booted with `dsh web`, and probed:
+
+| Host rc | `/switch-search/api/index-status` | `settings-describe` | Entry form |
+|---|---|---|---|
+| 0.1.0-rc.8 | 200 · available:true | 200 · `writable:true` (legacy bridge) | footer dialog |
+| 0.1.1-rc.2 | 200 · available:true | 200 · `writable:true` | footer dialog |
+| 0.1.2-rc.1 | 200 · available:true | 200 · `writable:true` | footer dialog |
+| 0.1.5-rc.3 | 200 · available:true | 200 · `writable:true` | footer dialog (UI verified) |
+| 0.1.7-rc.2 | 200 · available:true | 200 · `writable:false` (read-only) | main page |
+| 0.2.0-rc.2 | 200 · available:true | 200 · `writable:false` | main page |
+| 0.2.1-rc.1 | 200 · available:true | 200 · `writable:false` | main page |
+| 0.2.1-rc.2 | 200 · available:true | 200 · `writable:false` | main page |
+| 0.2.1-rc.3 | 200 · available:true | 200 · `writable:false` | main page (UI verified, desktop) |
+
+UI was verified in a real browser at both ends: 0.1.5-rc.3 = footer "搜索 Ctrl K" + dialog
+(Esc / Ctrl+K); 0.2.1-rc.3 = `sidebar.panellist` row + full page (no backdrop).
+**Nine enumerated rc versions still have no farm cell** (0.1.0-rc.2/rc.3/rc.6/rc.7, 0.1.1-rc.1,
+0.1.5-rc.1/rc.2, 0.1.7-rc.1, 0.2.0-rc.1): allowed by the declaration only, not smoke-tested.
+Narrow the `engines.dsh` enumeration if you want the list to equal the tested set.
+
+## Install
+
+```bash
+dsh plugin --profile web add dsh-search-index
 ```
 
-The settings namespace stays `switch-search` (**storage key kept stable, no migration**), so existing configuration keeps working under the new name.
+Restart the host process afterwards. Without DRS, title search still works; content search
+reports itself unavailable.
 
-## What it does
+> **Do not install together with the merged `dsh-session-steward` (≤0.5.x, which bundles search)**:
+> both register the `/switch-search/api` prefix and a 0.1.5-line host refuses to boot
+> (`webserver: duplicate prefix route`). Upgrade path: remove `dsh-session-steward`, then install
+> `dsh-manage-session` + this plugin. Verified on the 0.1.5 line: footer entry "搜索 Ctrl K" opens
+> the dialog (Esc closes), `settings-describe` goes through the legacy bridge with `writable:true`,
+> and without DRS `search-status` answers `available:false, reason:'drs-unavailable'`.
 
-- **Title ↔ content toggle**: two ways to search from one entry — "Title" filters by session title / working-directory substring live; "Content" searches message bodies through **this plugin's own index**.
-- **Content grouped by session**: each content result is one row (session title + strongest snippet + type tag); clicking opens that session — no per-message flood.
-- **Content-type filter**: filter chips at the top of content mode — **All / User / Reply / Tool**; `Tool` opens `tool/call` and `tool/result` events into the index, so you can search tool call arguments and results directly.
-- **Result ordering**: **Relevance / Time** on the right of the same row — "Time" orders by **session last activity**, newest first; the choice persists locally across reloads. Hits carry both the document timestamp and the session clock, so a client can re-sort on its own.
-- **Realtime titles**: the host subscribes to `session/event`, so a rename (`session/title`) folds into the index immediately instead of waiting for the next sync (30s by default).
-- **Settings card**: Settings → Plugins gains a **"Search Index"** card — enable toggle, default search mode, sync/retention/index-dir knobs, and the index-lifecycle block (status, non-destructive rebuild, snapshot export/import). When it reports "N archived session(s) excluded" it also **points at the owner**: browsing and disposing of archived sessions belongs to **dsh-session-steward**, and this plugin only reads the archive set. When that plugin is absent the hint says so — the host decides by resolving it from the plugin's own module graph, and any inconclusive probe falls back to the neutral wording rather than reporting "not installed" for a package it merely could not check.
-- **Invoke key and platform-native key hints**: both the sidebar entry and the panel's key bar show the invoke chord — `⌘K` on macOS, `Ctrl K` on Windows/Linux, decided from the running system; the panel's close key is platform-native too (`esc` on macOS, `Esc` elsewhere). Detection falls back **UA-CH → `navigator.platform` → UA string**, so a privacy mode never demotes a Mac user to the Windows glyphs. The hint and the binding share one owner: the chord printed on the cap is the chord the `keydown` handler matches.
-- **Jump to session**: clicking a result opens that session, landing on the context around the hit.
+## Routes
 
-## UI preview
+Prefix `/switch-search/api`:
 
-Sidebar entry and the search panel layout:
+| Method | Purpose |
+|---|---|
+| `list-sessions` | title corpus (id + title + cwd/updatedAt; index first, sessionQuery fallback) |
+| `content-search` | content hits via DRS (`archived`/`types`/`sortBy`/`expand`/`from`/`to`) |
+| `search-status` | availability decided by the DRS probe, plus index watermark / rebuild progress |
+| `index-status` / `index-rebuild` | index lifecycle surface (`index-status` also carries `deepSync`) |
+| `index-deep-sync` | deep sync: DRS slow rescan → local rebuild (background, progress via `index-status`) |
+| `index-export` / `index-import` | snapshot export (raw JSON Lines) / import (raw body) |
+| `settings-describe` / `settings-mutate` | settings: read-only projection on 0.1.7+; writable through the legacy settings bridge on ≤0.1.5 |
 
-![sidebar search entry](assets/content-search-example.png)
-![search panel](assets/new-index.png)
+## Settings
 
-## The independent index: three mechanisms
+Namespace `switch-search`: `enabled`, `defaultMode`, `autoSync`, `syncIntervalMs`,
+`archiveKeep`, `indexDir`, `corpusSource` (default `drs`), `drsBaseUrl`.
 
-Content mode **builds its own database**; it does not depend on DSH's `session-query-sqlite` full-text index. The index lives in `src/host/`: `schema.ts` creates the tables (including its own FTS5 table `docs_fts`), `engine.ts` runs queries, and `extract.ts` pulls searchable text out of session events — including `tool/call` (tool name + arguments) and `tool/result` (result text), which is what the tool filter is built on. DSH's `sessionQuery` is used only as a **corpus reader** (`listSessions` / `readSession`), never as the search backend.
+> Since 0.7.0 the namespace returned from the merged package's `manage-sessions-search`;
+the old key is no longer read, so after upgrading `enabled` and friends fall back to their
+defaults (search on) and need adjusting once more.
 
-### 1. An independent conversation-content index
+## Boundary with dsh-manage-session
 
-The index is **this plugin's own SQLite file**, with no effect on the official index. The directory is configurable, the index can be exported/imported as a snapshot and rebuilt wholesale. On host activation it inspects the index directory: a leftover `index.building.sqlite` next to a live active index means "the last rebuild never finished" and is discarded; a leftover with no active index means "the crash hit the rename window", so the newest archive is rolled back as active.
-
-### 2. Archived — i.e. no longer usable — sessions are pruned, on a rolling update
-
-`archive-source.ts` reads `global.archivedSessionIds` from the official storage hub (`~/.dsh/storages/workspace.json`) and keeps **archived sessions out of the index**. The archive set has exactly one writer — the steward; this package only reads it.
-
-Sync is **rolling**: `SwitchWatermarkSync` in `sync.ts` keeps a `version` watermark per session and, on each pass, only diffs and re-ingests sessions that changed — never a full rebuild. The index files themselves are retained in a bounded number of copies under `archiveKeep`, with older ones aged out.
-
-### 3. Housekeeping never blocks the working index
-
-Housekeeping goes through a **shadow index**: `rebuild.ts` builds `index.building.sqlite` from scratch beside the active one, and **the active index keeps serving searches the whole time** — queries are never blocked. Once the build completes, the swap is three synchronous `rename` calls (active → archive, shadow → active), i.e. a single atomic window.
-
-That also fixes the failure semantics: **shadow present + active present = the build never finished**, so the shadow is garbage and is discarded — the active index was never at risk.
-
-## Installation
-
-```sh
-# Option 1: install directly from GitHub (recommended) — lib/ is committed, no local build
-dsh plugin --profile web add github:drscrewdriver/dsh-search-index#master
-
-# Option 2: assemble from a local path / source (see Development)
-
-# Restart dsh web — required! A running instance does not hot-load the bundle layer
-dsh web
-```
-
-After install a **"Search"** button appears at the sidebar footer; Settings → Plugins gains the **"Search Index"** card.
-
-> ⚠️ **GitHub reachability**: installing via github: requires access to github.com; if your network is restricted, set up a working proxy or mirror first, otherwise add may stall while fetching.
+- Archive set is **read-only** here; only `dsh-manage-session` writes it.
+- The inline Delete button probes
+  `POST /manage-session/api/session-health-status` → `switches.directDelete === true`,
+  then posts `session-history-purge` there; uninstalled or probe failure hides the button.
+- Opening a hit never depends on manage-session.
 
 ## Development
 
-```sh
-pnpm install            # includes the @deepseek-ai client chain + tsdown/tsc
-pnpm typecheck          # tsc --noEmit
-pnpm build              # tsc (lib/types) + tsdown (lib/index.mjs + lib/client.js)
+```bash
+pnpm install
+pnpm run typecheck
+pnpm run build
+pnpm test
 ```
-
-### Layout
-
-```
-src/
-├── index.ts            # host half (node): Config schema + installSettingsSection + routes
-├── config.ts           # pure shared config (enabled/defaultMode + namespace constant, schemastery-free for client)
-├── host/               # the independent index (host side)
-│   ├── schema.ts       # tables: docs / docs_fts(FTS5) / sessions / watermarks
-│   ├── engine.ts       # queries
-│   ├── extract.ts      # pulls searchable text from session events (incl. tool/call, tool/result)
-│   ├── sync.ts         # SwitchWatermarkSync: rolling incremental sync by version watermark
-│   ├── rebuild.ts      # shadow build + atomic swap + crash-recovery inspection
-│   ├── archive-source.ts  # reads the archive set to keep archived sessions out of the index
-│   └── snapshot.ts     # snapshot export/import
-└── client/
-    └── index.ts        # browser half: sidebar.footer.action entry + floating panel + settings.general.item row
-```
-
-- **Host half**: registers the fenced HTTP route `/switch-search/api` (`list-sessions` / `content-search` / `search-status`), with a browser-trust fence identical to the DSH `/api` gateway (loopback Host or trustedHosts; cross-site refused).
-- **Config pattern**: the host registers the `switch-search` namespace through the `settings` service with a schemastery `Config`; the client mirrors/edits it with a local store seat + `settingsScope.bind`; the shared pure module `src/config.ts` keeps schemastery out of the client bundle.
-- **Build chain**: tsdown mirrors the harness `packages/client/tsdown.client.ts` semantics (`__ModuleLoader__.load` banner, platform externals table, bundle purity gate).
-- **lib/ committed**: GitHub installs run off the committed build output (dsh does not run `prepare` on a git install); `.gitignore` does not exclude `lib/`.
-
-## Relation to the official sidebar search
-
-- The official sidebar search box lives in `sidebar.workspaces` (a single slot); an external plugin **cannot replace it**. This plugin adds a **separate entry** at the sidebar footer via `sidebar.footer.action`; the two coexist.
-- The official content search hard-codes `user/message` + `assistant/message` in apiproxy; this plugin searches its own index and opens up `tool/call` + `tool/result`, enabling tool-level search.
-
-## Compatibility and privacy
-
-- Requires DeepSeek Harness with the web profile; **no official source is modified**. The index is this plugin's own file, so whether the official `session-query-sqlite` is enabled makes no difference to this plugin.
-- Configuration lives only in the DSH settings namespace and browser panel state; it reads/upload nothing beyond session-search data.
-- Host/client contract types are declared structurally in `src/*.ts` (the npm dsh client chain is incomplete) and mirror the harness sources at build-verification time.
-
-## drscrewdriver DSH Plugin Family
-
-This project is one of the DSH plugins maintained by [drscrewdriver](https://github.com/drscrewdriver). If this one helps you, the others likely will too:
-
-| Plugin | One-liner |
-|---|---|
-| [dsh-input-traffic](https://github.com/drscrewdriver/dsh-input-traffic) | Busy-time input queue: three-tier traffic control, drag-to-reorder, session freeze |
-| [dsh-thinking-levels](https://github.com/drscrewdriver/dsh-thinking-levels) | Per-round reasoning_effort control: Auto scheduling or manual wire level |
-| [dsh-seatbelt-sandbox](https://github.com/drscrewdriver/dsh-seatbelt-sandbox) | macOS Seatbelt sandbox adapter: native libsandbox loader replacing deprecated sandbox-exec |
-| [dsh-prime-memory](https://github.com/drscrewdriver/dsh-prime-memory) | Layered distilled memory: automatic L0–L3 distillation, recall injected before each step |
-| **[dsh-search-index](https://github.com/drscrewdriver/dsh-search-index)** | Session content search sidebar: title/content toggle, type-filter by user/reply/tool |
 
 ## License
 

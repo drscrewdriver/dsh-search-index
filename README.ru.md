@@ -1,4 +1,7 @@
 <p align="center">
+
+> **Note (0.7.0)**: this translation lags behind `README.md` / `README.en.md`. The 0.7.0 changes (DRS hard dependency, 017 dual-form entry, namespace `switch-search`) are documented there.
+
   <strong>Поиск по сессиям с собственным индексом для боковой панели DeepSeek Harness — переключение между заголовком и содержимым в один клик, с фильтрами по пользователю / ответу / инструменту</strong>
 </p>
 <p align="center">

@@ -1,846 +1,311 @@
 /**
- * dsh-search-index client half.
+ * dsh-search-index 客户端半身：入口双形态 + 设置卡 + 字典/样式。
  *
- * One registration:
- * - a `sidebar.footer.action` entry (currently disabled upstream) that opens
- *   the floating title/content search panel.
+ * **017 分代**（用户定标）：
+ * - 宿主声明了 `sidebar.workspaces.session.menu.item`（0.1.7 线实证存在，0.1.5 线没有）
+ *   且 `main` 席位在场 → 走「官方插件页式」：`sidebar.panellist` 行（order 5，落在
+ *   「插件」0 之后、「会话管理」6 之前）+ `main` 整页（key = `dsh-search-index`），
+ *   点行 / `Ctrl+K` → `layout.selectPanel`；
+ * - 否则（< 0.1.7）→ 原样弹窗：`sidebar.footer.action` 入口（order 5）+ `SwitchPanel`
+ *   dialog 形态；`Ctrl+K` 由入口组件自己绑定。
  *
- * The `locale` and config services are consumed structurally: when
- * the host release lacks them the footer falls back to the bundled zh
- * dictionary and the host-composition config layer.
+ * 两形态互斥：席位探测用 `inject`（声明即回调），接线期不 sync，就绪后一次性决定；
+ * 席位后到时就地撤掉另一形态。`enabled=false` 时整对注销。
  */
-import { createElement, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactElement } from 'react'
-import { createPortal } from 'react-dom'
 import type { Context } from 'cordis'
-import { SWITCH_SEARCH_SETTINGS_NAMESPACE, type SwitchSearchConfig } from '../config.ts'
-// 0.1.7：插件族共用设置节（dsh-thinking-levels 持有并声明 `dsh-family.tab`
-// 子席位；本仓不依赖 ui-slots 类型包，席位键以运行时 children 表为准）。
-import { callHost, callHostAny, openSessionThrough, type HostContentHit, type HostIndexStatus, type HostSessionItem, type HostSortMode, type SwitchSessionsService, type SwitchUiWorkspaceService } from './host-api.ts'
+import { createElement, useSyncExternalStore, type ReactElement } from 'react'
+import type { SwitchSearchConfig } from '../config.ts'
 import { SearchSettingsCard, type SwitchCardScope } from './card.tsx'
-import { NS, de, en, es, fr, it, ru, translate, zh, type LocaleKey } from './locales.ts'
-import { LABELS, isInvokeChord } from './platform.ts'
+import { searchBridgeScope, withBridgeFallback, type BridgeScope } from './bridge-scope.ts'
+import { dictionaries, NS, translate, type LocaleKey } from './locales.ts'
+import { injectStyles, SwitchFooter, SwitchPanel } from './panel.tsx'
+import { openSessionThrough } from './host-api.ts'
+import { configureLocator } from './locate.ts'
+import { isInvokeChord, LABELS } from './platform.ts'
 
-/** ------------------------------------------------------------------ types */
+export { NS as SWITCH_SEARCH_LOCALE_NAMESPACE, translate }
+export type { LocaleKey }
 
-/** The client slots service face (structural subset used here). */
+/** 设置 scope（configForms 原生句柄 / legacy 桥的结构交集）。 */
+type SettingsScope = BridgeScope<SwitchSearchConfig> & { set(field: string, value: unknown): Promise<void> }
+
+/** 槽位服务面（结构化镜像）。 */
 interface SwitchSlotsService {
-  inject(key: string, callback: () => () => void, label?: string): () => void
-  register(options: {
-    name: string
-    id?: string
-    key?: string
-    order?: number
-    store?: unknown
-    locale?: string
-    label?: string | (() => string)
-    inject?: (actions: unknown) => unknown
-  }, component: unknown): () => void
+  inject(name: string, callback: () => unknown, label?: string): () => void
+  register(config: Record<string, unknown>, component: unknown): unknown
+  entries(name: string): Array<{ options: { id?: string; key?: string; order?: number; label?: unknown } }>
+  getVersion(name: string): number
+  subscribe(name: string, listener: () => void): () => void
 }
 
-/**
- * The client sessions service face: open a session from a search result.
- * Defined in `host-api.ts` (shared with `openSessionThrough`); re-imported as
- * a type here for the cordis Context augmentation below.
- */
-
-/** The client settings-scope service face (structural subset). */
-interface SwitchSettingsScope<C> {
-  bind(spec: { namespace: string }): SwitchScopeLike<C>
-}
-/** configForms 服务面（0.1.7：以 profile entry id 取句柄）。 */
-interface SwitchConfigForms<T> {
-  get(entryId: string): SwitchScopeLike<T>
-}
-interface SwitchScopeLike<T> {
-  getSnapshot(): {
-    status: 'loading' | 'ready' | 'unavailable'
-    value: T | undefined
-    revision: number | undefined
-    writable: boolean
-  }
-  subscribe(listener: () => void): () => void
-  set(field: string, value: unknown): Promise<void>
-}
-
-/**
- * The client locale service face (structural mirror; the plugin must not
- * value- or type-import a single release of the official locale package).
- */
+/** locale 服务面。 */
 interface SwitchLocaleService {
-  register(ns: string, dicts: Partial<Record<string, Record<string, string>>>): () => void
-  register(ns: string, localeId: string, dicts: Record<string, string>): () => void
-  /**
-   * Read-time translator bound to a namespace (host `dsh-client-locale`).
-   * Needed for slot `label` thunks, which the owner re-reads per render so the
-   * tab text follows locale switches without re-registration. Optional: older
-   * hosts may expose `register` only, hence the guarded call site.
-   */
-  bind?(ns: string): (key: string, params?: Record<string, unknown>) => string
+  register(ns: string, dicts: Record<string, Record<string, string>>): () => void
+  bind?(ns: string): (key: LocaleKey, params?: Record<string, unknown>) => string
 }
 
-/** The locale dictionary face the renderer may hand the card as `t`. */
-type CardLocale = (key: LocaleKey, params?: Record<string, unknown>) => string
-
-/** Coarse content-type filter carried to the host content-search. */
-type ContentType = 'all' | 'user' | 'reply' | 'tool'
-
-/** The coarse filter chips rendered above content results. */
-const CONTENT_TYPE_CHIPS: readonly { id: ContentType; labelKey: LocaleKey }[] = [
-  { id: 'all', labelKey: 'filter.all' },
-  { id: 'user', labelKey: 'filter.user' },
-  { id: 'reply', labelKey: 'filter.reply' },
-  { id: 'tool', labelKey: 'filter.tool' },
-]
-
-/** Result-ordering chips rendered at the right of the same filter row. */
-const SORT_CHIPS: readonly { id: HostSortMode; labelKey: LocaleKey }[] = [
-  { id: 'relevance', labelKey: 'sort.relevance' },
-  { id: 'time', labelKey: 'sort.time' },
-]
-
-/**
- * The identity of one content-search request, derived from every input that
- * changes the result set.
- *
- * This is the single owner of that identity. The effect that issues the
- * request and the render path that decides whether the stored result belongs
- * to the current inputs must both come through here: two hand-written copies
- * of the same template literal drift apart silently, and the render path then
- * falls through to its empty `loading` state for every query — results arrive,
- * parse, and are never shown.
- *
- * @param normalized - the trimmed query text.
- * @param contentType - the active content-type filter.
- * @param sortBy - the active result ordering.
- * @returns an opaque key, stable for equal inputs.
- */
-function contentRequestKey(normalized: string, contentType: ContentType, sortBy: HostSortMode): string {
-  return `${normalized}\u0000${contentType}\u0000${sortBy}`
+/** configForms 服务面（0.1.7：以 profile entry id 取句柄）。 */
+interface SwitchConfigForms {
+  get<U>(entryId: string): SettingsScope & { getSnapshot(): { value: U | undefined } }
 }
 
-/**
- * Persisted ordering preference. Unlike `lastPanelMode` this one survives a
- * page reload — an ordering is a durable preference, not a session mood.
- */
-const SORT_STORE_KEY = 'dsh-search-index.sortBy'
-
-/** Read the persisted ordering; private mode or a bad value degrades to relevance. */
-function readStoredSort(): HostSortMode {
-  try {
-    return window.localStorage.getItem(SORT_STORE_KEY) === 'time' ? 'time' : 'relevance'
-  } catch {
-    return 'relevance'
-  }
-}
-
-/** Persist the ordering; a storage failure still leaves this session working. */
-function writeStoredSort(next: HostSortMode): void {
-  try {
-    window.localStorage.setItem(SORT_STORE_KEY, next)
-  } catch {
-    // ignore: the choice applies for the rest of this session regardless
-  }
-}
-
-/**
- * Local re-sort so the page honours the chosen ordering even against an older
- * host half that ignores `sortBy` and therefore omits `updatedAt` entirely —
- * in that case the host order is left untouched rather than scrambled to NaN.
- */
-function sortHits(items: readonly HostContentHit[], sortBy: HostSortMode): HostContentHit[] {
-  if (sortBy !== 'time') return [...items]
-  if (!items.every(item => typeof item.updatedAt === 'number' && Number.isFinite(item.updatedAt))) return [...items]
-  return [...items].sort((a, b) => b.updatedAt - a.updatedAt)
-}
-
-/** The footer-action owner share (structural subset). */
-interface SwitchFooterProps {
-  wide: boolean
-}
-
-/** Last panel mode used this web session (mode memory, not persisted). */
-let lastPanelMode: 'title' | 'content' = 'title'
-
-declare module 'cordis' {
-  interface Context {
-    slots: SwitchSlotsService
-    sessions?: SwitchSessionsService
-    uiWorkspace?: SwitchUiWorkspaceService
-    settingsScope?: SwitchSettingsScope<SwitchSearchConfig>
-    locale?: SwitchLocaleService
-  }
-}
-
-/** ------------------------------------------------------------------ styles */
-
-const CSS = `
-/* 侧栏 footer 槽位公约（2026-09-26；2026-10-01 收紧行距并强制居中）：一行多
-   入口（第三方 dsh-context 等）会互相挤占 —— 宿主 .footerActions 是 nowrap
-   flex 行。这里允许容器换行，并把本插件入口钉成独占一整行（flex-basis:100%）；
-   其余入口（含第三方）自然落到后续行。justify-content:center 让行内所有入口
-   （含不占满行的）统一居中；row-gap:0 配合入口自身 32px 高度压缩纵向占位。
-   类名用 [class*=] 中段匹配：宿主是 CSS Module 哈希类名（实测形如
-   hHd-Xa_footerActions —— <hash>_<name>，哈希在前），中段跨版本稳定。 */
-[class*="footerActions"]{flex-wrap:wrap;justify-content:center;row-gap:0;height:auto;min-height:0}
-/* —— 第三方矫正：dsh-context「上下文洞察」入口（2026-10-01）——
-   .lc-ov-entry 按"独占整行"设计（width:calc(100% + 4px)、无 justify-content、
-   42px 高、不对称 padding），与本槽位公约（每个入口独占一行、行内居中、32px）
-   冲突，表现为文字靠左、纵向松散。这里按公约强制矫正；:not() 排除收起轨道的
-   36px 圆钮形态。lc-ov-* 是 dsh-context 源码硬编码类名（非构建哈希），跨版本
-   稳定（实测 0.56.1 / 0.60.0 规则一致）。 */
-.lc-ov-entry:not(.lc-ov-entry-rail){width:auto!important;flex:0 0 100%!important;min-width:0!important;justify-content:center!important;height:32px!important;margin:0!important;padding:0 10px!important}
-.lc-ov-entry-label{flex:0 1 auto!important}
-.dsws_root{box-sizing:border-box;position:relative;display:flex;align-items:center;justify-content:center;flex:0 0 100%;width:100%;min-width:0;container-type:inline-size}
-/* 收起轨道：回落自然宽度（根类的 100% 基准只属于宽栏形态），放弃收缩。 */
-.dsws_rootRail{flex:none;width:auto;container-type:normal}
-/* 高度 32px（内容 22px 行高 + 上下各 5px）：宿主默认 42px 的上下裕度在
-   多行堆叠后过于松散；左右内边距对称（10px/10px），否则整行居中时按钮内容
-   会因不对称 padding 向左偏 1px。 */
-.dsws_button{box-sizing:border-box;display:inline-flex;align-items:center;flex:0 0 auto;min-width:0;gap:8px;height:32px;border:none;border-radius:12px;background:transparent;color:var(--dsw-alias-label-primary);cursor:pointer;padding:0 10px;font-family:inherit;font-size:14px;line-height:22px;white-space:nowrap;overflow:hidden;transition:background-color 160ms ease-out,color 160ms ease-out}
-.dsws_buttonRail{flex:none;width:28px;height:28px;padding:0;gap:0;justify-content:center;border-radius:50%}
-.dsws_button:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
-.dsws_button svg{flex:none}
-.dsws_trigger{position:fixed;z-index:2147483000;left:50%;top:50%;transform:translate(-50%,-50%);width:520px;max-width:calc(100vw - 24px);max-height:min(72vh,640px);box-sizing:border-box;background:var(--dsw-specific-tip);border:1px solid var(--dsw-alias-border-l1);border-radius:12px;box-shadow:var(--dsw-shadow-lv3,0 8px 28px rgba(0,0,0,.16));overflow:hidden;display:flex;flex-direction:column;font-family:Inter,var(--dsw-font-family)}
-.dsws_toolrow{display:flex;align-items:center;gap:8px;padding:10px 10px 0}
-.dsws_mode{display:inline-flex;align-items:center;gap:2px;flex:none;background:var(--dsw-alias-interactive-bg-hover);border-radius:8px;padding:2px}
-.dsws_modeBtn{height:24px;border:none;background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer;border-radius:6px;padding:0 8px;font-size:12px;font-weight:500;line-height:20px}
-.dsws_modeBtn:hover{color:var(--dsw-alias-label-primary)}
-.dsws_modeBtnActive{background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);box-shadow:0 1px 2px rgba(0,0,0,.08)}
-.dsws_search{flex:auto;min-width:0;height:30px;box-sizing:border-box;color:var(--dsw-alias-label-primary);background:var(--dsw-alias-bg-base);border:1px solid var(--dsw-alias-border-l2);border-radius:8px;outline:none;padding:0 10px;font:inherit;font-size:13px;line-height:20px}
-.dsws_search:focus{border-color:var(--dsw-alias-state-business-primary)}
-.dsws_search::placeholder{color:var(--dsw-alias-label-caption)}
-.dsws_chips{display:flex;align-items:center;gap:6px;padding:8px 10px 0;flex:none}
-.dsws_chipGap{flex:1;min-width:0}
-.dsws_sortGroup{display:flex;align-items:center;gap:6px;flex:none}
-.dsws_chip{height:24px;box-sizing:border-box;border:1px solid var(--dsw-alias-border-l2);background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer;border-radius:999px;padding:0 10px;font-size:12px;font-weight:500;line-height:22px;white-space:nowrap}
-.dsws_chip:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
-.dsws_chipActive{background:var(--dsw-alias-state-business-primary);border-color:var(--dsw-alias-state-business-primary);color:var(--dsw-alias-label-primary)}
-.dsws_list{flex:1 1 auto;min-height:0;overflow-y:auto;margin:8px 0 0;padding:0 6px 8px;list-style:none}
-.dsws_row{box-sizing:border-box;border-radius:8px;width:100%;padding:7px 8px;cursor:pointer;text-align:left;border:none;background:transparent;color:var(--dsw-alias-label-primary);display:flex;flex-direction:column;gap:2px;min-width:0}
-.dsws_row:hover{background:var(--dsw-alias-interactive-bg-hover)}
-.dsws_rowTitle{display:flex;align-items:center;gap:8px;min-width:0}
-.dsws_titleText{flex:auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:500;line-height:18px}
-.dsws_tag{flex:none;color:var(--dsw-alias-label-caption);font-size:11px;line-height:16px;white-space:nowrap;font-variant-numeric:tabular-nums}
-.dsws_snippet{color:var(--dsw-alias-label-secondary);font-size:12px;line-height:17px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}
-.dsws_meta{color:var(--dsw-alias-label-caption);font-size:11px;line-height:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.dsws_status{color:var(--dsw-alias-label-tertiary);padding:10px 8px 8px;font-size:12px;line-height:18px}
-.dsws_error{color:var(--dsw-alias-state-error-primary);padding:8px;font-size:12px;line-height:18px}
-.dsws_empty{color:var(--dsw-alias-label-tertiary);padding:10px 8px 8px;font-size:12px;line-height:18px}
-.dsws_backdrop{position:fixed;inset:0;z-index:2147482999;background:var(--dsw-alias-bg-mask-1,rgba(0,0,0,.24));backdrop-filter:blur(var(--dsw-mask-blur,4px))}
-.dsws_setRow{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--dsw-alias-border-l2)}
-.dsws_setRow:last-child{border-bottom:none}
-.dsws_setText{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
-.dsws_setTitle{color:var(--dsw-alias-label-primary);font-size:14px;line-height:22px}
-.dsws_setDesc{color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px}
-.dsws_seg{display:inline-flex;align-items:center;gap:2px;background:var(--dsw-alias-interactive-bg-hover);border-radius:8px;padding:2px;flex:none}
-.dsws_segBtn{height:24px;border:none;background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer;border-radius:6px;padding:0 10px;font-size:12px;font-weight:500;line-height:20px}
-.dsws_segBtn:hover{color:var(--dsw-alias-label-primary)}
-.dsws_segBtn:disabled{cursor:not-allowed;opacity:.5}
-.dsws_segBtnActive{background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);box-shadow:0 1px 2px rgba(0,0,0,.08)}
-.dsws_actBtn{height:26px;box-sizing:border-box;border:1px solid var(--dsw-alias-border-l2);background:transparent;color:var(--dsw-alias-label-primary);cursor:pointer;border-radius:8px;padding:0 10px;font-size:12px;line-height:24px;white-space:nowrap}
-.dsws_actBtn:hover{background:var(--dsw-alias-interactive-bg-hover)}
-.dsws_actBtn:disabled{cursor:not-allowed;opacity:.5}
-.dsws_btnRow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.dsws_progressWrap{display:flex;flex-direction:column;gap:4px;padding:8px 10px 0}
-.dsws_progress{height:6px;border-radius:3px;background:var(--dsw-alias-interactive-bg-hover);overflow:hidden}
-.dsws_progressFill{height:100%;border-radius:3px;background:var(--dsw-alias-state-business-primary);transition:width .4s ease}
-.dsws_progressLabel{color:var(--dsw-alias-state-business-primary);font-size:12px;line-height:18px;font-weight:600;font-variant-numeric:tabular-nums}
-.dsws_panelFoot{flex:none;display:flex;align-items:center;gap:14px;padding:8px 14px;border-top:1px solid var(--dsw-alias-border-l1);color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:16px}
-.dsws_footItem{display:inline-flex;align-items:center}
-.dsws_footItem>.dsws_kbd{margin-right:5px}
-.dsws_footGap{flex:1;min-width:0}
-.dsws_buttonLabel{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.dsws_kbd{flex:none;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;min-width:18px;width:auto;height:18px;padding:0 4px;border:1px solid var(--dsw-alias-border-l2);border-radius:5px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-secondary);font-size:10px;line-height:1;white-space:nowrap;font-variant-numeric:tabular-nums}
-/*
- * The row shares its width with the session-steward entry (order 12), so at
- * narrow sidebar widths the shortcut chip, not the label, is what yields: the
- * chip is a hint repeated by the entry tooltip and the panel footer, while the
- * label is the entry's identity. Measured in Chrome: the pair needs 230px for
- * both labels plus the chip; below that the chip's 43px is what makes the
- * difference. The query is scoped to the wide form: container-type also
- * applies inline-size containment, which zeroes a flex:none rail root.
- */
-@container (max-width: 132px){.dsws_kbd{display:none}}
-.dsws_pill{flex:none;display:inline-grid;grid-template-columns:14px max-content;align-items:center;column-gap:4px;height:26px;padding:0 10px;box-sizing:border-box;border:none;border-radius:8px;font-size:12px;font-weight:500;line-height:18px;white-space:nowrap;transition:background-color 160ms ease-out,color 160ms ease-out}
-.dsws_pill .dsws_pillIcon{display:grid;place-items:center;width:14px;height:14px}
-.dsws_pill .dsws_pillLabel{display:grid;text-align:left}
-.dsws_pill .dsws_pillLabel>span{grid-area:1/1}
-.dsws_pillReady{background:var(--dsw-alias-state-success-tertiary);color:var(--dsw-alias-state-success-primary)}
-.dsws_pillWarn{background:var(--dsw-alias-state-warn-tertiary);color:var(--dsw-alias-state-warn-label)}
-.dsws_pillError{background:var(--dsw-alias-state-error-tertiary,var(--dsw-alias-state-warn-tertiary));color:var(--dsw-alias-state-error-primary,var(--dsw-alias-state-warn-label))}
-.dsws_pillNeutral{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-secondary)}
-.dsws_pillDots span{opacity:0;animation:dsws-reveal-dot 1.5s step-end infinite}
-.dsws_pillDots span:nth-child(2){animation-delay:.5s}
-.dsws_pillDots span:nth-child(3){animation-delay:1s}
-@keyframes dsws-reveal-dot{0%,32%{opacity:0}33%,100%{opacity:1}}
-@media (prefers-reduced-motion:reduce){.dsws_pillDots span{animation:none;opacity:1}}
-`
-
-/** Inject the plugin stylesheet once per activation (removed on disposal). */
-function injectStyles(): () => void {
-  if (typeof document === 'undefined') return () => {}
-  if (document.querySelector('style[data-plugin-css="dsw-session-search-toggle/styles"]') !== null) return () => {}
-  const tag = document.createElement('style')
-  tag.dataset.plugin = 'dsh-search-index'
-  tag.dataset.pluginCss = 'dsw-session-search-toggle/styles'
-  tag.textContent = CSS
-  document.head.appendChild(tag)
-  return () => {
-    if (tag.parentNode !== null) tag.parentNode.removeChild(tag)
-  }
-}
-
-/** ------------------------------------------------------------------ view */
-
-/** The floating search panel. */
-function SwitchPanel({
-  t,
-  onClose,
-  open,
-}: {
-  t?: CardLocale
-  onClose: () => void
-  open: (sessionId: string) => void
-}): ReactElement {
-  // Mode memory: the panel reopens in the mode last used in this web session
-  // (first open falls back to 'title'). Session-scoped on purpose — no
-  // persistence, the settings card's defaultMode stays the durable preference.
-  const [mode, setModeState] = useState<'title' | 'content'>(lastPanelMode)
-  const setMode = (next: 'title' | 'content'): void => {
-    lastPanelMode = next
-    setModeState(next)
-  }
-  const [query, setQuery] = useState('')
-  const [contentType, setContentType] = useState<ContentType>('all')
-  const [sortBy, setSortByState] = useState<HostSortMode>(readStoredSort)
-  const setSortBy = (next: HostSortMode): void => {
-    writeStoredSort(next)
-    setSortByState(next)
-  }
-  const [sessions, setSessions] = useState<HostSessionItem[] | null>(null)
-  const [sessionsError, setSessionsError] = useState<string | null>(null)
-  const [content, setContent] = useState<{ query: string; status: 'idle' | 'loading' | 'ready' | 'error'; items: HostContentHit[]; error?: string }>({
-    query: '',
-    status: 'idle',
-    items: [],
-  })
-  // Independent-index availability probe + rebuild progress.
-  const [searchStatus, setSearchStatus] = useState<{
-    available: boolean | null
-    reason?: string
-    rebuilding: boolean
-    done: number
-    total: number
-  }>({ available: null, rebuilding: false, done: 0, total: 0 })
-  const inputRef = useRef<HTMLInputElement | null>(null)
-  const listRef = useRef<HTMLUListElement | null>(null)
-
-  const normalized = query.trim().toLowerCase()
-
-  // Probe the independent index status on open, and keep polling while a
-  // rebuild ("整理") is in flight so the panel flips to ready on completion.
-  useEffect(() => {
-    let cancelled = false
-    let timer: number | undefined
-    const probe = (): void => {
-      callHostAny<HostIndexStatus>('index-status', {}).then((res) => {
-        if (cancelled) return
-        if (!res.ok) {
-          // Old host half without this route (browser refresh keeps the old
-          // process): show an actionable state instead of a blank panel.
-          setSearchStatus({ available: false, reason: 'unreachable', rebuilding: false, done: 0, total: 0 })
-          return
-        }
-        const status = res as HostIndexStatus
-        const rebuilding = status.rebuild?.state === 'building' || status.rebuild?.state === 'swapping'
-        setSearchStatus({
-          available: status.available ?? false,
-          reason: status.reason,
-          rebuilding,
-          done: status.rebuild?.done ?? 0,
-          total: status.rebuild?.total ?? 0,
-        })
-        if (rebuilding) timer = window.setTimeout(probe, 1500)
-      })
-    }
-    probe()
-    return () => {
-      cancelled = true
-      if (timer !== undefined) window.clearTimeout(timer)
-    }
-  }, [])
-
-  const startIndexBuild = (): void => {
-    setSearchStatus(prev => ({ ...prev, rebuilding: true }))
-    void callHostAny<HostIndexStatus>('index-rebuild', {})
-  }
-
-  // Load the title-search corpus once on open.
-  useEffect(() => {
-    if (sessions !== null) return
-    let cancelled = false
-    callHost<HostSessionItem>('list-sessions', {}).then((res) => {
-      if (cancelled) return
-      if (res.ok) { setSessions(res.items); setSessionsError(null) }
-      else setSessionsError(res.error ?? '读取会话列表失败')
-    })
-    return () => { cancelled = true }
-  }, [sessions])
-
-  // Content search debounces against the host route.
-  useEffect(() => {
-    if (mode !== 'content' || normalized === '') {
-      if (mode !== 'content') setContent({ query: normalized, status: 'idle', items: [] })
-      return
-    }
-    let cancelled = false
-    const requestType: ContentType = contentType
-    const requestKey = contentRequestKey(normalized, requestType, sortBy)
-    setContent(prev => ({ query: requestKey, status: 'loading', items: prev.query === requestKey ? prev.items : [] }))
-    const timer = window.setTimeout(() => {
-      callHost<HostContentHit>('content-search', {
-        query: normalized,
-        limit: 50,
-        types: requestType === 'all' ? undefined : [requestType],
-        sortBy,
-      }).then((res) => {
-        if (cancelled) return
-        setContent({
-          query: requestKey,
-          status: res.ok ? 'ready' : 'error',
-          items: res.ok ? sortHits(res.items, sortBy) : [],
-          error: res.ok ? undefined : (res.error ?? '搜索失败'),
-        })
-      })
-    }, 250)
-    return () => {
-      cancelled = true
-      window.clearTimeout(timer)
-    }
-  }, [mode, normalized, contentType, sortBy])
-
-  // Focus the input on open; reset mode on every open.
-  useEffect(() => {
-    inputRef.current?.focus()
-  }, [])
-
-  // Escape closes the panel.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => { if (e.key === 'Escape') onClose() }
-    document.addEventListener('keydown', onKey)
-    return () => { document.removeEventListener('keydown', onKey) }
-  }, [onClose])
-
-  // Title-mode rows: local substring filter over the corpus.
-  const titleRows = useMemo<HostSessionItem[]>(() => {
-    if (sessions === null) return []
-    if (normalized === '') return sessions
-    return sessions.filter(item =>
-      item.title.toLowerCase().includes(normalized)
-      || item.cwd.toLowerCase().includes(normalized))
-  }, [sessions, normalized])
-
-  const children: ReactElement[] = []
-  if (sessionsError !== null) {
-    children.push(createElement('div', { key: 'err', className: 'dsws_error' }, translate(t, 'panel.sessionsError', { error: sessionsError })))
-  }
-  const activeRequestKey = contentRequestKey(normalized, contentType, sortBy)
-  const activeContent = content.query === activeRequestKey ? content : { query: activeRequestKey, status: 'loading' as const, items: [] }
-  if (mode === 'title') {
-    if (sessions === null) {
-      children.push(createElement('div', { key: 'loading', className: 'dsws_status' }, translate(t, 'panel.loadingSessions')))
-    } else if (titleRows.length === 0) {
-      children.push(createElement('div', { key: 'empty', className: 'dsws_empty' }, normalized === '' ? translate(t, 'panel.noSessions') : translate(t, 'panel.noMatch')))
-    } else {
-      children.push(createElement('ul', {
-        key: 'list',
-        ref: listRef,
-        className: 'dsws_list',
-        role: 'listbox',
-        'aria-label': translate(t, 'panel.titleSearch'),
-      }, titleRows.slice(0, 200).map(item => createElement('li', { key: item.sessionId, role: 'option' }, createElement('button', {
-        type: 'button',
-        className: 'dsws_row',
-        onClick: () => { open(item.sessionId) },
-      }, [
-        createElement('span', { key: 't', className: 'dsws_rowTitle' }, [
-          createElement('span', { key: 'x', className: 'dsws_titleText' }, item.title || translate(t, 'panel.untitled')),
-          createElement('span', { key: 'tag', className: 'dsws_tag' }, fmtTime(item.updatedAt)),
-        ]),
-        item.cwd !== '' && createElement('span', { key: 'c', className: 'dsws_meta' }, item.cwd),
-      ])))))
-    }
-  } else {
-    if (searchStatus.rebuilding) {
-      const pct = searchStatus.total > 0
-        ? Math.min(100, Math.round((searchStatus.done / searchStatus.total) * 100))
-        : undefined
-      children.push(createElement('div', { key: 'rebuilding', className: 'dsws_progressWrap' }, [
-        createElement('div', { key: 'bar', className: 'dsws_progress' },
-          createElement('div', {
-            className: 'dsws_progressFill',
-            style: pct === undefined ? { width: '30%', opacity: 0.6 } : { width: `${pct}%` },
-          })),
-        createElement('span', { key: 'label', className: 'dsws_progressLabel' },
-          translate(t, 'panel.rebuilding', { done: searchStatus.done, total: searchStatus.total || '?' })),
-      ]))
-    } else if (searchStatus.available === false) {
-      children.push(createElement('div', { key: 'unavailable', className: 'dsws_error' }, [
-        createElement('div', { key: 'msg' },
-          searchStatus.reason === 'unreachable'
-            ? '索引状态不可达：Host 半可能是旧进程。请完全重启 dsh web（浏览器刷新不重载 Host）后重试。'
-            : searchStatus.reason === 'unavailable'
-              ? translate(t, 'panel.unavailable')
-              : translate(t, 'panel.notBuilt')),
-        createElement('button', {
-          key: 'build',
-          type: 'button',
-          className: 'dsws_actBtn',
-          style: { marginTop: '6px' },
-          onClick: startIndexBuild,
-        }, translate(t, 'panel.buildIndex')),
-      ]))
-    } else if (activeContent.status === 'loading') {
-      children.push(createElement('div', { key: 'loading', className: 'dsws_status' }, translate(t, 'panel.loadingContent')))
-    } else if (activeContent.status === 'error') {
-      children.push(createElement('div', { key: 'error', className: 'dsws_error' }, translate(t, 'panel.contentError', { error: activeContent.error ?? '未知错误' })))
-    } else if (activeContent.items.length === 0) {
-      children.push(createElement('div', { key: 'empty', className: 'dsws_empty' }, normalized === '' ? translate(t, 'panel.contentHint') : translate(t, 'panel.noContent')))
-    } else {
-      children.push(createElement('ul', {
-        key: 'list',
-        ref: listRef,
-        className: 'dsws_list',
-        role: 'listbox',
-        'aria-label': translate(t, 'panel.contentSearch'),
-      }, activeContent.items.slice(0, 200).map(item => createElement('li', { key: item.sessionId, role: 'option' }, createElement('button', {
-        type: 'button',
-        className: 'dsws_row',
-        onClick: () => { open(item.sessionId) },
-      }, [
-        createElement('span', { key: 't', className: 'dsws_rowTitle' }, [
-          createElement('span', { key: 'x', className: 'dsws_titleText' }, item.title || translate(t, 'panel.untitled')),
-          createElement('span', { key: 'tag', className: 'dsws_tag' }, typeLabel(t, item.type)),
-          // The session clock — the very field the 「时间」 ordering sorts by and
-          // the one the title rows already show. Ordering rows by a time the
-          // rows never display is illegible: you cannot tell what the sort did.
-          createElement('span', { key: 'time', className: 'dsws_tag' }, fmtTime(item.updatedAt)),
-        ]),
-        createElement('span', { key: 's', className: 'dsws_snippet' }, item.snippet || translate(t, 'panel.noText')),
-      ])))))
-    }
-  }
-
-  return createPortal(createElement('div', { key: 'switch-root' }, [
-    createElement('div', { key: 'backdrop', className: 'dsws_backdrop', onClick: onClose }),
-    createElement('div', { key: 'panel', className: 'dsws_trigger', role: 'dialog', 'aria-label': translate(t, 'card.title') }, [
-      createElement('div', { key: 'tools', className: 'dsws_toolrow' }, [
-        createElement('div', { key: 'mode', className: 'dsws_mode', role: 'group', 'aria-label': translate(t, 'card.defaultMode') }, [
-          createElement('button', {
-            key: 'title',
-            type: 'button',
-            className: `dsws_modeBtn${mode === 'title' ? ' dsws_modeBtnActive' : ''}`,
-            onClick: () => { setMode('title') },
-          }, translate(t, 'panel.titleSearch')),
-          createElement('button', {
-            key: 'content',
-            type: 'button',
-            className: `dsws_modeBtn${mode === 'content' ? ' dsws_modeBtnActive' : ''}`,
-            onClick: () => { setMode('content') },
-          }, translate(t, 'panel.contentSearch')),
-        ]),
-        createElement('input', {
-          key: 'search',
-          ref: inputRef,
-          className: 'dsws_search',
-          type: 'text',
-          placeholder: mode === 'title' ? translate(t, 'panel.searchTitle') : translate(t, 'panel.searchContent'),
-          value: query,
-          onChange: (e: { target: { value: string } }) => setQuery(e.target.value),
-        }),
-      ]),
-      mode === 'content' && createElement('div', { key: 'chips', className: 'dsws_chips', role: 'group', 'aria-label': translate(t, 'filter.all') }, [
-        ...CONTENT_TYPE_CHIPS.map(chip => createElement('button', {
-          key: chip.id,
-          type: 'button',
-          className: `dsws_chip${contentType === chip.id ? ' dsws_chipActive' : ''}`,
-          'aria-pressed': contentType === chip.id,
-          onClick: () => { setContentType(chip.id) },
-        }, translate(t, chip.labelKey))),
-        // Ordering sits on the same row, pushed right: it filters the same
-        // result set the type chips do, so it is not a separate toolbar.
-        createElement('span', { key: 'gap', className: 'dsws_chipGap' }),
-        createElement('span', { key: 'sort', className: 'dsws_sortGroup', role: 'group', 'aria-label': translate(t, 'sort.label') },
-          SORT_CHIPS.map(chip => createElement('button', {
-            key: chip.id,
-            type: 'button',
-            className: `dsws_chip${sortBy === chip.id ? ' dsws_chipActive' : ''}`,
-            'aria-pressed': sortBy === chip.id,
-            title: chip.id === 'time' ? translate(t, 'sort.time.hint') : translate(t, 'sort.relevance.hint'),
-            onClick: () => { setSortBy(chip.id) },
-          }, translate(t, chip.labelKey)))),
-      ]),
-      children,
-      // The key bar. It advertises only chords that are actually bound: the
-      // invoke chord (see `SwitchFooter`) and Escape (see the effect above).
-      // A key cap for a key nothing listens to is a lie the user has to
-      // discover by pressing it.
-      createElement('div', { key: 'foot', className: 'dsws_panelFoot' }, [
-        createElement('span', { key: 'invoke', className: 'dsws_footItem' }, [
-          createElement('kbd', { key: 'k', className: 'dsws_kbd' }, LABELS.invokeLabel),
-          translate(t, 'panel.footer.invoke'),
-        ]),
-        createElement('span', { key: 'gap', className: 'dsws_footGap' }),
-        createElement('span', { key: 'close', className: 'dsws_footItem' }, [
-          createElement('kbd', { key: 'k', className: 'dsws_kbd' }, LABELS.escLabel),
-          translate(t, 'panel.footer.close'),
-        ]),
-      ]),
-    ]),
-  ]), document.body)
-}
-
-/**
- * Whether the user has the sidebar entry switched on.
- *
- * The `enabled` field has existed since the card shipped, but nothing read it:
- * the switch promised "show the search entry at the bottom of the sidebar" and
- * controlled nothing at all. Reading it here is the whole fix.
- *
- * An absent or unreadable scope keeps the entry visible — a settings service we
- * cannot read is not a user asking for the feature off, and hiding the entry
- * would also hide the only way back to the panel.
- *
- * @param scope - the bound `switch-search` namespace scope, when available.
- * @returns `false` only when a readable scope says the entry is switched off.
- */
-function useEntryEnabled(scope: SwitchCardScope | undefined): boolean {
-  const snapshot = useSyncExternalStore(
-    (listener) => scope?.subscribe(listener) ?? (() => {}),
-    () => scope?.getSnapshot(),
-  )
-  return snapshot?.value?.enabled !== false
-}
-
-/** The footer entry: one icon button that opens the search panel. */
-function SwitchFooter({
-  t,
-  wide,
-  open,
-  scope,
-}: SwitchFooterProps & { t?: CardLocale; open: (sessionId: string) => void; scope?: SwitchCardScope }): ReactElement | null {
-  const [openPanel, setOpenPanel] = useState(false)
-  const enabled = useEntryEnabled(scope)
-
-  // The invoke chord. Bound here, next to the entry, so the shortcut exists
-  // exactly while the entry does: a sidebar button that the `enabled` switch
-  // hid, but a chord that still opened a panel out of nowhere, would be two
-  // answers to "is this plugin on". The match itself lives in `platform.ts`
-  // so the chord and the `⌘K`/`Ctrl K` chip cannot disagree.
-  useEffect(() => {
-    if (!enabled) return undefined
-    const onKey = (event: KeyboardEvent): void => {
-      if (!isInvokeChord(event, LABELS.isMac)) return
-      event.preventDefault()
-      setOpenPanel(true)
-    }
-    document.addEventListener('keydown', onKey)
-    return () => { document.removeEventListener('keydown', onKey) }
-  }, [enabled])
-
-  // Hook order is fixed above; the early return sits after every hook.
-  if (!enabled) return null
-
-  return createElement('div', { className: wide ? 'dsws_root' : 'dsws_root dsws_rootRail' }, [
-    createElement('button', {
-      key: 'btn',
-      type: 'button',
-      className: wide ? 'dsws_button' : 'dsws_button dsws_buttonRail',
-      title: `${translate(t, 'panel.entry')}（${LABELS.invokeLabel}）`,
-      'aria-label': `${translate(t, 'panel.entry')}（${translate(t, 'panel.titleSearch')} / ${translate(t, 'panel.contentSearch')}，${LABELS.invokeLabel}）`,
-      'aria-expanded': openPanel,
-      onClick: () => { setOpenPanel(true) },
-    }, [
-      searchIcon(),
-      // The label and the key chip carry the same `wide` condition: a chip
-      // beside an icon-only entry would be the only thing in the collapsed
-      // rail, and `.dsws_button` clips rather than wraps.
-      wide && createElement('span', { key: 'label', className: 'dsws_buttonLabel' }, translate(t, 'panel.entry')),
-      wide && createElement('kbd', { key: 'key', className: 'dsws_kbd' }, LABELS.invokeLabel),
-    ]),
-    openPanel && createElement(SwitchPanel, {
-      key: 'panel',
-      t,
-      onClose: () => { setOpenPanel(false) },
-      open: (sessionId: string) => {
-        setOpenPanel(false)
-        open(sessionId)
-      },
-    }),
-  ])
-}
-
-/** ------------------------------------------------------------------ helpers */
-
-/** Format an epoch-ms timestamp: today → HH:mm, else YYYY-MM-DD HH:mm. */
-function fmtTime(ms: number): string {
-  if (!ms || typeof ms !== 'number') return ''
-  try {
-    const d = new Date(ms)
-    const now = new Date()
-    const pad = (n: number): string => String(n).padStart(2, '0')
-    const sameDay = d.getFullYear() === now.getFullYear()
-      && d.getMonth() === now.getMonth()
-      && d.getDate() === now.getDate()
-    const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`
-    if (sameDay) return time
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${time}`
-  } catch {
-    return ''
-  }
-}
-
-/** Short label for a content-hit event type. */
-function typeLabel(t: CardLocale | undefined, type: string): string {
-  if (type === 'user/message' || type === 'assistant/message'
-    || type === 'tool/call' || type === 'tool/result') {
-    return translate(t, `type.${type}` as LocaleKey)
-  }
-  return type
-}
-
-/** Inline search icon (stroke aligned with the product's 1.75 hairline). */
-function searchIcon(): ReactElement {
-  return createElement('svg', {
-    width: 14,
-    height: 14,
-    viewBox: '0 0 16 16',
-    fill: 'none',
-    'aria-hidden': true,
-  }, createElement('circle', {
-    cx: 7,
-    cy: 7,
-    r: 4.5,
-    stroke: 'currentColor',
-    strokeWidth: 1.75,
-    fill: 'none',
-  }), createElement('path', {
-    d: 'M10.5 10.5 L14 14',
-    stroke: 'currentColor',
-    strokeWidth: 1.75,
-    strokeLinecap: 'round',
-  }))
-}
-
-/** ------------------------------------------------------------------ plugin */
-
-/**
- * Sibling-tab seat (`settings.plugins.tab`). **Deliberately NOT registered.**
- *
- * Kept as a named constant because it is the seat this plugin used to also
- * occupy — registering both is what made the card appear twice (once next to
- * 「插件配置」 and once under it). 0.1.7 removed the child seat entirely; the
- * settings form is generated from the host half's `.volatile()` Config fields.
- */
-export const SETTINGS_SIBLING_SEAT = 'settings.plugins.tab'
-
-/** Services required before mounting: the slot registry + locale (the family
- * tab label captures the translator eagerly — a lazy `ctx.locale` access inside
- * the label thunk would be evaluated by the FAMILY HOLDER's render and throw
- * `cannot get property "locale" without inject` there, killing the whole tab
- * ledger projection). */
+/** 客户端插件声明的注入面。 */
 export const inject = ['slots', 'locale']
 
+/** 底栏入口的 props（宿主给的结构子集）。 */
+export interface SwitchFooterProps {
+  wide?: boolean
+}
+
+/** 017+ 页 id / 面板行 id / main key（同一值）。 */
+const PANEL_ID = 'dsh-search-index'
+/** 面板行与底栏入口的 order：落在「插件」(0) 之后、「会话管理」(6) 之前。 */
+const ENTRY_ORDER = 5
+/** 顶栏工具槽位（面板行列表）。 */
+const PANEL_SEAT = 'sidebar.panellist'
+/** 主栏整页槽位（keyed）。 */
+const MAIN_SEAT = 'main'
+/** 017 代际信号：0.1.7 线起声明的会话菜单子席位（0.1.5 线无）。 */
+const GEN_017_SEAT = 'sidebar.workspaces.session.menu.item'
+
 /**
- * Client plugin body: dictionaries, the plugin settings card, and the
- * (disabled upstream) footer search panel entry.
- * @param ctx - client plugin context (slots, optional locale/settingsScope/sessions).
+ * 入口按钮壳：把设置 scope 绑到搜索入口组件上（底栏弹窗形态）。
+ * @param props - 宿主给的槽位 props + 绑定面。
+ */
+function FooterEntry(props: SwitchFooterProps & {
+  scope?: SwitchCardScope
+  open: (sessionId: string) => void
+}): ReactElement {
+  return createElement(SwitchFooter, {
+    wide: props.wide === true,
+    open: props.open,
+    scope: props.scope,
+  })
+}
+
+/**
+ * 整页形态：搜索面板占满主栏（017+）。
+ * @param props - 关闭动作 + 打开会话回调（真实导航，不是空函数）。
+ */
+function SearchPage(props: { onClose: () => void; openSession: (sessionId: string) => void }): ReactElement {
+  return createElement(SwitchPanel, {
+    variant: 'page',
+    onClose: props.onClose,
+    // 点结果：先退回会话（卸载本页），再打开目标会话；定位巡逻在模块级继续。
+    open: (sessionId: string) => {
+      props.onClose()
+      props.openSession(sessionId)
+    },
+  })
+}
+
+/**
+ * 客户端插件主体。
+ * @param ctx - 客户端上下文（slots、可选 locale / configForms / layout / conversation）。
  */
 export function apply(ctx: Context): void {
   ctx.effect(() => injectStyles(), 'dsh-search-index: stylesheet')
 
-  // Register the dictionaries when the locale service exists (optional across
-  // target releases); the card falls back to the bundled zh dictionary.
   const locale = ctx.get('locale') as SwitchLocaleService | undefined
   if (locale !== undefined && typeof locale.register === 'function') {
-    ctx.effect(() => locale.register(NS, { zh, en, fr, de, it, ru, es } as never), 'dsh-search-index: dictionaries')
+    ctx.effect(() => locale.register(NS, dictionaries), 'dsh-search-index: dictionaries')
   }
-  // The family-tab label translator, captured EAGERLY: the holder evaluates
-  // `label()` during its own render, and a lazy ctx.locale access there throws
-  // (see the inject note above). `bind` returns a live binder, so locale
-  // switches are still followed.
-  const familyLabel = (locale as unknown as { bind?: (n: string) => CardLocale } | undefined)?.bind?.(NS)
+
+  // 设置面回退链：configForms 原生句柄优先，观测到 unavailable 就地落桥（A2 死路）。
+  const configForms = ctx.get('configForms') as SwitchConfigForms | undefined
+  const bound = withBridgeFallback(
+    configForms?.get<SwitchSearchConfig>(PANEL_ID) as BridgeScope<SwitchSearchConfig> | undefined,
+    searchBridgeScope(),
+  )
 
   const slots = ctx.get('slots') as SwitchSlotsService | undefined
   if (slots === undefined) return
-  // Session opening resolves through `openSessionThrough` at click time: this
-  // plugin applies before the session-controller / ui-workspace client modules
-  // in the load order, so an eager service lookup captured undefined and every
-  // result click silently no-op'd (see the host-api.ts note). 0.1.7 moved
-  // navigation from `sessions.open` (dropped from the contract) to
-  // `uiWorkspace.openSession`; the old face stays as a legacy-host fallback —
-  // with the old call the guard turned the missing method into a silent
-  // no-op, which is exactly how the jump died on 0.1.7/0.2.0 without a trace.
-  const open = (sessionId: string): void => {
+
+  /** 设置快照（缺字段按缺省；用于入口可见性）。 */
+  const useConfig = (): SwitchSearchConfig => {
+    const snapshot = useSyncExternalStore(
+      (listener) => bound.subscribe(listener),
+      () => bound.getSnapshot(),
+    )
+    return (snapshot.value ?? {}) as SwitchSearchConfig
+  }
+
+  // 结果点击：host-api 内解析 uiWorkspace.openSession / sessions.open（惰性取）。
+  const openHit = (sessionId: string): void => {
     openSessionThrough((name) => ctx.get(name), sessionId)
   }
 
-  // Resolved before the footer entry because that entry is the thing the
-  // `enabled` switch controls: the switch and the entry have to read the same
-  // binding, or the switch silently goes back to controlling nothing.
-  // 0.1.7：configForms 以 entry id 取句柄；旧宿主回退按命名空间绑定。
-  const configForms = ctx.get('configForms') as SwitchConfigForms<SwitchSearchConfig> | undefined
-  const settingsScope = ctx.get('settingsScope') as SwitchSettingsScope<SwitchSearchConfig> | undefined
-  const entryScope: SwitchCardScope | undefined =
-    configForms?.get('dsh-search-index') ??
-    settingsScope?.bind({
-      namespace: SWITCH_SEARCH_SETTINGS_NAMESPACE,
-    })
+  // 命中定位翻页供给（巡逻可用宿主历史分页往回拉）。
+  configureLocator({
+    loadOlder: async (): Promise<boolean> => {
+      try {
+        const conv = ctx.get('conversation') as { loadOlder?: () => Promise<void> } | undefined
+        if (conv === undefined || typeof conv.loadOlder !== 'function') return false
+        await conv.loadOlder()
+        return true
+      } catch {
+        return false
+      }
+    },
+  })
 
-  // The sidebar footer entry: the search panel (title/content toggle), one
-  // bottom-bar button beside the official settings trigger. The archived-
-  // sessions viewer moved to dsh-session-steward (养老院) — this package no
-  // longer owns any session-history UI.
-  slots.inject('sidebar.footer.action', () => slots.register(
-    { name: 'sidebar.footer.action', id: 'dsh-search-index', order: 5 },
-    (props: SwitchFooterProps) => createElement(SwitchFooter, { ...props, open, scope: entryScope }),
-  ), 'dsh-search-index: sidebar footer entry')
+  /** 回退到会话（017+ 页内关闭 / 快捷键占位）。 */
+  const closePage = (): void => {
+    try {
+      const layout = ctx.get('layout') as { selectPanel?: (id: string | null) => void } | undefined
+      layout?.selectPanel?.(null)
+    } catch { /* 布局服务缺席：留在页内，用户可点「会话」行返回 */ }
+  }
 
-  // 插件族共用设置 tab（dsh-thinking-levels 的顶级「起子插件设置」节声明该子
-  // 席位）。thinking-levels 缺席时本 inject 静默等待，不阻塞客户端半；设置卡
-  // 随席位于 0.1.7 被宿主删除后在此恢复入口。
-  const familyTab = ctx.get('slots') as { inject: (n: string, f: () => unknown) => unknown } | undefined
-  familyTab?.inject('dsh-family.tab', () => slots.register(
+  /** 打开 017+ 页（点行之外的另一条路：快捷键）。 */
+  const openPage = (): void => {
+    try {
+      const layout = ctx.get('layout') as { selectPanel?: (id: string | null) => void } | undefined
+      layout?.selectPanel?.(PANEL_ID)
+    } catch { /* 同上 */ }
+  }
+
+  // ── 入口双形态：席位探测 + 一次性 sync ────────────────────────────────
+  ctx.effect(() => {
+    let gen017 = false
+    let mainSeat = false
+    let wired = false
+    let footerOff: (() => void) | undefined
+    let pageOff: (() => void) | undefined
+    let chordOff: (() => void) | undefined
+
+    const mountPage = (): (() => void) => {
+      const row = slots.inject(PANEL_SEAT, () => slots.register({
+        name: PANEL_SEAT,
+        id: PANEL_ID,
+        order: ENTRY_ORDER,
+        label: () => translate(locale?.bind?.(NS), 'card.title'),
+        locale: NS,
+      }, () => createElement(SearchIcon, {})), 'dsh-search-index: sidebar tool row')
+      const page = slots.inject(MAIN_SEAT, () => slots.register({
+        name: MAIN_SEAT,
+        key: PANEL_ID,
+        locale: NS,
+      }, () => createElement(PageHost, { onClose: closePage, openSession: openHit })), 'dsh-search-index: main page')
+      return () => { page(); row() }
+    }
+
+    const mountFooter = (): (() => void) => slots.inject('sidebar.footer.action', () => slots.register(
+      { name: 'sidebar.footer.action', id: PANEL_ID, order: ENTRY_ORDER, locale: NS },
+      (props: SwitchFooterProps) => createElement(FooterEntry, {
+        ...props,
+        scope: bound as unknown as SwitchCardScope,
+        open: openHit,
+      }),
+    ), 'dsh-search-index: sidebar footer entry')
+
+    const sync = (): void => {
+      const pageReady = gen017 && mainSeat
+      if (pageReady && pageOff === undefined) {
+        if (footerOff !== undefined) { const off = footerOff; footerOff = undefined; off() }
+        pageOff = mountPage()
+        // 017+：快捷键直接切主栏页（底栏入口不在了，弹窗也不该偷偷开）。
+        chordOff = bindInvokeChord(() => { openPage() })
+        return
+      }
+      if (!pageReady && footerOff === undefined && pageOff === undefined) {
+        footerOff = mountFooter()
+      }
+    }
+
+    const onSeat = (): void => { if (wired) sync() }
+
+    const offGen = slots.inject(GEN_017_SEAT, () => {
+      gen017 = true
+      onSeat()
+      return () => { gen017 = false }
+    }, 'dsh-search-index: probe 017 seat')
+
+    const offMain = slots.inject(MAIN_SEAT, () => {
+      mainSeat = true
+      onSeat()
+      return () => { mainSeat = false }
+    }, 'dsh-search-index: probe main seat')
+
+    wired = true
+    sync()
+
+    return () => {
+      offGen()
+      offMain()
+      if (chordOff !== undefined) { const off = chordOff; chordOff = undefined; off() }
+      if (footerOff !== undefined) { const off = footerOff; footerOff = undefined; off() }
+      if (pageOff !== undefined) { const off = pageOff; pageOff = undefined; off() }
+    }
+  }, 'dsh-search-index: sidebar entry')
+
+  // 可见性：enabled=false 时入驻口整对撤下（与设置卡同源）。
+  ctx.effect(() => {
+    let off: (() => void) | undefined
+    const apply = (): void => {
+      const enabled = bound.getSnapshot().value?.enabled !== false
+      if (!enabled && off !== undefined) { const fn = off; off = undefined; fn() }
+    }
+    apply()
+    const unsubscribe = bound.subscribe(apply)
+    return () => { unsubscribe(); if (off !== undefined) off() }
+  }, 'dsh-search-index: entry gate')
+
+  // 插件族共用设置 tab（dsh-thinking-levels 的顶级「起子插件设置」节声明该子席位）。
+  slots.inject('dsh-family.tab', () => slots.register(
     {
       name: 'dsh-family.tab',
-      id: 'dsh-search-index',
+      id: PANEL_ID,
       order: 30,
-      // 账本 label：读期求值，跟随当前 locale（translate 内建 zh/en 兜底）。
-      label: () => translate(familyLabel, 'card.title'),
+      label: () => translate(locale?.bind?.(NS), 'card.title'),
       locale: NS,
     },
-    (props: { t?: CardLocale }) => createElement(SearchSettingsCard, {
-      scope: entryScope as SwitchCardScope,
+    (props: { t?: (key: LocaleKey, params?: Record<string, unknown>) => string }) => createElement(SearchSettingsCard, {
+      scope: bound as unknown as SwitchCardScope,
       t: props.t,
     }),
-  ))
+  ), 'dsh-search-index: family settings tab')
 
-  // Plugins 页配置卡（`plugins.bundle.config`，key = 包名，dsh-tidy-display
-  // 已实证该模式）：0.2.0 的 Plugins 页不自动渲染 volatile 配置表单，bundle
-  // 详情页只渲染在该席位注册、key 与包名相等的条目。组件与 family tab 完全
-  // 同一张 `SearchSettingsCard`，scope 复用上方已解析的 `entryScope`
-  // （configForms 优先、settingsScope 软回退）——不另建第二份绑定；页面
-  // owner props 是 `{ view, form }` 不带 `t`，故回退到 family tab label 同款
-  // 的期求译器 `familyLabel`（translate 内建 zh 字典再兜底）。
-  // `settings.plugins.tab` 仍故意不注册（见上），两处设置面不重复。
+  // Plugins 页配置卡（key = 包名，0.1.7 宿主的 Plugins 页只渲染 key 与包名相等的条目）。
   slots.inject('plugins.bundle.config', () => slots.register(
-    { name: 'plugins.bundle.config', key: 'dsh-search-index' },
-    (props: { t?: CardLocale }) => createElement(SearchSettingsCard, {
-      scope: entryScope as SwitchCardScope,
-      t: props.t ?? familyLabel,
+    { name: 'plugins.bundle.config', key: PANEL_ID },
+    (props: { t?: (key: LocaleKey, params?: Record<string, unknown>) => string }) => createElement(SearchSettingsCard, {
+      scope: bound as unknown as SwitchCardScope,
+      t: props.t,
     }),
   ), 'dsh-search-index: plugins page config card')
+
+  // 让 useConfig 不被 tree-shake 掉（设置快照读取是入口可见性的备用路径）。
+  void useConfig
 }
 
-// Re-exported dictionary faces for consumers that compose the card directly.
-export { NS as SWITCH_SEARCH_LOCALE_NAMESPACE, translate }
+/** 017+ 页宿主：把 closePage / 打开会话绑进 SwitchPanel（page 形态）。 */
+function PageHost(props: { onClose: () => void; openSession: (sessionId: string) => void }): ReactElement {
+  return SearchPage({ onClose: props.onClose, openSession: props.openSession })
+}
+
+/** 顶栏行图标：放大镜（随行字色）。 */
+function SearchIcon({ size }: { size?: number }): ReactElement {
+  const edge = size ?? 16
+  return createElement('svg', {
+    width: edge, height: edge, viewBox: '0 0 16 16', fill: 'none', 'aria-hidden': true,
+  },
+  createElement('circle', { cx: 7, cy: 7, r: 4.5, stroke: 'currentColor', strokeWidth: 1.75, fill: 'none' }),
+  createElement('path', { d: 'M10.5 10.5 L14 14', stroke: 'currentColor', strokeWidth: 1.75, strokeLinecap: 'round' }))
+}
+
+/**
+ * 绑定调出快捷键（Ctrl/⌘+K）——只用于 017+（017- 由 SwitchFooter 自己绑）。
+ * @param open - 命中快捷键时的动作。
+ * @returns 解绑函数。
+ */
+function bindInvokeChord(open: () => void): () => void {
+  if (typeof document === 'undefined') return () => {}
+  const onKey = (event: KeyboardEvent): void => {
+    if (!isInvokeChord(event, LABELS.isMac)) return
+    event.preventDefault()
+    open()
+  }
+  document.addEventListener('keydown', onKey)
+  return () => { document.removeEventListener('keydown', onKey) }
+}

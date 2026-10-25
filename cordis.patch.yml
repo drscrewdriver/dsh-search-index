@@ -6,6 +6,8 @@
 #
 # — the command appends `dsh-search-index` to the bundle stack, and the
 # profile boot merges THIS patch (a single `insert` of the plugin row).
+# 客户端入口双形态（由客户端半身自行判定，不依赖本补丁）：
+#   宿主 ≥0.1.7 → sidebar.panellist 行 + main 整页；<0.1.7 → sidebar.footer.action 弹窗。
 - insert:
     - id: dsh-search-index
       name: 'dsh-search-index'

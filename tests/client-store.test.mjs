@@ -1,21 +1,15 @@
 #!/usr/bin/env node
 /**
- * The plugin settings card seat, proven against the built client bundle.
+ * dsh-search-index 客户端半身注册面（proven against the built bundle）。
  *
- * What it proves (and what it does NOT):
- * - `lib/client.js` materializes without any release-specific specifier and
- *   registers exactly one sidebar entry plus one settings card (dual `id`+`key`,
- *   no `settings.general.item` row, no store seat).
- * - The card lands on WHICHEVER settings seat the host declares: `settings.plugin.item`
- *   on the ≤0.1.2 line, `settings.plugins.tab` on the 0.1.5 line — and only one
- *   of the two ever fires, because `slots.inject` runs its callback only once
- *   the named seat is DECLARED. The fake below models that rule; a fake that
- *   fires every `inject` models a host that declares everything, which no real
- *   host does, and would hide exactly the regression this covers.
- * - The card's inject factory binds the `switch-search` settings namespace
- *   through the settingsScope service; when that service is absent the card
- *   degrades to a read-only DEFAULT_CONFIG scope instead of crashing.
- * - It does NOT render React, and it does NOT prove GUI behaviour.
+ * 覆盖契约（017 双形态，互斥）：
+ * - 017+（`sidebar.workspaces.session.menu.item` + `main` 席位在场）：
+ *   `sidebar.panellist` 一行（id/order = dsh-search-index/5）+ `main` 一页（key 同名），
+ *   **不**注册底栏入口；
+ * - 017-（无 017 席位）：只注册 `sidebar.footer.action` 一行（order 5），
+ *   **不**注册 panellist/main；
+ * - 设置卡双挂：`dsh-family.tab`（order 30）+ `plugins.bundle.config`（key = 包名）；
+ * - 不占用 `settings.*` 席位；scope 以 configForms entry id 取句柄。
  *
  * Usage: node tests/client-store.test.mjs
  */
@@ -28,11 +22,11 @@ import { runInNewContext } from 'node:vm'
 const HERE = dirname(fileURLToPath(import.meta.url))
 const BUNDLE = join(HERE, '..', 'lib', 'client.js')
 const PLUGIN_ID = 'dsh-search-index'
-const NAMESPACE = 'switch-search'
+const NS = 'switch-search'
+const SEAT_017 = 'sidebar.workspaces.session.menu.item'
 
-/** Module table the web shell seeds in both target releases (react family only here). */
 const TABLE = {
-  'react': {
+  react: {
     createElement: () => ({}), Fragment: {},
     useState: (v) => [v, () => {}], useEffect: () => {}, useMemo: (f) => f(),
     useRef: (v) => ({ current: v }), useSyncExternalStore: (sub, get) => get(),
@@ -40,7 +34,6 @@ const TABLE = {
   'react-dom': { createPortal: () => ({}) },
 }
 
-/** Minimal DOM so the stylesheet effect can run headless. */
 function documentStub() {
   const el = () => ({
     dataset: {}, style: {}, textContent: '', attributes: {},
@@ -53,10 +46,11 @@ function documentStub() {
     createElement: () => el(),
     querySelector: () => null,
     querySelectorAll: () => [],
+    getElementById: () => null,
+    addEventListener() {}, removeEventListener() {},
   }
 }
 
-/** Materialize the bundle and return its exports. */
 function loadBundle() {
   const captured = []
   const sandbox = {
@@ -64,7 +58,8 @@ function loadBundle() {
     document: documentStub(),
     MutationObserver: class { observe() {} disconnect() {} },
     queueMicrotask: (fn) => fn(),
-    setTimeout, clearTimeout, console,
+    setTimeout, clearTimeout, clearInterval, setInterval, console,
+    fetch: async () => ({ ok: false, status: 503, json: async () => ({ ok: false }), text: async () => '' }),
   }
   sandbox.globalThis = sandbox
   runInNewContext(readFileSync(BUNDLE, 'utf8'), sandbox, { filename: 'lib/client.js' })
@@ -80,148 +75,117 @@ function loadBundle() {
   return { exports, seen }
 }
 
-/**
- * The settings seats each host LINE declares.
- *
- * ⚠️ **The seats are NOT mutually exclusive** — that assumption is exactly what
- * caused the card to render twice. Measured from host source: the 0.1.2 host
- * declares `settings.section` (ui-settings-general:650), `settings.plugins.tab`
- * (ui-settings-plugins:1781) and `settings.plugin.item` (same package :1793,
- * declared at runtime by its `configurable` contribution) **all at once**.
- *
- * So the 0.1.2 fixture models the real deployment; the 0.1.5 fixture models the
- * suspected rename (child seat gone, only the sibling tab left).
- */
-const HOST_012_SEATS = [
+const BASE_SEATS = [
   'sidebar.footer.action',
+  'dsh-family.tab',
+  'plugins.bundle.config',
   'settings.section',
-  'settings.plugins.tab',
-  'settings.plugin.item',
 ]
 
-/** Client context that records slot registrations and namespace bindings. */
-function clientCtx(ledger, bindings, { withScope = true, withConfigForms = true, declaredSlots = HOST_012_SEATS } = {}) {
+function clientCtx(ledger, bindings, { declaredSlots = BASE_SEATS, snapshot } = {}) {
   const disposer = () => {}
   const declared = new Set(declaredSlots)
-  let snapshot = {
-    status: 'ready',
-    value: { enabled: false, defaultMode: 'title' },
-    base: undefined,
-    user: undefined,
-    revision: 1,
-    writable: false,
-    mode: 'host',
-  }
+  let value = snapshot ?? { enabled: true, defaultMode: 'title' }
   const scope = {
-    getSnapshot: () => snapshot,
+    getSnapshot: () => ({ status: 'ready', value, revision: 1, writable: false }),
     subscribe: () => disposer,
     set: async () => {},
-    unset: async () => {},
   }
   const slots = {
-    // Real semantics: the callback fires only once the named seat is DECLARED.
-    // The bundle relies on this for its two-seat (0.1.2 / 0.1.5) registration.
     inject: (name, fn) => { if (declared.has(name)) fn(); return disposer },
-    register: (options) => { ledger.push(options); return disposer },
+    register: (options) => {
+      ledger.push(options)
+      return () => { const i = ledger.indexOf(options); if (i >= 0) ledger.splice(i, 1) }
+    },
+    entries: (name) => (name === 'settings.section' ? [] : []),
+    getVersion: () => 0,
+    subscribe: () => disposer,
   }
   return {
     ctx: {
       effect: (fn) => { const d = fn(); return typeof d === 'function' ? d : disposer },
       on: () => disposer,
       get: (name) => {
-        if (name === 'configForms') {
-          if (!withConfigForms) return undefined
-          return { get: (entryId) => { bindings.push(entryId); return scope } }
-        }
-        if (name === 'settingsScope') {
-          if (!withScope) return undefined
-          return { bind: (spec) => { bindings.push(spec.namespace); return scope } }
-        }
+        if (name === 'configForms') return { get: (entryId) => { bindings.push(entryId); return scope } }
         if (name === 'slots') return slots
+        if (name === 'locale') return { register: () => disposer }
         return undefined
       },
-      logger: { info: () => {}, warn: () => {}, error: () => {} },
+      logger: { info() {}, warn() {}, error() {} },
       slots,
     },
-    setSnapshot: (next) => { snapshot = next },
+    setValue: (next) => { value = next },
   }
 }
 
 let failures = 0
 const line = (s) => process.stdout.write(`${s}\n`)
-/**
- * Checks are COLLECTED and run (in order, awaited) at the end of the file.
- * They cannot run inline any more: one of them has to wait out the bundle's
- * seat-probe window, and an inline sync runner would print the summary before
- * that promise settled — i.e. it would report PASS before the check ran.
- */
 const checks = []
-const check = (name, fn) => {
-  checks.push([name, fn])
-}
+const check = (name, fn) => { checks.push([name, fn]) }
 
-line('=== dsh-search-index plugin settings card ===')
+line('=== dsh-search-index client registrations ===')
 
 const { exports, seen } = loadBundle()
 check('bundle materializes with only baseline specifiers', () => {
-  for (const spec of seen) assert.ok(!/dsh-client-(runtime|store|ui-settings-general)/.test(spec), `release-specific require "${spec}"`)
+  for (const spec of seen) assert.ok(!/dsh-client-(runtime|store)/.test(spec), `release-specific require "${spec}"`)
   assert.equal(typeof exports.apply, 'function', 'client half exports no apply()')
 })
 
-check('registers only the sidebar footer entry; no settings seat on 0.1.7', () => {
+check('017- (no gen seat): exactly one footer entry, no panellist/main', () => {
+  const ledger = []
+  const { ctx } = clientCtx(ledger, [])
+  exports.apply(ctx)
+  const footer = ledger.filter((o) => o.name === 'sidebar.footer.action')
+  assert.equal(footer.length, 1, `expected one footer entry, got ${JSON.stringify(ledger.map((o) => o.name))}`)
+  assert.deepEqual(footer.map((o) => o.id), [PLUGIN_ID])
+  assert.deepEqual(footer.map((o) => o.order), [5])
+  assert.equal(ledger.filter((o) => o.name === 'sidebar.panellist').length, 0, 'no panel row on 017-')
+  assert.equal(ledger.filter((o) => o.name === 'main').length, 0, 'no main page on 017-')
+})
+
+check('017+ (gen seat + main): one panel row + one main page, no footer entry', () => {
+  const ledger = []
+  const { ctx } = clientCtx(ledger, [], { declaredSlots: [...BASE_SEATS, SEAT_017, 'main', 'sidebar.panellist'] })
+  exports.apply(ctx)
+  const rows = ledger.filter((o) => o.name === 'sidebar.panellist')
+  assert.equal(rows.length, 1, `expected one panel row, got ${JSON.stringify(ledger.map((o) => o.name))}`)
+  assert.deepEqual(rows.map((o) => o.id), [PLUGIN_ID])
+  assert.deepEqual(rows.map((o) => o.order), [5], 'row must sit between plugins(0) and manage-sessions(6)')
+  const pages = ledger.filter((o) => o.name === 'main')
+  assert.equal(pages.length, 1, 'expected one main page')
+  assert.deepEqual(pages.map((o) => o.key), [PLUGIN_ID], 'page key must equal the panel row id')
+  assert.equal(ledger.filter((o) => o.name === 'sidebar.footer.action').length, 0, 'footer entry must yield to the page form')
+})
+
+check('half-declared (gen seat only): falls back to the footer entry', () => {
+  const ledger = []
+  const { ctx } = clientCtx(ledger, [], { declaredSlots: [...BASE_SEATS, SEAT_017, 'sidebar.panellist'] })
+  exports.apply(ctx)
+  assert.equal(ledger.filter((o) => o.name === 'sidebar.panellist').length, 0, 'a half-declared page form must not be used')
+  assert.equal(ledger.filter((o) => o.name === 'sidebar.footer.action').length, 1, 'footer fallback must stay')
+})
+
+check('settings cards: one family tab + one plugins page card, no settings.* seat', () => {
+  const ledger = []
+  const { ctx } = clientCtx(ledger, [])
+  exports.apply(ctx)
+  const family = ledger.filter((o) => o.name === 'dsh-family.tab')
+  assert.equal(family.length, 1, `expected one family tab, got ${family.length}`)
+  assert.deepEqual(family.map((o) => o.id), [PLUGIN_ID])
+  assert.deepEqual(family.map((o) => o.locale), [NS])
+  const plugins = ledger.filter((o) => o.name === 'plugins.bundle.config')
+  assert.equal(plugins.length, 1, 'plugins page card must be registered once')
+  assert.equal(plugins[0].key, PLUGIN_ID, 'plugins.bundle.config key must equal the package name')
+  assert.deepEqual(ledger.filter((o) => String(o.name).startsWith('settings.')).map((o) => o.name), [])
+})
+
+check('scope prefers configForms (entry id)', () => {
   const ledger = []
   const bindings = []
   const { ctx } = clientCtx(ledger, bindings)
   exports.apply(ctx)
-  // 0.1.7: the settings card seat is gone; the form comes from the host half's
-  // .volatile() fields. Exactly one sidebar entry remains.
-  assert.equal(ledger.length, 1, `expected only the search entry, got ${ledger.length}`)
-  assert.equal(ledger[0].name, 'sidebar.footer.action', 'the sidebar footer search entry must be registered')
-  assert.equal(ledger[0].id, PLUGIN_ID)
+  assert.deepEqual([...new Set(bindings)], [PLUGIN_ID], 'configForms must be keyed by the profile entry id')
 })
-
-check('footer scope prefers configForms and falls back to the legacy binding', () => {
-  const formsLedger = []
-  const formsBindings = []
-  const { ctx } = clientCtx(formsLedger, formsBindings)
-  exports.apply(ctx)
-  assert.deepEqual(formsBindings, ['dsh-search-index'], 'configForms must be keyed by the profile entry id')
-  const legacyLedger = []
-  const legacyBindings = []
-  const { ctx: legacyCtx } = clientCtx(legacyLedger, legacyBindings, { withConfigForms: false })
-  exports.apply(legacyCtx)
-  assert.deepEqual(legacyBindings, [NAMESPACE], 'without configForms the legacy namespace binding applies')
-})
-
-// ── The 0.1.2 line declared all three settings seats ─────────────────────────
-// Regression guard for "the same card shown twice": no bundle may register more
-// than one seat, and on 0.1.7 none at all.
-
-check('registers exactly ONE sidebar seat and zero settings seats even on the 0.1.2 line', () => {
-  const ledger = []
-  const { ctx } = clientCtx(ledger, [], { declaredSlots: HOST_012_SEATS })
-  exports.apply(ctx)
-  assert.equal(ledger.length, 1, `expected only the search entry, got ${ledger.length}: ${JSON.stringify(ledger.map((o) => o.name))}`)
-  assert.deepEqual(
-    ledger.filter((o) => String(o.name).startsWith('settings.')).map((o) => o.name),
-    [],
-    'no settings seat may be occupied on the 0.1.7 line',
-  )
-})
-
-check('does NOT occupy the sibling tab seat even though the host declares it', () => {
-  const ledger = []
-  const { ctx } = clientCtx(ledger, [], { declaredSlots: HOST_012_SEATS })
-  exports.apply(ctx)
-  const names = ledger.map((o) => o.name)
-  assert.ok(!names.includes('settings.plugins.tab'), `the sibling tab (same level as 「插件配置」) must NOT be occupied; got ${JSON.stringify(names)}`)
-  assert.ok(
-    !names.includes('settings.section'),
-    `the top-level section must NOT also be occupied; got ${JSON.stringify(names)}`,
-  )
-})
-
-// ── The seat-probe warn check retired with the seat itself (0.1.7) ────────────
 
 for (const [name, fn] of checks) {
   try {

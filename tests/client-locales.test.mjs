@@ -60,10 +60,9 @@ test('translate interpolates known params and keeps unknown braces', () => {
 })
 
 test('translate falls back zh → key', () => {
-  // A key en has not translated falls back to the zh template, not to undefined.
-  const untranslated = Object.keys(zh).find(k => !(k in en))
-  assert.ok(untranslated, 'expected at least one zh-only key for this probe')
-  assert.equal(translate(undefined, untranslated), zh[untranslated])
+  // 每个键都有 zh 模板：无 locale 回调时回 zh（en 已全覆盖，故不依赖「en 缺键」）。
+  const anyKey = 'card.title'
+  assert.equal(translate(undefined, anyKey), zh[anyKey])
   assert.equal(translate(undefined, 'key.not.in.any.dictionary'), 'key.not.in.any.dictionary')
 })
 

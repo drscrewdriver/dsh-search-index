@@ -22,9 +22,19 @@ export interface SwitchSearchConfig {
     archiveKeep?: number;
     /** Optional absolute directory for the independent index files. */
     indexDir?: string;
+    /**
+     * 语料源(T7.1)：'drs'(缺省)=dsh-reference-session-collector 投影库(docs 直插；
+     * 内容搜索硬依赖，DRS 不可达 → 显式报错，不回退本地索引)；
+     * 'native'=sessionQuery + 转录文件兜底（仅标题/头部元数据面可用）。
+     */
+    corpusSource?: 'native' | 'drs';
+    /** DRS 投影库 API 基址；空=自动（首个 trustedHosts 条目，再退 http://127.0.0.1:8080）。 */
+    drsBaseUrl?: string;
 }
 /** Defaults when nothing is configured. */
 export declare const DEFAULT_CONFIG: Required<SwitchSearchConfig>;
 /** The settings namespace the host half registers (kept in lockstep with src/index.ts). */
 export declare const SWITCH_SEARCH_SETTINGS_NAMESPACE = "switch-search";
+/** 别名：与 DEFAULT_CONFIG 同值（合并包时代的命名，拆回后保留调用面）。 */
+export declare const SWITCH_DEFAULT_CONFIG: Required<SwitchSearchConfig>;
 //# sourceMappingURL=config.d.ts.map

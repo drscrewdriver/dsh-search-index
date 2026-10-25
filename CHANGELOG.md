@@ -1,5 +1,70 @@
 # Changelog
 
+## 0.7.7
+
+- 修复深度同步在真机上永远 `failed`：触发请求把 `op` 放进了 JSON body，而 DRSC 的 POST 分发只读 `?op=`，落回 400 `unknown POST op: (missing)`。现改为 `POST ?op=sync`（body 保留 `{op:'sync'}` 兼容旧版），并补两条契约用例。
+- 修复深度同步「触发即回」后的等待判据：DRSC 的 `last_sync` 是**上一轮已完成结果**（busy 恒 false），旧判据会立即放行。现轮询 `op=status` 的 `syncing`（DRSC 0.2.2 新增的真实在跑旗标），无该字段时退回旧逻辑；落定与否记进 `index-status.deepSync.drsSettled`。
+- 文档补「不可与合并包 `dsh-session-steward`（≤0.5.x）同装」：两者同注册 `/switch-search/api`，0.1.5 线宿主启动即 `webserver: duplicate prefix route`（升路径：拆成 `dsh-manage-session` + 本插件）。
+- 补「兼容矩阵（0.7.7 实测）」：9 个 rc 入农场 cell 逐格实测（0.1.0-rc.8、0.1.1-rc.2、0.1.2-rc.1、0.1.5-rc.3、0.1.7-rc.2、0.2.0-rc.2、0.2.1-rc.1/rc.2/rc.3），均 200 且设置面语义正确（≤0.1.5 `writable:true`，≥0.1.7 `writable:false`）；剩余 8 个 rc 仍是声明面放行、未逐格实测（README 已如实标注，原始记录见 `docs/compat-matrix-0.7.7.md`）。
+
+## 0.7.6
+
+- 修复设置卡看不到深度同步进度：`index-status` 补 `deepSync` 状态面（0.7.5 只在搜索页读到了它，设置卡的轮询一直拿到 `undefined`）。
+
+## 0.7.5
+
+- 新增「深度同步（drsc）」按钮（搜索页页脚 + 设置卡）：POST drsc {op:'sync'} 慢速重扫修好投影库 → 轮询 op=status 直到 busy=false → 再跑本地索引非破坏性重建；进度经 index-status.deepSync 暴露。
+
+## 0.7.4
+
+- 修复 017+ 整页形态下点击结果不跳转：整页形态的 SwitchPanel 之前拿到了 noop 的 open（提交时只传了 onClose），导致定位巡逻在搜索页上原地打转（沙漏→叉）。现在整页形态先退回会话再打开目标会话。
+
+## 0.7.3
+
+- 修复内容检索的 DRS 同源转发：route 把调用方 Host 透传给 DrsCorpusSource（此前缺省落到 127.0.0.1:8080，实际 DRS 由宿主进程自身端口提供，导致 fetch failed）。
+
+## 0.7.1
+
+- 重打版本号（与 0.7.0 代码内容一致）：pnpm 对同名 `file:` tarball 有内容缓存，
+  同版本覆盖重打不会被实装重解析，故以补丁版本强制重新解析。
+
+## 0.7.0
+
+**搜索子域从 dsh-manage-session 拆回本包，DRS 依赖回填。**
+
+### 依赖与配置面
+
+- 新增硬依赖 `dsh-reference-session-collector`（dependencies + `dsh.pluginDependencies`）；
+  内容检索改由 DRS 投影库直连（`content-search`），DRS 不可达显式报错、不回退本地索引。
+- `corpusSource`（缺省 `'drs'`）与 `drsBaseUrl` 进入配置面（schema + legacy 桥 + describe）。
+- 新增 `src/host/settings-bridge.ts`：≤0.1.5 legacy settings 桥（register/get/update）+
+  modern 只读投影，`settings-describe` / `settings-mutate` 两个方法。
+- 宿主兼容枚举扩到 18 项（0.1.0-rc.2 … 0.2.1-rc.3），修复旧枚举只覆盖 0.2.x 导致
+  0.1.x 线装不上的问题。
+
+### 索引实现
+
+- `src/host/index/` 采用合并包版本（含 `drs-source.ts`）：水位同步把 DRS 语料折进本地索引，
+  本地引擎只剩会话头元数据 / 标题面；`sync` 增加投影缓存标题第三源。
+
+### 入口双形态（017 分代）
+
+- **≥0.1.7**：`sidebar.panellist` 行（order 5）+ `main` 整页（key `dsh-search-index`），
+  点行 / `Ctrl+K` 切主栏整页；面板新增 `variant:'page'`（去遮罩与 portal）。
+- **<0.1.7**：保持原样弹窗（底栏入口 + `SwitchPanel` dialog）。
+- 代际信号：`sidebar.workspaces.session.menu.item` + `main` 席位探测；两形态互斥。
+
+### 命名空间回归
+
+- 设置命名空间从合并包的 `manage-sessions-search` 回归 `switch-search`，路由前缀同步回
+  `/switch-search/api`：旧键不再读取，升级后 `enabled` 等开关**回缺省**（搜索默认开启），
+  需重新按需调整一次；索引目录仍沿用 `~/.dsh-switch-search`，老索引无需全量重灌。
+
+### 跨仓契约
+
+- 归档集合只读；行内删除按钮改为跨插件探针（manage-session 的 `directDelete`），
+  删除走 `/manage-session/api/session-history-purge`。
+
 0.6.7: host enumeration addendum for DSH 0.2.1-rc.3 (declaration-only bump; contract plane zero diff).
 
 ## 0.6.6 (2026-10-18)

@@ -1,11 +1,11 @@
 {
   "name": "dsh-search-index",
-  "version": "0.6.7",
+  "version": "0.7.7",
   "publishConfig": {
     "registry": "https://registry.npmjs.org",
     "tag": "dsh-0.2.1-rc.1"
   },
-  "description": "DSH web 侧边栏搜索索引：标题搜索 ↔ 内容搜索一键切换，内容搜索按会话聚合展示标题与命中片段；自带独立索引（不依赖 DSH 官方全文索引），支持增量同步、非破坏性整理与快照导入导出。",
+  "description": "DSH 会话检索插件：标题 / 内容双模式 FTS5 检索（内容检索硬依赖 dsh-reference-session-collector 投影库，按会话聚合展示标题与命中片段并支持命中定位），自带独立索引（增量同步、非破坏性整理、深度同步自愈、快照导入导出）。入口双形态：宿主 ≥0.1.7 走「插件页式」主栏整页，<0.1.7 走侧栏弹窗。",
   "type": "module",
   "repository": {
     "type": "git",
@@ -39,7 +39,7 @@
   ],
   "engines": {
     "node": ">=20",
-    "dsh": "0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3"
+    "dsh": "0.1.0-rc.2 || 0.1.0-rc.3 || 0.1.0-rc.6 || 0.1.0-rc.7 || 0.1.0-rc.8 || 0.1.1-rc.1 || 0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.5-rc.1 || 0.1.5-rc.2 || 0.1.5-rc.3 || 0.1.7-rc.1 || 0.1.7-rc.2 || 0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3"
   },
   "dsh": {
     "bundle": {
@@ -52,23 +52,26 @@
         "@deepseek-ai/dsh-client-ui-settings-general"
       ],
       "platform": "web"
-    }
+    },
+    "pluginDependencies": [
+      "dsh-reference-session-collector"
+    ]
   },
   "scripts": {
     "build": "node -e \"require('fs').rmSync('lib',{recursive:true,force:true})\" && tsc -p tsconfig.build.json && tsdown --config-loader tsx",
     "prepublishOnly": "npm run build",
     "typecheck": "tsc --noEmit",
-    "test": "node tests/client-store.test.mjs && node tests/client-panel-key.test.mjs && node tests/client-styles.test.mjs && node --import tsx tests/client-platform.test.mjs && node --import tsx tests/host-peers.test.mjs && node tests/index-engine.test.mjs && node tests/index-archive.test.mjs && node --import tsx tests/client-locales.test.mjs && node --import tsx tests/client-host-api.test.mjs && node --import tsx tests/client-open-session.test.mjs",
+    "test": "node tests/client-store.test.mjs && node tests/client-panel-key.test.mjs && node tests/client-styles.test.mjs && node --import tsx tests/client-platform.test.mjs && node --import tsx tests/host-peers.test.mjs && node --import tsx tests/index-engine.test.mjs && node --import tsx tests/index-archive.test.mjs && node --import tsx tests/drs-source.test.mjs && node --import tsx tests/client-locales.test.mjs && node --import tsx tests/client-host-api.test.mjs && node --import tsx tests/client-open-session.test.mjs",
     "bundle": "tsdown --config-loader tsx",
     "lint": "eslint ."
   },
   "license": "MIT",
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.4",
-    "@deepseek-ai/dsh-client-locale": "0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3",
-    "@deepseek-ai/dsh-client-ui-settings": "0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3",
-    "@deepseek-ai/dsh-client-ui-settings-general": "0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3",
-    "@deepseek-ai/dsh-client-ui-slots": "0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3",
+    "@deepseek-ai/dsh-client-locale": "0.1.0-rc.2 || 0.1.0-rc.3 || 0.1.0-rc.6 || 0.1.0-rc.7 || 0.1.0-rc.8 || 0.1.1-rc.1 || 0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.5-rc.1 || 0.1.5-rc.2 || 0.1.5-rc.3 || 0.1.7-rc.1 || 0.1.7-rc.2 || 0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3",
+    "@deepseek-ai/dsh-client-ui-settings": "0.1.0-rc.2 || 0.1.0-rc.3 || 0.1.0-rc.6 || 0.1.0-rc.7 || 0.1.0-rc.8 || 0.1.1-rc.1 || 0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.5-rc.1 || 0.1.5-rc.2 || 0.1.5-rc.3 || 0.1.7-rc.1 || 0.1.7-rc.2 || 0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3",
+    "@deepseek-ai/dsh-client-ui-settings-general": "0.1.0-rc.2 || 0.1.0-rc.3 || 0.1.0-rc.6 || 0.1.0-rc.7 || 0.1.0-rc.8 || 0.1.1-rc.1 || 0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.5-rc.1 || 0.1.5-rc.2 || 0.1.5-rc.3 || 0.1.7-rc.1 || 0.1.7-rc.2 || 0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3",
+    "@deepseek-ai/dsh-client-ui-slots": "0.1.0-rc.2 || 0.1.0-rc.3 || 0.1.0-rc.6 || 0.1.0-rc.7 || 0.1.0-rc.8 || 0.1.1-rc.1 || 0.1.1-rc.2 || 0.1.2-rc.1 || 0.1.5-rc.1 || 0.1.5-rc.2 || 0.1.5-rc.3 || 0.1.7-rc.1 || 0.1.7-rc.2 || 0.2.0-rc.1 || 0.2.0-rc.2 || 0.2.1-rc.1 || 0.2.1-rc.2 || 0.2.1-rc.3",
     "@deepseek-ai/schemastery": "^3.18.4",
     "react": "^18.2.0"
   },
@@ -106,5 +109,13 @@
   },
   "optionalDependencies": {
     "better-sqlite3": "12.11.1"
-  }
+  },
+  "dependencies": {
+    "dsh-reference-session-collector": ">=0.2.0-beta.0 <0.3.0"
+  },
+  "keywords": [
+    "drs",
+    "dsh-reference-session-collector",
+    "locate"
+  ]
 }

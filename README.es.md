@@ -1,4 +1,7 @@
 <p align="center">
+
+> **Note (0.7.0)**: this translation lags behind `README.md` / `README.en.md`. The 0.7.0 changes (DRS hard dependency, 017 dual-form entry, namespace `switch-search`) are documented there.
+
   <strong>Una búsqueda de sesiones con índice propio para la barra lateral de DeepSeek Harness — conmutación en un clic entre título y contenido, con filtros por usuario / respuesta / herramienta</strong>
 </p>
 <p align="center">

@@ -1,8 +1,27 @@
-/** `switch-search` client dictionaries (zh / en / fr / de / it / ru / es), thinking-levels pattern. */
+/** `switch-search` client dictionaries (zh / en / ja / ko / fr / de / it / ru / es), thinking-levels pattern. */
 /** Dictionary namespace owned by this plugin (the host settings namespace). */
 export declare const NS = "switch-search";
 /** Simplified Chinese dictionary (the key-set source of truth). */
 export declare const zh: {
+    readonly 'card.deepSync.btn': "深度同步（drsc）";
+    readonly 'card.deepSync.hint': "先让 drsc 慢速重扫修好投影库，再把本地索引整理一遍。";
+    readonly 'card.deepSync.drs': "drsc 同步中…";
+    readonly 'card.deepSync.rebuilding': "索引整理中…";
+    readonly 'panel.deepSync': "深度同步";
+    readonly 'panel.deepSync.hint': "先让 drsc 慢速重扫修好投影库，再把本地索引整理一遍（用于定位不到 / 新会话搜不到）。";
+    readonly 'panel.deepSync.drs': "drsc 同步中…";
+    readonly 'panel.deepSync.rebuild': "索引整理中…";
+    readonly 'panel.deepSync.done': "同步完成";
+    readonly 'panel.deepSync.failed': "同步失败";
+    readonly 'card.corpusSource': "语料源";
+    readonly 'card.corpusSource.desc': "内容检索的语料来自 DRS 投影库（硬依赖）；native 仅保留标题/头部元数据面。";
+    readonly 'card.mode.drs': "DRS 投影库";
+    readonly 'card.mode.native': "本地会话服务";
+    readonly 'card.drsBaseUrl': "DRS 基址";
+    readonly 'card.drsBaseUrl.desc': "空=自动（首个 trustedHosts 条目，再退 http://127.0.0.1:8080）。";
+    readonly 'card.drsStatus.up': "内容检索可用（DRS 在线）。";
+    readonly 'card.drsStatus.down': "内容检索不可用：DRS 未就绪（{reason}）。";
+    readonly 'card.drsStatus.reading': "正在探测 DRS…";
     readonly 'card.title': "搜索索引";
     readonly 'card.description': "侧边栏会话搜索增强：标题搜索与内容搜索一键切换。内容搜索使用插件自建索引，不依赖 DSH 官方全文索引。";
     readonly 'card.unavailable': "设置命名空间不可用：请确认插件已装配进 profile。";
@@ -58,6 +77,11 @@ export declare const zh: {
     readonly 'panel.noContent': "没有匹配的内容。";
     readonly 'panel.contentHint': "输入内容关键词开始搜索。";
     readonly 'panel.noText': "(无文本)";
+    readonly 'panel.delete': "删除";
+    readonly 'panel.delete.confirm': "确认删除";
+    readonly 'panel.delete.hint': "删除该会话（不可逆，与管理端同款链路）";
+    readonly 'panel.delete.done': "已删除会话 {n} 个";
+    readonly 'panel.delete.failed': "删除失败：{error}";
     readonly 'panel.untitled': "(未命名)";
     readonly 'panel.openSession': "打开会话";
     readonly 'panel.footer.invoke': "唤出";
@@ -71,27 +95,71 @@ export declare const zh: {
     readonly 'sort.time': "时间";
     readonly 'sort.relevance.hint': "按匹配强度排序（默认）。";
     readonly 'sort.time.hint': "按会话最后活动时间倒序，更新的排前面；同一时间再按匹配强度。";
+    readonly 'group.merge': "合并";
+    readonly 'group.expand': "分开";
+    readonly 'group.merge.hint': "每个会话只显示最强的一条命中（默认）。";
+    readonly 'group.expand.hint': "同一会话的多条命中分行显示（每行仍是可跳转的独立命中）。";
     readonly 'type.user/message': "用户";
     readonly 'type.assistant/message': "回复";
     readonly 'type.tool/call': "工具调用";
     readonly 'type.tool/result': "工具结果";
+    readonly 'panel.manage': "管理";
+    readonly 'domain.all': "全部";
+    readonly 'domain.active': "活跃";
+    readonly 'domain.archived': "归档";
+    readonly 'tag.archived': "归档";
+    readonly 'manage.hint': "按工作区分组，勾选后批量操作；删除不可撤销。";
+    readonly 'manage.restartHint': "优先走宿主内存 API 即时生效（0.1.7+ 归档/取消归档免重启）；不可用时直写存储文件，重启后侧栏生效。";
+    readonly 'manage.done.restart': "需重启 DSH 后在侧栏完全生效。";
+    readonly 'manage.group.nocwd': "（未分组）";
+    readonly 'manage.selectGroup': "全选/取消本组";
+    readonly 'manage.selected': "已选 {n}";
+    readonly 'manage.batch.archive': "归档";
+    readonly 'manage.batch.unarchive': "取消归档";
+    readonly 'manage.batch.delete': "删除";
+    readonly 'manage.batch.confirm': "确认删除";
+    readonly 'manage.batch.working': "执行中…";
+    readonly 'manage.done.archive': "已归档 {n} 个会话。";
+    readonly 'manage.done.unarchive': "已取消归档 {n} 个会话。";
+    readonly 'manage.done.purge': "已清理 {n} 个会话。";
+    readonly 'manage.done.error': "操作失败：{error}";
+    readonly 'panel.index.none': "索引未建立";
+    readonly 'panel.index.count': "索引 {n}";
+    readonly 'panel.index.rebuilding': "整理中 {done}/{total}";
+    readonly 'panel.index.rebuild': "整理";
+    readonly 'filter.favorites': "收藏";
+    readonly 'date.from': "开始日期";
+    readonly 'date.to': "结束日期";
+    readonly 'star.on': "取消收藏";
+    readonly 'star.off': "收藏";
+    readonly 'workspace.label': "工作区";
+    readonly 'workspace.more': "还有 {n} 个";
+    readonly 'workspace.less': "收起";
+    readonly 'manage.search': "搜索会话…";
+    readonly 'group.collapse': "收拢/展开本组";
+    readonly 'group.expandAll': "全部展开";
+    readonly 'group.collapseAll': "全部收拢";
 };
 export type LocaleKey = keyof typeof zh;
 export type Dict = Record<LocaleKey, string>;
-/** English dictionary; missing keys fall back to zh. */
-export declare const en: Partial<Record<LocaleKey, string>>;
-/** French dictionary; missing keys fall back to zh. */
-export declare const fr: Partial<Record<LocaleKey, string>>;
-/** German dictionary; missing keys fall back to zh. */
-export declare const de: Partial<Record<LocaleKey, string>>;
-/** Italian dictionary; missing keys fall back to zh. */
-export declare const it: Partial<Record<LocaleKey, string>>;
-/** Russian dictionary; missing keys fall back to zh. */
-export declare const ru: Partial<Record<LocaleKey, string>>;
-/** Spanish dictionary; missing keys fall back to zh. */
-export declare const es: Partial<Record<LocaleKey, string>>;
-/** All shipped dictionaries by locale id (only built-in ids take the map overload). */
-export declare const dictionaries: Readonly<Record<string, Partial<Dict>>>;
+/** English dictionary. */
+export declare const en: Dict;
+/** Japanese dictionary. */
+export declare const ja: Partial<Dict>;
+/** Korean dictionary. */
+export declare const ko: Partial<Dict>;
+/** French dictionary. */
+export declare const fr: Partial<Dict>;
+/** German dictionary. */
+export declare const de: Partial<Dict>;
+/** Italian dictionary. */
+export declare const it: Partial<Dict>;
+/** Russian dictionary. */
+export declare const ru: Partial<Dict>;
+/** Spanish dictionary. */
+export declare const es: Partial<Dict>;
+/** All shipped dictionaries by locale id. */
+export declare const dictionaries: Record<string, Record<string, string>>;
 /** Translate with {param} interpolation; falls back to zh, then the key itself. */
 export declare function translate(locale: ((key: LocaleKey, params?: Record<string, unknown>) => string) | undefined, key: LocaleKey, params?: Record<string, unknown>): string;
 //# sourceMappingURL=locales.d.ts.map
