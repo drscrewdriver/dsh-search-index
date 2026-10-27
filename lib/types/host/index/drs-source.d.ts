@@ -22,7 +22,7 @@ import type { DrsLocalArm, DrsLocalSearchRequest } from './drs-local.ts';
 export declare const DRS_API_PATH = "/api/dsh-reference-session-collector";
 /** 语料列表分页大小(百会话级一轮 1-2 页;DRS 侧 offset/limit 透传)。 */
 export declare const DRS_CORPUS_PAGE = 500;
-/** 一个 DRS 会话头(watermark 代理 + 检索排序字段)。 */
+/** 一个 DRS 会话头（watermark 代理 + 检索排序字段）。 */
 export interface DrsCorpusHead {
     sessionId: string;
     version: number;
@@ -30,14 +30,18 @@ export interface DrsCorpusHead {
     cwd: string;
     updatedAt: number;
     archived: boolean;
+    /** 会话总回合数（op=session 行面携回）；缺列/老库时 undefined。 */
+    turnCount?: number;
 }
-/** 一个 DRS 检索臂文档(surface 已折算成引擎列的字符串域)。 */
+/** 一个 DRS 检索臂文档（surface 已折算成引擎列的字符串域）。 */
 export interface DrsCorpusDoc {
     seq: number;
     type: string;
     surface: 'current' | 'shadowed';
     time: number;
     text: string;
+    /** 行归属回合（op=session&fields=search 的 turn）；缺列时 undefined。 */
+    turn?: number;
 }
 /** 一个 DRS 会话的完整语料(头 + docs)。 */
 export interface DrsCorpusSession {
@@ -77,7 +81,7 @@ export declare class DrsCorpusSource {
     /** 全量语料头(内部翻页;rows 空或凑满 total 即止)。 */
     listSessions(): Promise<DrsCorpusHead[]>;
     /** 一个会话的检索臂 docs；DRS 无此会话（session:null）返回 undefined。 */
-    readSession(sessionId: string): Promise<DrsCorpusSession | undefined>;
+    readSession(sessionId: string, atHost?: string): Promise<DrsCorpusSession | undefined>;
     /**
      * 分组内容搜索（通道分派器）：
      * - `transport='http'`：只走 HTTP（强制，失败直抛）；
@@ -93,6 +97,11 @@ export declare class DrsCorpusSource {
      * 调用侧按硬依赖语义显式报错——**不回退本地索引**。
      */
     private searchGroupedHttp;
+    /**
+     * HTTP 臂回合富化（best-effort）：对 distinct 会话各调一次 readSession 建 seq→turn map。
+     * 桌面版走进程内臂（SQL 更廉），本臂主要服务 web；任一会话失败仅跳过、该行保持 undefined。
+     */
+    private enrichHitsHttp;
     /**
      * 触发 DRS 后台同步（`POST ?op=sync`）：慢速全扫，用于修复投影库自身的滞后。
      * **op 走 query**：DRS 的 POST 分发只读 `url.searchParams.get('op')`，落进 body 会

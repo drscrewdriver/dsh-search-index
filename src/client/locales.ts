@@ -167,6 +167,18 @@ export const zh = {
   'group.collapse': '收拢/展开本组',
   'group.expandAll': '全部展开',
   'group.collapseAll': '全部收拢',
+  'cold.badge.hint': '冷数据：目标超出消息轨索引范围（>40 回合），点击需回溯加载',
+  'toocold.badge.hint': '过冷数据：目标超出安全回溯范围（>200 回合），不自动翻页',
+  'cold.confirm.body': '目标在最新回合前约 {gap} 回合，超出消息轨索引范围，需回溯翻页加载（预计约 {pages} 页）。确认后将尽力加载并跳转。',
+  'cold.confirm.ok': '确认加载并跳转',
+  'cold.confirm.cancel': '取消',
+  'toocold.hint': '已打开会话，但目标超出安全回溯范围（>200 回合），请手动向上翻页查找。',
+  'hud.progress': '正在回溯加载更早历史… {pulled}/{budget}',
+  'hud.done': '历史已加载完成',
+  'hud.jump': '跳转',
+  'hud.fail': '回溯未命中目标',
+  'hud.retry': '再试一次（追加翻页预算）',
+  'hud.close': '关闭',
 } as const
 
 export type LocaleKey = keyof typeof zh
@@ -331,6 +343,18 @@ export const en: Dict = {
   'group.collapse': 'Collapse/expand group',
   'group.expandAll': 'Expand all',
   'group.collapseAll': 'Collapse all',
+  'cold.badge.hint': 'Cold data: target is beyond the message-rail index (>40 turns); clicking needs backfill loading',
+  'toocold.badge.hint': 'Very cold: target exceeds the safe backtrack range (>200 turns); no auto paging',
+  'cold.confirm.body': 'Target is ~{gap} turns before the latest, beyond the rail index. Backfill paging is needed (~{pages} pages). Confirm to best-effort load and jump.',
+  'cold.confirm.ok': 'Load & jump',
+  'cold.confirm.cancel': 'Cancel',
+  'toocold.hint': 'Session opened, but the target exceeds the safe backtrack range (>200 turns). Please page up manually.',
+  'hud.progress': 'Backfilling earlier history… {pulled}/{budget}',
+  'hud.done': 'History loaded',
+  'hud.jump': 'Jump',
+  'hud.fail': 'Backfill did not find the target',
+  'hud.retry': 'Retry (extra page budget)',
+  'hud.close': 'Close',
 }
 
 /** Japanese dictionary. */

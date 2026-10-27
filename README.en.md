@@ -9,6 +9,11 @@ fetched over **HTTP or the in-process read-only** transport.
   (user / reply / tool), domain (all / active / archived), date range, ordering
   (relevance / time) and "expand hits";
 - **Hit locating** — opening a hit lands on the target line (diagnostic badges ⏳/✓/✗);
+  cold hits (>40 turns behind the session's newest turn) are tagged 🧊 next to the session
+  title, ask for confirmation first, then backfill pages with a measured page-width budget
+  (a HUD overlay shows progress and stays put with Jump / Cancel; a miss can be retried with
+  up to two extra page-budget rounds; very-cold hits >200 turns are tagged ❄️ and never
+  auto-backfilled);
 - **Index lifecycle** — incremental watermark sync, non-destructive rebuild (shadow build +
   atomic swap + bounded archives), deep sync (DRS slow rescan + rebuild), JSON Lines
   snapshot export / import.

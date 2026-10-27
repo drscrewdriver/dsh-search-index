@@ -31,7 +31,7 @@ export const DRS_API_PATH = '/api/dsh-reference-session-collector'
 /** 语料列表分页大小(百会话级一轮 1-2 页;DRS 侧 offset/limit 透传)。 */
 export const DRS_CORPUS_PAGE = 500
 
-/** 一个 DRS 会话头(watermark 代理 + 检索排序字段)。 */
+/** 一个 DRS 会话头（watermark 代理 + 检索排序字段）。 */
 export interface DrsCorpusHead {
   sessionId: string
   version: number
@@ -39,15 +39,19 @@ export interface DrsCorpusHead {
   cwd: string
   updatedAt: number
   archived: boolean
+  /** 会话总回合数（op=session 行面携回）；缺列/老库时 undefined。 */
+  turnCount?: number
 }
 
-/** 一个 DRS 检索臂文档(surface 已折算成引擎列的字符串域)。 */
+/** 一个 DRS 检索臂文档（surface 已折算成引擎列的字符串域）。 */
 export interface DrsCorpusDoc {
   seq: number
   type: string
   surface: 'current' | 'shadowed'
   time: number
   text: string
+  /** 行归属回合（op=session&fields=search 的 turn）；缺列时 undefined。 */
+  turn?: number
 }
 
 /** 一个 DRS 会话的完整语料(头 + docs)。 */
@@ -123,6 +127,7 @@ export class DrsCorpusSource {
   }
 
   private static headOf(row: Record<string, unknown>, fallbackId: string): DrsCorpusHead {
+    const rawTurnCount = row['turn_count']
     return {
       sessionId: String(row['session_id'] ?? fallbackId),
       version: Number(row['artifact_mtime_ms'] ?? 0),
@@ -130,6 +135,7 @@ export class DrsCorpusSource {
       cwd: String(row['cwd'] ?? ''),
       updatedAt: Number(row['last_time_ms'] ?? 0),
       archived: Number(row['archived'] ?? 0) === 1,
+      ...(rawTurnCount === undefined || rawTurnCount === null ? {} : { turnCount: Number(rawTurnCount) }),
     }
   }
 
@@ -152,17 +158,21 @@ export class DrsCorpusSource {
   }
 
   /** 一个会话的检索臂 docs；DRS 无此会话（session:null）返回 undefined。 */
-  async readSession(sessionId: string): Promise<DrsCorpusSession | undefined> {
-    const body = await this.getJson(`?op=session&session=${encodeURIComponent(sessionId)}&fields=search`)
+  async readSession(sessionId: string, atHost?: string): Promise<DrsCorpusSession | undefined> {
+    const body = await this.getJson(`?op=session&session=${encodeURIComponent(sessionId)}&fields=search`, atHost)
     if (body['session'] === null || body['session'] === undefined) return undefined
     const head = DrsCorpusSource.headOf(body['session'] as Record<string, unknown>, sessionId)
-    const docs = (Array.isArray(body['rows']) ? body['rows'] as Record<string, unknown>[] : []).map(row => ({
-      seq: Number(row['seq'] ?? 0),
-      type: String(row['kind'] ?? ''),
-      surface: Number(row['on_surface'] ?? 1) === 1 ? 'current' as const : 'shadowed' as const,
-      time: Number(row['time'] ?? 0),
-      text: String(row['search_text'] ?? ''),
-    }))
+    const docs = (Array.isArray(body['rows']) ? body['rows'] as Record<string, unknown>[] : []).map(row => {
+      const rawTurn = row['turn']
+      return {
+        seq: Number(row['seq'] ?? 0),
+        type: String(row['kind'] ?? ''),
+        surface: Number(row['on_surface'] ?? 1) === 1 ? 'current' as const : 'shadowed' as const,
+        time: Number(row['time'] ?? 0),
+        text: String(row['search_text'] ?? ''),
+        ...(rawTurn === undefined || rawTurn === null ? {} : { turn: Number(rawTurn) }),
+      }
+    })
     return { head, docs }
   }
 
@@ -210,7 +220,7 @@ export class DrsCorpusSource {
     if (request.expand === true) params.set('expand', '1')
     const body = await this.getJson(`?${params.toString()}`, request.atHost)
     const hits = Array.isArray(body['hits']) ? body['hits'] as Record<string, unknown>[] : []
-    return hits.map(row => ({
+    const out: DrsSearchHit[] = hits.map(row => ({
       sessionId: String(row['session_id'] ?? ''),
       title: String(row['title'] ?? ''),
       seq: Number(row['seq'] ?? 0),
@@ -219,6 +229,43 @@ export class DrsCorpusSource {
       updatedAt: Number(row['updated_at'] ?? 0),
       snippet: String(row['snippet'] ?? ''),
     }))
+    await this.enrichHitsHttp(out, request.atHost)
+    return out
+  }
+
+  /**
+   * HTTP 臂回合富化（best-effort）：对 distinct 会话各调一次 readSession 建 seq→turn map。
+   * 桌面版走进程内臂（SQL 更廉），本臂主要服务 web；任一会话失败仅跳过、该行保持 undefined。
+   */
+  private async enrichHitsHttp(hits: DrsSearchHit[], atHost?: string): Promise<void> {
+    if (hits.length === 0) return
+    const bySession = new Map<string, DrsSearchHit[]>()
+    for (const h of hits) {
+      if (h.sessionId === '') continue
+      const arr = bySession.get(h.sessionId) ?? []
+      arr.push(h)
+      bySession.set(h.sessionId, arr)
+    }
+    for (const [sessionId, group] of bySession) {
+      try {
+        const sess = await this.readSession(sessionId, atHost)
+        if (sess === undefined) continue
+        const tc = sess.head.turnCount
+        const turnBySeq = new Map<number, DrsCorpusDoc>()
+        for (const d of sess.docs) turnBySeq.set(d.seq, d)
+        for (const h of group) {
+          const doc = turnBySeq.get(h.seq)
+          if (doc === undefined) continue
+          if (typeof doc.turn === 'number') {
+            h.turn = doc.turn
+            if (typeof tc === 'number' && tc > 0) h.turnGap = Math.max(0, tc - 1 - doc.turn)
+          }
+          h.onSurface = doc.surface === 'current' ? 1 : 0
+        }
+      } catch (err) {
+        this.options.log?.(`HTTP turn 富化跳过 ${sessionId}: ${err instanceof Error ? err.message : String(err)}`)
+      }
+    }
   }
 
   /**

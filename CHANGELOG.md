@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.12
+
+- **搜索冷数据区分与深度回溯定位**：内容命中按回合距分三档——目标距会话最新回合 `turn_gap ≤40` 热（直达）、`41..200` 冷（会话名后标 🧊，点击先弹面板内联确认卡）、`>200` 过冷（标 ❄️，仅打开会话不自动回溯）；已在 DOM 的命中（用户手动翻过页）走 `probeHitInDom` 秒跳豁免。回合富化**零改 DRSC**：进程内臂只读 SQL（`segments.turn` + `sessions.turn_count`），HTTP 臂走 `op=session` 现成 `turn` 字段；富化失败降级 `turnGap=undefined` 按热处理，绝不影响搜索本身。
+- **深加载引擎**：官方消息轨同源——翻页优先点宿主「加载更早记录」按钮（原生视图触发面）、退 `conversation.loadOlder()`；定位单元换官方锚点 `[data-chat-anchor-key]`（旧 `MESSAGE_TAGS` 白名单在宿主正文上命中 0，热/冷都沉底的根因）；运行时测页宽 P 后按 `ceil(gap/P)+1` 收紧预算，命中即停；硬封顶 60s / 40 页。
+- **回溯 HUD 浮窗**（命令式挂 body，独立于面板生命周期——`open()` 会关面板）：回溯中显「n/pages」+取消；落定**不自动消失**——成功停驻给「跳转（forceLand 立即补滚+高亮）/取消」，未命中给「再试一次（追加翻页预算）」，最多 2 轮重试（每轮在末次预算上加首轮量、硬顶 40 页；显式预算豁免页宽收紧），轮次用尽即终态只剩「关闭」。配色走宿主真实令牌（`--dsw-specific-tip` 等），浅色主题不发黑。
+- 契约扩展：`DrsSearchHit`/`HostContentHit` 加 `turn?`/`turnGap?`/`onSurface?` 可选字段（向后兼容）；文案 zh/en 新增 11 键（冷/过冷徽标提示、确认卡、toocold 提示、hud.progress/done/jump/fail/retry/close）。
+- 真机回归：冷命中确认→回溯→跳转全链路、热命中直达、二次点击秒跳、失败重试继续往深翻。
+
 ## 0.7.11
 
 - **DRSC 未激活检测与激活命令提示**：宿主 bundles 激活只扫 profile 顶层 `dependencies`（`dsh.pluginDependencies` 声明宿主不消费），DRSC 作为本包 npm 传递依赖「装得上、不激活」：包可解析但同步/路由不启动，投影库永远不更新。现在 HTTP 探针拿 404 时新增档位 `drs-not-activated`，`search-status` 附 `notActivated` 字段（即使进程内接穗成功也如实标记），设置卡/面板提示直接给出 `dsh plugin --profile <name> add dsh-reference-session-collector` + 重启宿主。

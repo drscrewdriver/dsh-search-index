@@ -44,6 +44,15 @@ export interface DrsSearchHit {
   /** 会话末活跃时间（排序键）。 */
   updatedAt: number
   snippet: string
+  /**
+   * 命中行归属回合（读 DRSC segments.turn 富化）；拿不到时 undefined，
+   * 消费方按热数据处理（不标冷）。
+   */
+  turn?: number
+  /** 距会话最新回合数 = turn_count-1-turn；undefined=富化失败/老库无列。 */
+  turnGap?: number
+  /** 命中行是否在表面（1=在、0=被压缩替换）；读自 segments.on_surface。 */
+  onSurface?: number
 }
 
 /** 兼容别名：宿主侧（`index.ts`）已有同名结构类型，这里给契约一个一致的名字。 */

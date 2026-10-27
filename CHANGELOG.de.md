@@ -2,6 +2,10 @@
 
 Alle wichtigen Änderungen und Bugfixes werden hier festgehalten. Die Versionen folgen der semantischen Versionierung (Installation via `dsh plugin --profile web add github:drscrewdriver/dsh-search-index`).
 
+## 0.7.12
+
+- Kalte Suchtreffer (🧊 >40 Turns hinter dem neuesten Turn) verlangen eine Bestätigung, bevor das Backfill mit breitem Messbudget fortgeschritten wird; das HUD zeigt den Fortschritt und bleibt mit Springen/Abbrechen stehen, ein Fehlschlag kann mit zwei zusätzlichen Seitenbudget-Runden wiederholt werden; ❄️ >200 Turns wird nie automatisch aufgefüllt. Einzelheiten nur in `CHANGELOG.md`.
+
 ## 0.7.11
 
 - DRSC nicht aktiviert als Plugin (Route 404) wird jetzt erkannt und gemeldet: neuer Fehlercode `drs-not-activated`, `search-status` liefert `notActivated`, und die Karte nennt direkt den Aktivierungsbefehl `dsh plugin --profile <name> add dsh-reference-session-collector` plus Host-Neustart. Hinweis: Einträge ab 0.6.6 stehen ausschließlich in `CHANGELOG.md`.

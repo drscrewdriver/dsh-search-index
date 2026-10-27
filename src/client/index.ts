@@ -135,17 +135,29 @@ export function apply(ctx: Context): void {
     openSessionThrough((name) => ctx.get(name), sessionId)
   }
 
-  // 命中定位翻页供给（巡逻可用宿主历史分页往回拉）。
+  // 命中定位翻页供给（巡逻可用宿主历史分页往回拉）——对齐官方消息轨的两个触发面：
+  // ① 原生视图（你现在这种）：官方轨顶部帽就是点宿主「加载更早记录」按钮，本插件同款先试按钮；
+  // ② 阅读视图：官方轨调 session().loadOlder()，本插件退到 ctx.get('conversation').loadOlder()。
+  // 按钮存在（含 disabled=正在加载）即视为「还有更早」返回 true，只有既无按钮又无服务才 false。
   configureLocator({
     loadOlder: async (): Promise<boolean> => {
+      const earlier = /^(加载更早|正在加载更早|载入更早|加载历史|Load earlier|Load older|Loading earlier|Loading older)/i
+      const btn = Array.from(document.querySelectorAll('button'))
+        .find((b) => earlier.test((b.textContent || '').trim()))
+      if (btn !== undefined) {
+        if (!btn.disabled) btn.click() // disabled=宿主正在加载：不点但不算到底，下轮再探
+        return true
+      }
       try {
         const conv = ctx.get('conversation') as { loadOlder?: () => Promise<void> } | undefined
-        if (conv === undefined || typeof conv.loadOlder !== 'function') return false
-        await conv.loadOlder()
-        return true
+        if (conv !== undefined && typeof conv.loadOlder === 'function') {
+          await conv.loadOlder()
+          return true
+        }
       } catch {
         return false
       }
+      return false
     },
   })
 

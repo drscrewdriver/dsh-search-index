@@ -92,6 +92,12 @@ export interface HostContentHit {
   type: string
   time: number
   updatedAt: number
+  /** 命中行归属回合（host 读 DRSC 富化）；undefined=富化失败，按热数据处理。 */
+  turn?: number
+  /** 距会话最新回合数（turn_count-1-turn）；>40 判冷、>200 判过冷。 */
+  turnGap?: number
+  /** 命中行是否在表面（1=在、0=被压缩替换）。 */
+  onSurface?: number
 }
 
 /** Result ordering accepted by the host `content-search` method. */

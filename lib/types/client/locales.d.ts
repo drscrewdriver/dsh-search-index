@@ -160,6 +160,18 @@ export declare const zh: {
     readonly 'group.collapse': "收拢/展开本组";
     readonly 'group.expandAll': "全部展开";
     readonly 'group.collapseAll': "全部收拢";
+    readonly 'cold.badge.hint': "冷数据：目标超出消息轨索引范围（>40 回合），点击需回溯加载";
+    readonly 'toocold.badge.hint': "过冷数据：目标超出安全回溯范围（>200 回合），不自动翻页";
+    readonly 'cold.confirm.body': "目标在最新回合前约 {gap} 回合，超出消息轨索引范围，需回溯翻页加载（预计约 {pages} 页）。确认后将尽力加载并跳转。";
+    readonly 'cold.confirm.ok': "确认加载并跳转";
+    readonly 'cold.confirm.cancel': "取消";
+    readonly 'toocold.hint': "已打开会话，但目标超出安全回溯范围（>200 回合），请手动向上翻页查找。";
+    readonly 'hud.progress': "正在回溯加载更早历史… {pulled}/{budget}";
+    readonly 'hud.done': "历史已加载完成";
+    readonly 'hud.jump': "跳转";
+    readonly 'hud.fail': "回溯未命中目标";
+    readonly 'hud.retry': "再试一次（追加翻页预算）";
+    readonly 'hud.close': "关闭";
 };
 export type LocaleKey = keyof typeof zh;
 export type Dict = Record<LocaleKey, string>;

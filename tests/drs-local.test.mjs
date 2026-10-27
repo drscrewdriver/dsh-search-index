@@ -83,7 +83,10 @@ test('probe + searchGrouped: 只读打开、命中形状与 HTTP 臂同形、库
 
     const hits = await arm.searchGrouped({ query: 'pineapple', archived: 'all', limit: 5 })
     assert.equal(hits.length, 1)
-    assert.deepEqual(hits[0], {
+    // 命中核心形状与 HTTP 臂逐字同形；turn/turnGap/onSurface 为回合富化新增可选字段，
+    // 解构排除后只校 7 个基础字段（新字段存在性另测）。
+    const { turn: hitTurn, turnGap: hitGap, onSurface: hitSurface, ...core } = hits[0]
+    assert.deepEqual(core, {
       sessionId: 's1',
       title: 'Pineapple talk',
       seq: 3,
@@ -93,6 +96,10 @@ test('probe + searchGrouped: 只读打开、命中形状与 HTTP 臂同形、库
       snippet: hits[0].snippet,
     })
     assert.match(hits[0].snippet, /pineapple/u)
+    // 富化生效：seed 的 segments 带 turn/on_surface 列，命中应回填数值。
+    assert.equal(typeof hitTurn, 'number')
+    assert.equal(typeof hitGap, 'number')
+    assert.ok(hitGap >= 0)
 
     const after = snapshot(dir)
     assert.deepEqual(after, before, '只读臂不得改动库内容（版本/行数一律不变）')

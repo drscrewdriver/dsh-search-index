@@ -170,6 +170,46 @@ function countSessions(db: DbFace): number {
   }
 }
 
+/**
+ * 读 projection.db 现成列富化命中回合信息（只读 SELECT，DRSC 零改动）。
+ * `segments(session_id,seq)` 主键→ `turn`/`on_surface`；`sessions.turn_count`→最新回合。
+ * 任一环节抛错即跳过该字段（保持 undefined），绝不因富化失败让整次搜索报错或空。
+ */
+function enrichHitsWithTurn(db: DbFace, hits: DrsSearchHit[], log: (message: string) => void): void {
+  if (hits.length === 0) return
+  const turnCountCache = new Map<string, number | undefined>()
+  const turnCountOf = (sessionId: string): number | undefined => {
+    if (turnCountCache.has(sessionId)) return turnCountCache.get(sessionId)
+    let tc: number | undefined
+    try {
+      const r = db.prepare('SELECT turn_count FROM sessions WHERE session_id=?').get(sessionId) as { turn_count?: unknown } | undefined
+      const raw = r?.turn_count
+      tc = raw === undefined || raw === null ? undefined : Number(raw)
+    } catch {
+      tc = undefined
+    }
+    turnCountCache.set(sessionId, tc)
+    return tc
+  }
+  for (const hit of hits) {
+    if (hit.sessionId === '') continue
+    try {
+      const seg = db.prepare('SELECT turn, on_surface FROM segments WHERE session_id=? AND seq=?')
+        .get(hit.sessionId, hit.seq) as { turn?: unknown; on_surface?: unknown } | undefined
+      if (seg === undefined) continue
+      const turn = Number(seg.turn)
+      if (Number.isFinite(turn)) {
+        hit.turn = turn
+        const tc = turnCountOf(hit.sessionId)
+        if (tc !== undefined && Number.isFinite(tc)) hit.turnGap = Math.max(0, tc - 1 - turn)
+      }
+      if (seg.on_surface !== undefined && seg.on_surface !== null) hit.onSurface = Number(seg.on_surface)
+    } catch (err) {
+      log(`[switch-search] turn 富化跳过 ${hit.sessionId}#${hit.seq}: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+}
+
 interface OpenStore {
   dir: string
   db: DbFace
@@ -262,7 +302,7 @@ export function createDrsLocalArm(options: { dir?: () => string; log?: (message:
         throw new DrsUnavailableError('drs-empty', `本地查询失败：${err instanceof Error ? err.message : String(err)}`)
       }
       const rows = Array.isArray(body.hits) ? body.hits : []
-      return rows.map(row => ({
+      const hits: DrsSearchHit[] = rows.map(row => ({
         sessionId: String(row.session_id ?? ''),
         title: String(row.title ?? ''),
         seq: Number(row.seq ?? 0),
@@ -271,6 +311,8 @@ export function createDrsLocalArm(options: { dir?: () => string; log?: (message:
         updatedAt: Number(row.updated_at ?? 0),
         snippet: String(row.snippet ?? ''),
       }))
+      enrichHitsWithTurn(store.db, hits, log)
+      return hits
     },
 
     dispose(): void {

@@ -2,6 +2,10 @@
 
 Toutes les modifications importantes et corrections de bugs sont consignées ici. Les versions suivent la gestion sémantique de versions (installation : `dsh plugin --profile web add github:drscrewdriver/dsh-search-index`).
 
+## 0.7.12
+
+- Les résultats froids (🧊 à plus de 40 tours du plus récent) demandent confirmation avant le backfill par pages avec un budget mesuré en direct ; le HUD affiche la progression et reste sur Aller / Annuler, un échec peut être relancé avec deux tours de budget supplémentaires ; ❄️ au-delà de 200 tours, aucun backfill automatique. Détails uniquement dans `CHANGELOG.md`.
+
 ## 0.7.11
 
 - Détection et signalement de dsh-reference-session-collector non activé comme plugin (route 404) : nouveau code `drs-not-activated`, champ `notActivated` dans `search-status`, et la carte affiche la commande d'activation `dsh plugin --profile <name> add dsh-reference-session-collector` suivie du redémarrage. Note : les entrées à partir de 0.6.6 figurent uniquement dans `CHANGELOG.md`.

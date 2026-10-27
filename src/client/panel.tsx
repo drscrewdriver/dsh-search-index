@@ -14,7 +14,8 @@ import { createPortal } from 'react-dom'
 import type { SwitchSearchConfig } from '../config.ts'
 // 0.1.7：插件族共用设置节（dsh-thinking-levels 持有并声明 `dsh-family.tab`
 // 子席位；本仓不依赖 ui-slots 类型包，席位键以运行时 children 表为准）。
-import { locateSearchHit } from './locate.ts'
+import { locateSearchHit, classifyHit, probeHitInDom, RAIL_INDEX_TURNS, DEEP_MAX_PAGES } from './locate.ts'
+import { showLocateHud, updateLocateHud, hideLocateHud, type HudButton } from './locate-hud.ts'
 import { callHost, callHostAny, callSteward, deepSyncIndex, type HostContentHit, type HostIndexStatus, type HostSessionItem, type HostSortMode, type SwitchSessionsService, type SwitchUiWorkspaceService } from './host-api.ts'
 import type { SwitchCardScope } from './card.tsx'
 import { translate, type LocaleKey } from './locales.ts'
@@ -367,6 +368,13 @@ export function SwitchPanel({
   const [dateTo, setDateTo] = useState('')
   // 定位诊断徽标（T7.4 v3）：点过命中行的定位态 ⏳/✓/✗——「停在底部」不再靠猜。
   const [locateStatus, setLocateStatus] = useState<Record<string, 'pending' | 'ok' | 'fail'>>({})
+  // 冷数据（turn_gap>40）交互：pendingCold=待确认的命中；deepProgress=回溯进度；
+  // cancelRef=深加载取消令牌（巡逻循环每 tick 读它）。
+  const [pendingCold, setPendingCold] = useState<{ hit: HostContentHit; gap: number } | null>(null)
+  const [deepProgress, setDeepProgress] = useState<{ key: string; pulled: number; budget: number } | null>(null)
+  const cancelRef = useRef<{ cancelled: boolean }>({ cancelled: false })
+  // 过冷（>200）仅提示不自动回溯时的文案行。
+  const [coldNote, setColdNote] = useState<string | null>(null)
   // 直接删除入口（功能①）：开关由 index-status 探针下发（管家
   // session-steward.directDelete，缺省关）；armed=待二次确认的会话 id。
   const [directDelete, setDirectDelete] = useState(false)
@@ -585,9 +593,131 @@ export function SwitchPanel({
       || item.cwd.toLowerCase().includes(normalized))
   }, [sessions, normalized, archivedFilter, dateRangeMs])
 
+  // 命中行点击路由：先探 DOM（已翻过页=激活，直接跳），否则按 turn_gap 分档。
+  const runPlainLocate = (hit: HostContentHit, hitKey: string): void => {
+    setLocateStatus(s => ({ ...s, [hitKey]: 'pending' }))
+    void locateSearchHit(hit).then(ok => {
+      setLocateStatus(s => ({ ...s, [hitKey]: ok ? 'ok' : 'fail' }))
+    })
+  }
+  const runDeepLocate = (hit: HostContentHit, hitKey: string): void => {
+    cancelRef.current = { cancelled: false }
+    setDeepProgress({ key: hitKey, pulled: 0, budget: 1 })
+    setLocateStatus(s => ({ ...s, [hitKey]: 'pending' }))
+    // HUD 命令式浮窗：open() 会关掉面板，面板内进度不可见，故进度交给独立于面板的 HUD。
+    const hudText = (pulled: number, budget: number): string =>
+      translate(t, 'hud.progress', { pulled, budget })
+    const cancelBtn = (): HudButton => ({
+      label: translate(t, 'cold.confirm.cancel'),
+      onClick: () => {
+        cancelRef.current.cancelled = true
+        hideLocateHud()
+        setDeepProgress(null)
+        setLocateStatus(s => ({ ...s, [hitKey]: 'fail' }))
+      },
+    })
+    // 预算追踪：首轮 onProgress 的 budget=收紧前上界（每轮重试追加量）；lastBudget=末次值。
+    let initialBudget = DEEP_MAX_PAGES
+    let lastBudget = DEEP_MAX_PAGES
+    let budgetSeen = false
+    // 重试硬规：失败未命中最多追加 2 轮预算（共 3 次尝试），每轮在末次预算上
+    // 再加首轮量、硬顶 DEEP_MAX_PAGES；轮次用尽即终态只剩「关闭」。
+    const MAX_RETRY = 2
+    const enterBacktrack = (pageBudget?: number, attempt = 0): void => {
+      showLocateHud(hudText(0, pageBudget ?? initialBudget), [cancelBtn()])
+      void locateSearchHit(hit, {
+        deep: true,
+        pageBudget,
+        onProgress: (pulled, budget) => {
+          if (!budgetSeen) { budgetSeen = true; initialBudget = budget }
+          lastBudget = Math.max(lastBudget, budget)
+          setDeepProgress({ key: hitKey, pulled, budget })
+          updateLocateHud(hudText(pulled, budget))
+        },
+        cancel: cancelRef.current,
+      }).then(ok => {
+        setLocateStatus(s => ({ ...s, [hitKey]: ok ? 'ok' : 'fail' }))
+        setDeepProgress(null)
+        // 落定不自动消失（真机反馈）：成功后视图可能被后续渲染冲走，停驻给「跳转」
+        // 按钮（forceLand 二次定位立即补滚+高亮）。
+        if (ok) {
+          showLocateHud(translate(t, 'hud.done'), [
+            {
+              label: translate(t, 'hud.jump'),
+              primary: true,
+              onClick: () => {
+                hideLocateHud()
+                void locateSearchHit(hit, { forceLand: true })
+              },
+            },
+            cancelBtn(),
+          ])
+          return
+        }
+        // 失败未命中：可再追加一轮预算重试（已翻进 DOM 的历史不丢，重试从当前位置
+        // 继续往深翻）；最多 MAX_RETRY 轮，再失败即终态。
+        const buttons: HudButton[] = []
+        if (attempt < MAX_RETRY) {
+          buttons.push({
+            label: translate(t, 'hud.retry'),
+            primary: true,
+            onClick: () => { enterBacktrack(Math.min(DEEP_MAX_PAGES, lastBudget + initialBudget), attempt + 1) },
+          })
+        }
+        buttons.push({
+          label: translate(t, 'hud.close'),
+          onClick: () => { hideLocateHud() },
+        })
+        showLocateHud(translate(t, 'hud.fail'), buttons)
+      })
+    }
+    enterBacktrack()
+  }
+  const handleHitClick = (hit: HostContentHit): void => {
+    const hitKey = `${hit.sessionId}:${hit.seq}`
+    setArmedDelete(null)
+    setColdNote(null)
+    // open() 会先 setOpenPanel(false) 关掉搜索面板（见 SwitchFooter 的 open 包装），
+    // 所以冷/过冷一律先出确认卡/提示、暂不导航；确认后才 open + 定位。
+    const cls = classifyHit(hit)
+    if (cls === 'cold') {
+      // 已加载快路径：目标行已在当前 DOM（同会话已翻页到）→ 直接秒跳，不弹确认。
+      // probeHitInDom 现基于官方锚点 [data-chat-anchor-key]，面板行无此属性→无假阳性。
+      void (async () => {
+        if (await probeHitInDom(hit)) { open(hit.sessionId); runPlainLocate(hit, hitKey); return }
+        setPendingCold({ hit, gap: typeof hit.turnGap === 'number' ? hit.turnGap : 0 })
+      })()
+      return
+    }
+    if (cls === 'too-cold') { setColdNote(translate(t, 'toocold.hint')); return }
+    open(hit.sessionId)
+    runPlainLocate(hit, hitKey)
+  }
+
   const children: ReactElement[] = []
   if (deleteNote !== null) {
     children.push(createElement('div', { key: 'delnote', className: deleteNote.failed ? 'dsws_error' : 'dsws_status' }, deleteNote.text))
+  }
+  if (coldNote !== null) {
+    children.push(createElement('div', { key: 'coldnote', className: 'dsws_status' }, coldNote))
+  }
+  if (pendingCold !== null) {
+    const pk = `${pendingCold.hit.sessionId}:${pendingCold.hit.seq}`
+    const pages = Math.max(1, Math.ceil(pendingCold.gap / RAIL_INDEX_TURNS))
+    children.push(createElement('div', {
+      key: 'coldconfirm', className: 'dsws_status',
+      style: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px', padding: '8px', border: '1px solid var(--dsw-alias-border-default, #444)', borderRadius: '6px' },
+    }, [
+      createElement('span', { key: 'msg' }, translate(t, 'cold.confirm.body', { gap: pendingCold.gap, pages })),
+      createElement('button', {
+        key: 'ok', type: 'button', className: 'dsws_actBtn',
+        onClick: () => { const hit = pendingCold.hit; setPendingCold(null); open(hit.sessionId); runDeepLocate(hit, pk) },
+      }, translate(t, 'cold.confirm.ok')),
+      createElement('button', {
+        key: 'cancel', type: 'button', className: 'dsws_actBtn',
+        onClick: () => { setPendingCold(null) },
+      }, translate(t, 'cold.confirm.cancel')),
+    ]))
   }
   if (sessionsError !== null) {
     children.push(createElement('div', { key: 'err', className: 'dsws_error' }, translate(t, 'panel.sessionsError', { error: sessionsError })))
@@ -678,18 +808,17 @@ export function SwitchPanel({
           // B 路线定位臂（T7.4）：先开会话，再异步把命中行滚进视口高亮；
           // 定位失败静默——行为与接臂前逐行一致（仅打开）。展开态下同会话
           // 多行各自成行，行键/定位态键都降到 (sessionId,seq) 粒度。
-          onClick: () => {
-            const hitKey = `${item.sessionId}:${item.seq}`
-            setArmedDelete(null)
-            open(item.sessionId)
-            setLocateStatus(s => ({ ...s, [hitKey]: 'pending' }))
-            void locateSearchHit(item).then(ok => {
-              setLocateStatus(s => ({ ...s, [hitKey]: ok ? 'ok' : 'fail' }))
-            })
-          },
+          onClick: () => handleHitClick(item),
         }, [
           createElement('span', { key: 't', className: 'dsws_rowTitle' }, [
-            createElement('span', { key: 'x', className: 'dsws_titleText' }, item.title || translate(t, 'panel.untitled')),
+            createElement('span', { key: 'x', className: 'dsws_titleText' }, [
+              item.title || translate(t, 'panel.untitled'),
+              ...(classifyHit(item) === 'cold'
+                ? [createElement('span', { key: 'cold', title: translate(t, 'cold.badge.hint') }, ' 🧊')]
+                : classifyHit(item) === 'too-cold'
+                  ? [createElement('span', { key: 'cold', title: translate(t, 'toocold.badge.hint') }, ' ❄️')]
+                  : []),
+            ]),
             createElement('span', { key: 'tag', className: 'dsws_tag' }, typeLabel(t, item.type)),
             // The session clock — the very field the 「时间」 ordering sorts by and
             // the one the title rows already show. Ordering rows by a time the
@@ -701,7 +830,9 @@ export function SwitchPanel({
               title: locateStatus[`${item.sessionId}:${item.seq}`] === 'pending' ? '定位巡逻中'
                 : locateStatus[`${item.sessionId}:${item.seq}`] === 'ok' ? '已跳转到命中行'
                   : '未能定位（行未渲染/文本被拆分/超时）',
-            }, locateStatus[`${item.sessionId}:${item.seq}`] === 'pending' ? '⏳' : locateStatus[`${item.sessionId}:${item.seq}`] === 'ok' ? '✓' : '✗')]),
+            }, locateStatus[`${item.sessionId}:${item.seq}`] === 'pending'
+              ? (deepProgress?.key === `${item.sessionId}:${item.seq}` ? `⏳ ${String(deepProgress.pulled)}/${String(deepProgress.budget)}` : '⏳')
+              : locateStatus[`${item.sessionId}:${item.seq}`] === 'ok' ? '✓' : '✗')]),
           ]),
           createElement('span', { key: 's', className: 'dsws_snippet' }, item.snippet || translate(t, 'panel.noText')),
         ]),

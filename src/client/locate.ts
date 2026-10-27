@@ -50,6 +50,19 @@ const MAX_OLDER_PAGES = 24
 /** 硬封顶：带翻页的定位窗口上限。 */
 const HARD_DEADLINE_MS = 30_000
 
+/** 热/冷分界：消息轨（tidy-display RailView）只索引最新往回这么多回合。 */
+export const RAIL_INDEX_TURNS = 40
+
+/** 安全回溯护栏：超出这么多回合不自动翻页（过冷），仅打开会话。 */
+export const MAX_BACKTRACK_TURNS = 200
+
+/** 深加载硬封顶（冷数据确认后的定位窗口上限）。 */
+const DEEP_HARD_DEADLINE_MS = 60_000
+
+/** 深加载页数上限（页宽无法静态得知时的安全上界；命中即停，实际很少跑满）。
+ * 导出供 panel 失败重试推导追加预算后的硬顶。 */
+export const DEEP_MAX_PAGES = 40
+
 /** 巡逻间隔：会话重渲染会换 DOM 节点，每轮重新定位。 */
 const TICK_MS = 350
 
@@ -99,6 +112,21 @@ export function resolveNeedle(row: LocateRowFace | undefined): string | null {
   return null
 }
 
+/** 命中的可达性档位。 */
+export type HitClass = 'hot' | 'cold' | 'too-cold' | 'unknown'
+
+/**
+ * 按 turn_gap 分档：≤40 热（直接跳）、41..200 冷（确认+深加载）、>200 过冷
+ * （不自动回溯）、undefined 未知（富化失败/老库，按热处理）。
+ */
+export function classifyHit(hit: { turnGap?: number }): HitClass {
+  const g = hit.turnGap
+  if (typeof g !== 'number' || !Number.isFinite(g)) return 'unknown'
+  if (g <= RAIL_INDEX_TURNS) return 'hot'
+  if (g > MAX_BACKTRACK_TURNS) return 'too-cold'
+  return 'cold'
+}
+
 /** 正文候选标签：只取消息渲染会用的块级/内联代码标签——不含 div/span，
  * 否则搜索面板自己的结果行（dsws_snippet 的 span，文本就含 needle 前缀）会抢先命中。 */
 const MESSAGE_TAGS = 'p, li, pre, blockquote, h1, h2, h3, h4, td, code'
@@ -143,52 +171,34 @@ function landedInPort(el: Element): boolean {
   return flow >= -VISIBILITY_SLACK && flow <= port.clientHeight + VISIBILITY_SLACK
 }
 
-/** 阅读模式优先：命中行若落在 [data-reader-turn] 段内，直接返该段（turn 级
- * 锚点由插件自标，比文本匹配稳）；env.turn 给定时还能直接按 turn 号选段。 */
-function findReaderRow(root: ParentNode, needle: string, turn: number | undefined): Element | null {
-  if (turn !== undefined && turn > 0) {
-    const direct = root.querySelector(`[data-reader-turn="${String(turn)}"]`)
-    if (direct !== null && hasLayout(direct)) return direct
-  }
-  for (const el of Array.from(root.querySelectorAll(MESSAGE_TAGS))) {
-    if (!hasLayout(el)) continue
-    if (el.closest('[class*="dsws_"], [role="dialog"]') !== null) continue
-    const text = el.textContent
-    if (text === null || !normalizeForMatch(text).includes(needle)) continue
-    const section = el.closest('[data-reader-turn]')
-    if (section !== null && hasLayout(section)) return section
-    return el
-  }
-  return null
-}
-
 /**
- * 找正文行：多义时取 DOM 最深者（段落本体而非包裹层）；**排除插件自家
- * 子树**（dsws_ 前缀类与任何 role=dialog 弹层）——面板行/管理台行都是
- * 目标文本的镜像，绝不允许当作跳转目的地。
+ * 找正文行：以宿主官方消息轨锚点 `[data-chat-anchor-key]` 为主——0.1.2+ 原生会话行
+ * 都带此属性（tidy-display 的 RailView 也正是镜像它），其 textContent 含整轮正文，
+ * needle 命中即取该锚点；多义时取最深者。官方锚点缺席（老宿主）才回退块级正文标签
+ * 文本匹配。两条路都不依赖 tidy-display 的 [data-reader-turn]，也不按哈希类名匹配。
+ * 回退路径额外排除插件自家子树（dsws_ / role=dialog），绝不停到面板自己身上。
  */
-function findMessageElement(root: ParentNode, needle: string, turn?: number): Element | null {
-  // 阅读模式（dsh-tidy-display）在场时优先进其 turn 锚点体系；缺席自动走官方会话视图。
-  const reader = findReaderRow(root, needle, turn)
-  if (reader !== null) return reader
-  let best: Element | null = null
-  let bestDepth = -1
-  for (const el of Array.from(root.querySelectorAll(MESSAGE_TAGS))) {
-    if (!hasLayout(el)) continue // 未激活页签里的隐藏行不参与匹配（防驻留误判/跳错页签）
-    const text = el.textContent
-    if (text === null) continue
-    if (el.closest('[class*="dsws_"], [role="dialog"]') !== null) continue
-    if (!normalizeForMatch(text).includes(needle)) continue
-    const section = el.closest('[data-reader-turn]')
-    if (section !== null) continue // 段级已由 findReaderRow 处理，这里只收散行
-    let depth = 0
-    for (let n: Node | null = el.parentElement; n !== null; n = n.parentElement) depth += 1
-    if (depth > bestDepth) {
-      best = el
-      bestDepth = depth
+function findMessageElement(root: ParentNode, needle: string): Element | null {
+  const deepestMatch = (nodes: Element[], excludePanel: boolean): Element | null => {
+    let best: Element | null = null
+    let bestDepth = -1
+    for (const el of nodes) {
+      if (!hasLayout(el)) continue // 未激活页签里的隐藏行不参与（防驻留误判/跳错页签）
+      const text = el.textContent
+      if (text === null) continue
+      if (excludePanel && el.closest('[class*="dsws_"], [role="dialog"]') !== null) continue
+      if (!normalizeForMatch(text).includes(needle)) continue
+      let depth = 0
+      for (let n: Node | null = el.parentElement; n !== null; n = n.parentElement) depth += 1
+      if (depth > bestDepth) { best = el; bestDepth = depth }
     }
+    return best
   }
-  return best
+  // 官方消息轨锚点优先：宿主原生属性，跨构建稳定。
+  const byAnchor = deepestMatch(Array.from(root.querySelectorAll('[data-chat-anchor-key]')), false)
+  if (byAnchor !== null) return byAnchor
+  // 老宿主无 data-chat-anchor-key → 回退块级正文标签文本匹配。
+  return deepestMatch(Array.from(root.querySelectorAll(MESSAGE_TAGS)), true)
 }
 
 /** 瞬时高亮：类切换（不写 inline 样式——真机教训：prepend 历史后 React 复用
@@ -223,6 +233,17 @@ export interface LocateEnv {
   log?: (message: string) => void
   /** 覆盖注入的翻页供给（测试用）；缺省走 configureLocator 的全局注入。 */
   loadOlder?: () => Promise<boolean>
+  /** 深加载模式：冷数据确认后由 panel 置 true，放宽封顶并测页宽收紧预算。 */
+  deep?: boolean
+  /** 显式页数预算（测试用）；缺省由 deep 标志与运行时页宽推导。 */
+  pageBudget?: number
+  /** 翻页进度回调（已翻页数, 当前预算）。 */
+  onProgress?: (pulled: number, budget: number) => void
+  /** 取消令牌：外部置 cancelled=true 时巡逻立即收手。 */
+  cancel?: { cancelled: boolean }
+  /** 强制着陆：跳过 STICK 驻留窗判定（HUD「跳转」按钮二次调用用——目标已在 DOM，
+   * 但要立即补滚+高亮，不等驻留期满）。 */
+  forceLand?: boolean
 }
 
 /** 外部能力注入面：client apply 期接线宿主会话服务，模块自身零 ctx 依赖。 */
@@ -236,6 +257,37 @@ let injectedDeps: LocatorDeps = {}
 /** 接线点：client apply 调一次；未接线时定位退化为 v3 纯 DOM 巡逻。 */
 export function configureLocator(deps: LocatorDeps): void {
   injectedDeps = deps
+}
+
+/** 已加载回合数（官方消息轨锚点 [data-chat-anchor-key] 计数，不依赖 tidy-display）。 */
+function countLoadedTurns(root: ParentNode): number {
+  try {
+    return root.querySelectorAll('[data-chat-anchor-key]').length
+  } catch {
+    return 0
+  }
+}
+
+/**
+ * 点击豁免探测：拉 DRS 行→选 needle→单次 findMessageElement 判目标行是否已在 DOM。
+ * 不滚动、不翻页；命中=true（用户已翻到过，算激活，可直接跳）。任何异常返回 false。
+ */
+export async function probeHitInDom(hit: HostContentHit, env: LocateEnv = {}): Promise<boolean> {
+  const fetchImpl = env.fetchImpl ?? globalThis.fetch
+  const doc = env.doc ?? (typeof document === 'undefined' ? undefined : document)
+  if (doc === undefined) return false
+  try {
+    const response = await fetchImpl(`${DRS_ROUTE}?op=session&session=${encodeURIComponent(hit.sessionId)}`)
+    if (!response.ok) return false
+    const body = await response.json() as { ok?: boolean; rows?: LocateRowFace[] }
+    if (body.ok !== true || !Array.isArray(body.rows)) return false
+    const row = body.rows.find(r => Number(r.seq) === Number(hit.seq))
+    const needle = resolveNeedle(row)
+    if (needle === null) return false
+    return findMessageElement(doc.body ?? doc, needle) !== null
+  } catch {
+    return false
+  }
 }
 
 /** 目标行是否基本完整落在**其滚动窗口**内由 landedInPort 判定；旧视口函数已废弃。 */
@@ -259,11 +311,14 @@ export async function locateSearchHit(hit: HostContentHit, env: LocateEnv = {}):
     const row = body.rows.find(r => Number(r.seq) === Number(hit.seq))
     const needle = resolveNeedle(row)
     if (needle === null) { log(`locate: skip row seq=${String(hit.seq)} (shadowed/短文本/无行)`); return false }
-    const targetTurn = typeof row?.turn === 'number' ? row.turn : undefined
 
     const startedAt = Date.now()
+    const deep = env.deep === true
+    // 页数预算：显式覆盖 > 深加载 DEEP_MAX_PAGES > 普通 MAX_OLDER_PAGES；
+    // 首次翻页测到真实页宽 P 后按 turn_gap 收紧（命中即停，预算只是 never-found 上界）。
+    let budget = env.pageBudget ?? (deep ? DEEP_MAX_PAGES : MAX_OLDER_PAGES)
     let deadline = startedAt + (env.timeoutMs ?? LOCATE_TIMEOUT_MS)
-    const hardDeadline = startedAt + HARD_DEADLINE_MS
+    const hardDeadline = startedAt + (deep ? DEEP_HARD_DEADLINE_MS : HARD_DEADLINE_MS)
     let lastScrollAt = 0
     let userTookOver = false
     // 翻页供给：client apply 注入（IConversation.loadOlder 包装），env 可覆盖供测试。
@@ -271,6 +326,9 @@ export async function locateSearchHit(hit: HostContentHit, env: LocateEnv = {}):
     let pagesPulled = 0
     let pullInFlight = false
     let lastPullAt = 0
+    // 运行时测页宽：首次翻页前后各测一次已加载回合数，delta=真实页宽 P。
+    let turnsBeforePull: number | undefined
+    let pageSizeMeasured = false
     // pointerdown 必收：真机教训——巡逻窗口内用户点「加载更早记录」等页内按钮，
     // 不收手则我们的补滚与宿主 prepend 后的滚动锚定对打，画面错乱。
     const USER_EVENTS = ['wheel', 'touchstart', 'keydown', 'pointerdown'] as const
@@ -285,19 +343,32 @@ export async function locateSearchHit(hit: HostContentHit, env: LocateEnv = {}):
       }
       for (const ev of USER_EVENTS) win.addEventListener(ev, onUser, { passive: true, once: true })
       const ticker = setInterval(() => {
+        if (env.cancel?.cancelled === true) { finish(false, 'cancelled'); return }
         if (userTookOver) { finish(false, 'yield user'); return }
         if (Date.now() >= deadline) { finish(false, `locate timeout (pages=${String(pagesPulled)})`); return }
-        const el = findMessageElement(doc.body ?? doc, needle, targetTurn)
+        const el = findMessageElement(doc.body ?? doc, needle)
         if (el === null) {
           // 目标行不在 DOM：历史分页面（IConversation.loadOlder）——没找到就
           // 往回拉页，每拉一页给 2s 渲染窗口；拉满/拉尽则维持原超时。
-          if (pullOlder !== undefined && !pullInFlight && pagesPulled < MAX_OLDER_PAGES
+          if (pullOlder !== undefined && !pullInFlight && pagesPulled < budget
             && deadline < hardDeadline && Date.now() - lastPullAt >= TICK_MS * 2) {
             pullInFlight = true
             lastPullAt = Date.now()
+            if (turnsBeforePull === undefined) turnsBeforePull = countLoadedTurns(doc)
             void Promise.resolve().then(() => pullOlder()).then((pulled) => {
               if (pulled) {
                 pagesPulled += 1
+                env.onProgress?.(pagesPulled, budget)
+                // 首次成功翻页后测页宽 P，按 turn_gap 收紧预算（绝不超过初始上限）。
+                // 显式 pageBudget（失败重试的追加预算）豁免收紧——那是调用方
+                // 刻意给出的上界，压回去会让重试形同虚设。
+                if (!pageSizeMeasured && env.pageBudget === undefined
+                  && typeof hit.turnGap === 'number' && hit.turnGap > 0
+                  && turnsBeforePull !== undefined) {
+                  pageSizeMeasured = true
+                  const delta = countLoadedTurns(doc) - turnsBeforePull
+                  if (delta > 0) budget = Math.min(budget, Math.ceil(hit.turnGap / delta) + 1)
+                }
                 deadline = Math.min(hardDeadline, Date.now() + 2_000 + (env.timeoutMs ?? LOCATE_TIMEOUT_MS) / 2)
               } else {
                 deadline = Math.min(deadline, Date.now()) // 服务缺席：不再等待
@@ -308,7 +379,9 @@ export async function locateSearchHit(hit: HostContentHit, env: LocateEnv = {}):
         }
         if (landedInPort(el)) {
           // 从未滚过且本来就可见（同会话当前视口）=直达；否则须驻留过 STICK 窗。
-          if (lastScrollAt === 0 || Date.now() - lastScrollAt >= STICK_MS) {
+          // forceLand（HUD 跳转按钮）豁免驻留窗——用户主动要求立刻落位。
+          if (env.forceLand === true || lastScrollAt === 0 || Date.now() - lastScrollAt >= STICK_MS) {
+            landRow(el)
             flashElement(el)
             finish(true, 'located')
           }
