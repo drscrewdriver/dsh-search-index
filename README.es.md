@@ -91,6 +91,8 @@ De ahí la semántica de fallos: **sombra presente + activo presente = construcc
 
 ## Instalación
 
+> **Nota para DSH NEXT (escritorio):** el host de escritorio responde a las peticiones que no vienen del renderer con `403 Browser access is disabled`, así que la búsqueda de contenido usa automáticamente el canal en proceso de solo lectura (`contentTransport: auto`). No hay que instalar nada aparte: `dsh-reference-session-collector` llega como dependencia normal. Ojo: instalado ≠ activado — si la tarjeta muestra `drs-not-activated` (ruta 404), ejecuta `dsh plugin --profile <name> add dsh-reference-session-collector` y reinicia el host.
+
 ```sh
 # Opción 1: instalación directa desde GitHub (recomendada) — lib/ está subido al repo, sin compilación local
 dsh plugin --profile web add github:drscrewdriver/dsh-search-index#master

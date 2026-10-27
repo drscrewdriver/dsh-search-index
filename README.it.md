@@ -91,6 +91,8 @@ Da qui la semantica dei guasti: **ombra presente + attivo presente = costruzione
 
 ## Installazione
 
+> **Nota per DSH NEXT (desktop):** l'host desktop risponde alle richieste non provenienti dal renderer con `403 Browser access is disabled`, quindi la ricerca dei contenuti passa automaticamente al canale in-process in sola lettura (`contentTransport: auto`). Non serve installare altro: `dsh-reference-session-collector` arriva come dipendenza normale. Attenzione: installato ≠ attivato — se la card mostra `drs-not-activated` (rotta 404), esegui `dsh plugin --profile <name> add dsh-reference-session-collector` e riavvia l'host.
+
 ```sh
 # Opzione 1: installazione diretta da GitHub (consigliata) — lib/ è committato, niente build locale necessaria
 dsh plugin --profile web add github:drscrewdriver/dsh-search-index#master

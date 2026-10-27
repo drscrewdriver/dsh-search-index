@@ -6,7 +6,7 @@ import reactHooks from 'eslint-plugin-react-hooks'
 import globals from 'globals'
 
 export default tseslint.config(
-  { ignores: ['lib/**', 'node_modules/**', 'coverage/**', '_wt-*/**'] },
+  { ignores: ['lib/**', 'node_modules/**', 'coverage/**', '_wt-*/**', '_tmp-*.mjs'] },
   ...tseslint.configs.recommended,
   reactHooks.configs['recommended-latest'],
   {

@@ -41,6 +41,39 @@ test('no dictionary value is empty', () => {
   }
 })
 
+// 0.7.8 起内容检索通道与六档诊断文案，0.7.11 加 drs-not-activated 档与未激活提示：
+// 九语字典必须全部带键，不得只靠 zh 回退。
+test('every dictionary carries the transport + failure-code keys', () => {
+  const keys = [
+    'card.contentTransport', 'card.contentTransport.desc',
+    'card.transport.auto', 'card.transport.http', 'card.transport.in-process',
+    'card.drsStatus.mode', 'card.drsStatus.inactive',
+    'card.drsReason.browser-access-denied', 'card.drsReason.drs-http-unreachable', 'card.drsReason.drs-http-error',
+    'card.drsReason.drs-not-activated',
+    'card.drsReason.drs-missing', 'card.drsReason.drs-empty', 'card.drsReason.drs-schema-mismatch',
+    'panel.contentErr.browser-access-denied', 'panel.contentErr.drs-http-unreachable', 'panel.contentErr.drs-http-error',
+    'panel.contentErr.drs-not-activated',
+    'panel.contentErr.drs-missing', 'panel.contentErr.drs-empty', 'panel.contentErr.drs-schema-mismatch',
+  ]
+  const missing = []
+  const placeholderProblems = []
+  for (const [locale, dict] of Object.entries(dictionaries)) {
+    for (const key of keys) {
+      if (typeof dict[key] !== 'string' || dict[key] === '') {
+        missing.push(`${locale}.${key}`)
+        continue
+      }
+      const expected = placeholders(zh[key])
+      const actual = placeholders(dict[key])
+      if (JSON.stringify(expected) !== JSON.stringify(actual)) {
+        placeholderProblems.push(`${locale}.${key}: zh ${JSON.stringify(expected)} vs ${JSON.stringify(actual)}`)
+      }
+    }
+  }
+  assert.deepEqual(missing, [], 'missing keys')
+  assert.deepEqual(placeholderProblems, [], 'placeholder mismatches')
+})
+
 test('translated en keys keep the zh placeholder set', () => {
   const problems = []
   for (const [key, enValue] of Object.entries(en)) {

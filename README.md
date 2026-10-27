@@ -1,7 +1,7 @@
 # dsh-search-index（会话检索）
 
-DSH 插件：**会话标题 / 内容全文检索**，自带独立 FTS5 索引，内容检索**硬依赖**
-`dsh-reference-session-collector`（DRS）投影库。
+DSH 插件：**会话标题 / 内容全文检索**，自带独立 FTS5 索引；内容检索的语料与语义
+来自 `dsh-reference-session-collector`（DRS）投影库，经 **HTTP 或进程内只读** 两条通道取数。
 
 - **标题模式** —— 直接命中会话标题，输入即出结果；
 - **内容模式** —— 按会话聚合展示标题 + 命中片段，支持类型（用户/回复/工具）、
@@ -10,10 +10,23 @@ DSH 插件：**会话标题 / 内容全文检索**，自带独立 FTS5 索引，
 - **索引生命周期** —— 增量同步（水位轮询）、非破坏性整理（影子库构建 + 原子切换 +
   有界归档）、深度同步（DRS 慢扫自愈 + 整理）、JSON Lines 快照导出/导入。
 
-> **DRS 是硬依赖**：内容检索的语义（会话分组、类型加权、表面与归档日期过滤、
-> 锚定节选）全部在 `dsh-reference-session-collector` 的投影库里完成。DRS 不可达时
-> 内容检索**显式报错**，不回退本地索引（本地引擎只剩会话头元数据面），`search-status`
-> 返回 `available:false, reason:'drs-unavailable'`。
+> **DRS 是硬依赖，但通道可选**：内容检索的语义（会话分组、类型加权、表面与归档日期过滤、
+> 锚定节选）全部在 `dsh-reference-session-collector` 的投影库里完成。它作为本包的
+> 正式依赖随包安装，**包本身不需要用户单独下载**；但注意「包装上 ≠ 插件激活」：
+> 宿主激活 bundles 只扫 profile 顶层 `dependencies`，作为传递依赖它可能不被挂载，
+> 此时投影库不会更新——设置卡会提示激活命令：
+> `dsh plugin --profile <name> add dsh-reference-session-collector` 后重启宿主。
+> 两条检索通道任一生效即可用：
+> `http`（同源路由）与 `in-process`（只读直连 `projection.db`）。
+>
+> **DSH NEXT 桌面版必读**：桌面宿主在 web 层对非渲染进程请求一律 `403 Browser access is disabled`，
+> 所以 HTTP 通道在桌面版永远不可用——`contentTransport` 缺省 `auto` 会自动改走进程内只读臂，
+> 用户无需任何操作。仅当两臂都不可用时，`search-status` 才返回 `available:false` 并给出具体档位码
+> （`browser-access-denied` / `drs-http-unreachable` / `drs-http-error` / `drs-not-activated` /
+> `drs-missing` / `drs-empty` / `drs-schema-mismatch`）；其中 `drs-not-activated`（路由 404）
+> 会在 `search-status.notActivated=true` 中单独标记，即使进程内接穗可用也会提示执行上述激活命令。
+>
+> 进程内臂只读：不建目录、不跑 DDL、不写 `meta`；库 schema 与本包预期不符时只报错，**绝不清库**。
 
 ## 索引自愈：整理 vs 深度同步
 
@@ -112,8 +125,9 @@ dsh plugin --profile web add "file:E:/test/rewrite-agently/mine-dsh-plugins/dsh-
 | `autoSync` / `syncIntervalMs` | true / 30000 | 后台水位轮询增量同步 |
 | `archiveKeep` | 2 | 整理索引后保留的历史索引份数 |
 | `indexDir` | `''` | 索引目录覆盖（缺省 `~/.dsh-switch-search`，环境变量 `DSH_SWITCH_SEARCH_DIR`） |
-| `corpusSource` | `drs` | 语料源；`drs`=DRS 投影库（硬依赖）；`native`=sessionQuery 兜底（仅标题面可用） |
+| `corpusSource` | `drs` | 同步语料源；`drs`=DRS 投影库；`native`=sessionQuery 兜底（仅标题面可用） |
 | `drsBaseUrl` | `''` | DRS 基址；空=首个 `trustedHosts` 条目，再退 `http://127.0.0.1:8080` |
+| `contentTransport` | `auto` | 内容检索通道：`auto`=HTTP 优先、失败降级进程内只读库；`http`=只走 HTTP；`in-process`=只走进程内只读库（桌面版） |
 
 ## 与 dsh-manage-session 的职责边界
 

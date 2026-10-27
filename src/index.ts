@@ -39,8 +39,9 @@ import {
   type SwitchRebuildState,
 } from './host/index/rebuild.ts'
 import { exportSnapshot, parseSnapshot } from './host/index/snapshot.ts'
-import { extractTitleFromEvents } from './host/index/extract.ts'
 import { DrsCorpusSource, resolveDrsBaseUrl } from './host/index/drs-source.ts'
+import { createDrsLocalArm, resolveDrsDir, type DrsLocalArm } from './host/index/drs-local.ts'
+import { classifyDrsFailure, messageForDrsFailure } from './host/index/drs-contract.ts'
 import {
   bridgeOverlay,
   installLegacySettingsBridge,
@@ -185,6 +186,7 @@ export const Config = z.object({
   indexDir: z.string().default(''),
   corpusSource: z.union(['native', 'drs']).default('drs').volatile(),
   drsBaseUrl: z.string().default('').volatile(),
+  contentTransport: z.union(['auto', 'http', 'in-process']).default('auto').volatile(),
 })
 
 /** Live reference the 0.1.7 loader hands `apply` for `.volatile()` config fields. */
@@ -384,7 +386,7 @@ async function contentSearch(
   runtime: SwitchRuntime,
   payload: unknown,
   requestHost = '',
-): Promise<{ ok: boolean; items?: unknown[]; error?: string }> {
+): Promise<{ ok: boolean; items?: unknown[]; error?: string; code?: string }> {
   const record = payload as { query?: unknown; limit?: unknown; types?: unknown; sortBy?: unknown; archived?: unknown; expand?: unknown; from?: unknown; to?: unknown } | null
   const query = typeof record?.query === 'string' ? record.query.trim() : ''
   if (query === '') return { ok: false, error: '缺少 query' }
@@ -425,24 +427,40 @@ async function contentSearch(
     })
     return { ok: true, items }
   } catch (err) {
-    return {
-      ok: false,
-      error: `dsh-reference-session-collector 搜索面不可用（硬依赖）：${String(err instanceof Error ? err.message : err)}`,
-    }
+    // 六档诊断：403 / 不可达 / DRS 报错 / 包缺失 / 库未建 / 版本不匹配，
+    // 客户端按 code 取本地化文案（旧客户端仍读 error 原文）。
+    const failure = classifyDrsFailure(err)
+    runtime.log(`[switch-search] content-search failed: ${failure.code} ${failure.detail}`)
+    return { ok: false, code: failure.code, error: messageForDrsFailure(failure.code) }
   }
 }
 
-/** search-status: 可用性由 DRS 探针裁决（硬依赖）；本地引擎只剩头元数据面。 */
+/** search-status: 可用性由通道探针裁决（HTTP 或进程内任一可用）；附当前 mode 与库明细。 */
 async function searchStatus(runtime: SwitchRuntime, requestHost = ''): Promise<unknown> {
   const index = runtime.index
   const sync = index.sync.snapshot()
-  const drsUp = await runtime.drsSource.probe(requestHost)
+  const probe = await runtime.drsSource.probeDetail(requestHost)
   return {
     ok: true,
-    available: drsUp,
-    reason: drsUp ? undefined : 'drs-unavailable',
+    available: probe.ok,
+    reason: probe.reason,
+    detail: probe.detail,
+    /** 当前实际可用通道：http / in-process / none。 */
+    mode: probe.mode,
+    /** DRSC 路由 404（插件未激活，投影库不会自动更新）；旧客户端忽略此字段。 */
+    notActivated: probe.notActivated === true,
+    /** 配置面选择的通道：auto / http / in-process。 */
+    transport: runtime.config().contentTransport ?? 'auto',
+    /** 进程内只读廂明细（库版本/会话数/目录）。 */
+    local: {
+      schemaVersion: probe.schemaVersion,
+      expected: probe.expected,
+      sessions: probe.sessions,
+      dir: probe.dir,
+    },
     indexing: sync.state === 'syncing',
-    archivedSessions: index.engine.countArchived(),
+    // 引擎在 setImmediate 后才 open：启动窗口内不能抛（卡片会轮询这里）。
+    archivedSessions: index.engine.isOpen ? index.engine.countArchived() : 0,
     archive: index.archiveReader.diagnostics(),
     sync,
     rebuild: index.rebuild,
@@ -694,6 +712,11 @@ export function apply(ctx: Context, entry: Partial<SwitchSearchConfig> = {}): vo
       search['defaultMode'] === 'title' || search['defaultMode'] === 'content' ? (search['defaultMode'] as 'title' | 'content') : v
     const corpus = (v: 'native' | 'drs'): 'native' | 'drs' =>
       search['corpusSource'] === 'native' || search['corpusSource'] === 'drs' ? (search['corpusSource'] as 'native' | 'drs') : v
+    // 内容检索通道：未知值一律回退 auto（先 HTTP、失败降级进程内）。
+    const transport = (v: 'auto' | 'http' | 'in-process'): 'auto' | 'http' | 'in-process' => {
+      const value = search['contentTransport']
+      return value === 'http' || value === 'in-process' || value === 'auto' ? value : v
+    }
     return {
       enabled: bool('enabled', readVolatileValue(entry.enabled) ?? DEFAULT_CONFIG.enabled),
       defaultMode: mode(readVolatileValue(entry.defaultMode) ?? DEFAULT_CONFIG.defaultMode),
@@ -703,6 +726,7 @@ export function apply(ctx: Context, entry: Partial<SwitchSearchConfig> = {}): vo
       indexDir: str('indexDir', readVolatileValue(entry.indexDir) ?? DEFAULT_CONFIG.indexDir),
       corpusSource: corpus(readVolatileValue(entry.corpusSource) ?? DEFAULT_CONFIG.corpusSource),
       drsBaseUrl: str('drsBaseUrl', readVolatileValue(entry.drsBaseUrl) ?? DEFAULT_CONFIG.drsBaseUrl),
+      contentTransport: transport(readVolatileValue(entry.contentTransport) ?? DEFAULT_CONFIG.contentTransport),
     }
   }
 
@@ -747,10 +771,15 @@ export function apply(ctx: Context, entry: Partial<SwitchSearchConfig> = {}): vo
   // dsh-reference-session-collector 投影库取；Host 头回显首个 trustedHosts 条目
   // （DRS 信任门是精确匹配，条目省略端口时 URL 带端口会失配）。
   const trustedHosts = trustedRuntime.trustedHosts
+  // 进程内只读臂（桌面版唯一可用通道）：HTTP 被宿主 permits 门拦下时的降级目标。
+  // 库目录只读 env/默认，绝不跟随本地索引 `indexDir`。
+  const localArm: DrsLocalArm = createDrsLocalArm({ dir: () => resolveDrsDir(), log })
   const drsSource = new DrsCorpusSource({
     baseUrl: resolveDrsBaseUrl(config.drsBaseUrl, trustedHosts),
     hostHeader: trustedHosts !== undefined && trustedHosts.length > 0 ? trustedHosts[0] : undefined,
     log,
+    transport: () => current().contentTransport ?? 'auto',
+    inProcess: () => localArm,
   })
   const state: SwitchIndexServiceState = {
     engine,
@@ -847,6 +876,7 @@ export function apply(ctx: Context, entry: Partial<SwitchSearchConfig> = {}): vo
   ctx.effect(() => () => {
     if (syncTimer !== undefined) clearInterval(syncTimer)
     if (titleTimer !== undefined) clearTimeout(titleTimer)
+    localArm.dispose()
     engine.close()
   }, 'dsh-search-index: index lifecycle')
 

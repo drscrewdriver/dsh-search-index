@@ -1,6 +1,6 @@
 {
   "id": "dsh-external/dsh-search-index",
-  "version": "0.7.7",
+  "version": "0.7.11",
   "main": "./lib/index.mjs",
   "description": "会话检索：标题 / 内容双模式 FTS5（内容检索硬依赖 dsh-reference-session-collector 投影库，按会话聚合展示标题与命中片段，支持命中定位与日期/域/类型筛选），自带独立索引（增量同步、非破坏性整理、深度同步自愈、快照导入导出）。入口双形态：宿主 ≥0.1.7 主栏整页，<0.1.7 侧栏弹窗。",
   "engines": {

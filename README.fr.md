@@ -91,6 +91,8 @@ D'où la sémantique d'échec : **fantôme présent + active présent = construc
 
 ## Installation
 
+> **Note pour DSH NEXT (bureau) :** l'hôte de bureau répond aux requêtes non émises par le renderer par `403 Browser access is disabled` ; la recherche de contenu bascule donc automatiquement sur le canal en processus en lecture seule (`contentTransport: auto`). Rien à installer en plus : `dsh-reference-session-collector` arrive comme dépendance normale. Attention : installé ≠ activé — si la carte affiche `drs-not-activated` (route 404), exécutez `dsh plugin --profile <name> add dsh-reference-session-collector` puis redémarrez l'hôte.
+
 ```sh
 # Option 1 : installation directe depuis GitHub (recommandée) — lib/ est committé, pas de build local nécessaire
 dsh plugin --profile web add github:drscrewdriver/dsh-search-index#master

@@ -1,7 +1,8 @@
 # dsh-search-index (Session Search)
 
 A DSH plugin: **title + content full-text search over sessions**, backed by its own FTS5
-index. Content search is a **hard dependency** on `dsh-reference-session-collector` (DRS).
+index. Content-search corpus and semantics come from `dsh-reference-session-collector` (DRS),
+fetched over **HTTP or the in-process read-only** transport.
 
 - **Title mode** — matches session titles as you type;
 - **Content mode** — session-grouped hits (title + anchored snippet) with type filters
@@ -12,11 +13,29 @@ index. Content search is a **hard dependency** on `dsh-reference-session-collect
   atomic swap + bounded archives), deep sync (DRS slow rescan + rebuild), JSON Lines
   snapshot export / import.
 
-> **DRS is a hard dependency**: grouping, type weighting, surface and archive-date filters and
-> anchored snippets are all computed inside the `dsh-reference-session-collector` projection DB.
-> When DRS is unreachable, content search fails **explicitly** and does **not** fall back to the
-> local index (the local engine only keeps session-header metadata); `search-status` answers
-> `available:false, reason:'drs-unavailable'`.
+> **DRS is a hard dependency — the transport is not.** Grouping, type weighting, surface and
+> archive-date filters and anchored snippets are all computed inside the
+> `dsh-reference-session-collector` projection DB. It ships as a regular dependency of this
+> package (**users never download it separately**) — but *installed* is not *activated*: the host
+> only activates bundles listed in the profile's top-level `dependencies`, so as a transitive
+> dependency it may never mount and the projection DB will not update. The settings card then
+> shows the activation command:
+> `dsh plugin --profile <name> add dsh-reference-session-collector`, followed by a host restart.
+> Either transport is enough to serve
+> content search: `http` (same-origin route) or `in-process` (direct read-only access to
+> `projection.db`).
+>
+> **DSH NEXT desktop users, read this.** The desktop host answers every non-renderer request
+> with `403 Browser access is disabled` **before** routing, so the HTTP transport can never work
+> there. The default `contentTransport: auto` silently switches to the in-process read-only arm —
+> no action required. Only when *both* arms fail does `search-status` return `available:false`,
+> now with a specific code (`browser-access-denied` / `drs-http-unreachable` / `drs-http-error` /
+> `drs-not-activated` / `drs-missing` / `drs-empty` / `drs-schema-mismatch`). A 404 route is
+> reported as `drs-not-activated` and flagged via `search-status.notActivated=true` even when
+> the in-process arm succeeds, together with the activation command above.
+>
+> The in-process arm is strictly read-only: no `mkdir`, no DDL, no `meta` writes; a schema
+> mismatch is reported and **never** clears the projection DB.
 
 ## Index self-healing: rebuild vs deep sync
 
@@ -106,7 +125,9 @@ Prefix `/switch-search/api`:
 ## Settings
 
 Namespace `switch-search`: `enabled`, `defaultMode`, `autoSync`, `syncIntervalMs`,
-`archiveKeep`, `indexDir`, `corpusSource` (default `drs`), `drsBaseUrl`.
+`archiveKeep`, `indexDir`, `corpusSource` (default `drs`), `drsBaseUrl`,
+`contentTransport` (default `auto`: HTTP first, then the in-process read-only store;
+`http` forces HTTP; `in-process` forces the local store, which is what desktop needs).
 
 > Since 0.7.0 the namespace returned from the merged package's `manage-sessions-search`;
 the old key is no longer read, so after upgrading `enabled` and friends fall back to their

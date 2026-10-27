@@ -47,10 +47,6 @@ interface SwitchSlotsService {
 interface SwitchSettingsScope<C> {
   bind(spec: { namespace: string }): SwitchScopeLike<C>
 }
-/** configForms 服务面（0.1.7：以 profile entry id 取句柄）。 */
-interface SwitchConfigForms<T> {
-  get(entryId: string): SwitchScopeLike<T>
-}
 interface SwitchScopeLike<T> {
   getSnapshot(): {
     status: 'loading' | 'ready' | 'unavailable'
@@ -390,7 +386,7 @@ export function SwitchPanel({
   }
   const [sessions, setSessions] = useState<HostSessionItem[] | null>(null)
   const [sessionsError, setSessionsError] = useState<string | null>(null)
-  const [content, setContent] = useState<{ query: string; status: 'idle' | 'loading' | 'ready' | 'error'; items: HostContentHit[]; error?: string }>({
+  const [content, setContent] = useState<{ query: string; status: 'idle' | 'loading' | 'ready' | 'error'; items: HostContentHit[]; error?: string; code?: string }>({
     query: '',
     status: 'idle',
     items: [],
@@ -536,6 +532,7 @@ export function SwitchPanel({
           status: res.ok ? 'ready' : 'error',
           items: res.ok ? sortHits(res.items, sortBy) : [],
           error: res.ok ? undefined : (res.error ?? '搜索失败'),
+          code: res.ok ? undefined : res.code,
         })
       })
     }, 250)
@@ -659,7 +656,11 @@ export function SwitchPanel({
     } else if (activeContent.status === 'loading') {
       children.push(createElement('div', { key: 'loading', className: 'dsws_status' }, translate(t, 'panel.loadingContent')))
     } else if (activeContent.status === 'error') {
-      children.push(createElement('div', { key: 'error', className: 'dsws_error' }, translate(t, 'panel.contentError', { error: activeContent.error ?? '未知错误' })))
+      // 有档位码时用本地化文案；旧宿主无 code 则回退宿主原文。
+      const text = activeContent.code === undefined
+        ? translate(t, 'panel.contentError', { error: activeContent.error ?? '未知错误' })
+        : translate(t, `panel.contentErr.${activeContent.code}` as LocaleKey, { error: activeContent.error ?? '' })
+      children.push(createElement('div', { key: 'error', className: 'dsws_error' }, text))
     } else if (activeContent.items.length === 0) {
       children.push(createElement('div', { key: 'empty', className: 'dsws_empty' }, normalized === '' ? translate(t, 'panel.contentHint') : translate(t, 'panel.noContent')))
     } else {

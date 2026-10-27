@@ -91,6 +91,8 @@ dsh web   # перезапуск
 
 ## Установка
 
+> **Для DSH NEXT (десктоп):** десктопный хост отвечает на запросы не от рендерера кодом `403 Browser access is disabled`, поэтому поиск по содержимому автоматически переходит на внутрипроцессный канал только для чтения (`contentTransport: auto`). Дополнительно ничего ставить не нужно: `dsh-reference-session-collector` приходит как обычная зависимость. Важно: установлено ≠ активировано — если карточка показывает `drs-not-activated` (маршрут 404), выполните `dsh plugin --profile <name> add dsh-reference-session-collector` и перезапустите хост.
+
 ```sh
 # Вариант 1: установка прямо с GitHub (рекомендуется) — lib/ закоммичен, локальная сборка не нужна
 dsh plugin --profile web add github:drscrewdriver/dsh-search-index#master

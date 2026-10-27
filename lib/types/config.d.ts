@@ -30,6 +30,13 @@ export interface SwitchSearchConfig {
     corpusSource?: 'native' | 'drs';
     /** DRS 投影库 API 基址；空=自动（首个 trustedHosts 条目，再退 http://127.0.0.1:8080）。 */
     drsBaseUrl?: string;
+    /**
+     * 内容检索的通道选择（与 `corpusSource` 正交：后者管同步语料源，本项管搜索面）：
+     * - `auto`（缺省）=先 HTTP，失败降级进程内只读臂；
+     * - `http`=只走 HTTP（旧行为，便于排查）；
+     * - `in-process`=只走进程内只读臂（桌面版强制离线通道）。
+     */
+    contentTransport?: 'auto' | 'http' | 'in-process';
 }
 /** Defaults when nothing is configured. */
 export declare const DEFAULT_CONFIG: Required<SwitchSearchConfig>;

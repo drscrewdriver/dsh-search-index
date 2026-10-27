@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.7.11
+
+- **DRSC 未激活检测与激活命令提示**：宿主 bundles 激活只扫 profile 顶层 `dependencies`（`dsh.pluginDependencies` 声明宿主不消费），DRSC 作为本包 npm 传递依赖「装得上、不激活」：包可解析但同步/路由不启动，投影库永远不更新。现在 HTTP 探针拿 404 时新增档位 `drs-not-activated`，`search-status` 附 `notActivated` 字段（即使进程内接穗成功也如实标记），设置卡/面板提示直接给出 `dsh plugin --profile <name> add dsh-reference-session-collector` + 重启宿主。
+- `classifyDrsFailure`：404 从 `drs-http-error` 拆出为独立档 `drs-not-activated`（处置动作不同：404=激活插件，其它=查 DRS 健不健康）；`contentTransport='http'` 档下 404 同样直抛此码。
+- 九语字典各新增 3 键（`card.drsReason.drs-not-activated` / `card.drsStatus.inactive` / `panel.contentErr.drs-not-activated`），字典契约用例同步扩展到 21 键。
+- 新增路由级用例 2 例（未激活接穗标 notActivated / 未激活+无库时档位合并）与通道分派用例 4 例（404 档位、探针、降级、强制 http）；全量 **59 例**。
+
+## 0.7.10
+
+- 九语文案补全：`contentTransport` 设置行、三档通道标签、状态行「当前通道」与六档诊断（`card.drsReason.*` / `panel.contentErr.*`）此前只有 zh/en，其余 7 语靠 zh 回退；现 ja/ko/fr/de/it/ru/es 全部补齐，共 18 键/语。
+- 新增字典契约用例：九语字典必须带齐 18 个通道/诊断键，且 `{mode}` / `{error}` 占位符与 zh 逐字一致（`tests/client-locales.test.mjs` 现 8 例）。
+
+## 0.7.9
+
+- 修复启动窗口期 `search-status` 报错 `switch-search: index engine is not open`：引擎在 `setImmediate` 后才 open，而设置卡启动即轮询。现与 `index-status` 同口径用 `engine.isOpen` 判据，启动瞬时也返回可用响应。
+- 新增路由级端到端契约 `tests/index-route.test.mjs`（4 例）：最小 fake host 装载 `apply()` 后直接调 `/switch-search/api/*`，在「宿主 403」现场下断言 `content-search` 降级并返回真实命中、`search-status` 报 `mode:'in-process'`、`http` 档仍可复现旧行为、`in-process` 档零 HTTP。
+- 降级日志去掉重复的 `[switch-search]` 前缀（`runtime.log` 已统一加）。
+
+## 0.7.8
+
+- **内容检索新增进程内只读通道**：DSH NEXT 桌面版在 web 层对非 renderer 请求一律 403（`Browser access is disabled`，在路由分发**之前**拦住），HTTP 臂在桌面版永远不通。现在 `content-search` 失败即降级为「进程内只读直连 `projection.db`」（`createQueryContext` + `searchGrouped`，命中形状与 HTTP 臂逐字同形），桌面版内容检索恢复可用（issue #1）。
+- 新增 `contentTransport`（缺省 `auto`）：`auto`=HTTP 优先、失败降级；`http`=强制 HTTP（旧行为，排查用）；`in-process`=只走进程内只读臂（桌面版）。设置卡新增「DRS 连接方式」三档。
+- **只读纪律**：只用 `new DatabaseSync(path, { readOnly: true })`，不建目录、不跑 DDL、不写 `meta`；**禁止**调用 `openProjectionStore`（它会 `mkdir` + `PRAGMA journal_mode`，且 schema 版本不符时 DROP 全表重建 + VACUUM）。schema 不符只报 `drs-schema-mismatch`，**绝不清库**。
+- 错误语义从一句 `drs-unavailable` 拆成六档：`browser-access-denied` / `drs-http-unreachable` / `drs-http-error` / `drs-missing` / `drs-empty` / `drs-schema-mismatch`。卡片与搜索页按 code 给本地化处置建议，**不再把 403 说成“没装依赖”**（依赖是本包正式 dependency，装机自带）。
+- `search-status` 增 `mode`（http/in-process/none）、`transport`（配置值）、`local{ schemaVersion, expected, sessions, dir }` 与 `detail`；`available` 改为「两臂任一可用」。
+- 依赖保持 external（`tsdown neverBundle` 新增 `dsh-reference-session-collector`），运行时按变量说明符动态 import：缺包或 Node<22.5 落 `drs-missing`，插件其余功能零影响。
+- 新增 2 个契约测试：`tests/drs-local.test.mjs`（5 例：目录解析/只读不变/schema 闸门不清库/目录不创建/空库）与 `tests/drs-transport.test.mjs`（8 例：403 降级/强制 http/无 provider 旧语义/进程内零 HTTP/probeDetail）。
+- 工具链：`eslint` 忽略 `_tmp-*.mjs` 临时脚本；清理 `panel.tsx` 与 `index.ts` 两处未使用声明（基线 lint 由红转绿）。
+
 ## 0.7.7
 
 - 修复深度同步在真机上永远 `failed`：触发请求把 `op` 放进了 JSON body，而 DRSC 的 POST 分发只读 `?op=`，落回 400 `unknown POST op: (missing)`。现改为 `POST ?op=sync`（body 保留 `{op:'sync'}` 兼容旧版），并补两条契约用例。

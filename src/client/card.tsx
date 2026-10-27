@@ -231,6 +231,13 @@ function IndexBlock(props: { t?: SearchSettingsCardProps['t'] }): JSX.Element {
       : status === null || status.available !== true
         ? 'neutral'
         : 'ready'
+  // 实际通道标签（旧宿主无 mode 字段 → 直出 'none'）。
+  const modeText = status?.mode === 'http'
+    ? translate(t, 'card.transport.http')
+    : status?.mode === 'in-process'
+      ? translate(t, 'card.transport.in-process')
+      : String(status?.mode ?? 'none')
+
   const pillLabel = fetchError !== null
     ? '状态读取失败'
     : rebuilding
@@ -319,13 +326,22 @@ function IndexBlock(props: { t?: SearchSettingsCardProps['t'] }): JSX.Element {
         }, translate(t, 'panel.archived', { count: status?.archivedSessions ?? 0 })),
       ]),
       createElement('span', { key: 'd', className: 'dsws_setDesc' }, statusLine),
-      // DRS 可用性（硬依赖）：内容检索的唯一来源；不可用时给出原因，不让人猜。
+      // 内容检索通道：可用时显示当前实际通道；失败时按档位码给处置建议，
+      // 不把“宿主禁止浏览器访问”说成“没装依赖”（那样会把用户引向重装）。
+      // 路由 404（notActivated）单独一档：包随本插件落地但插件未激活，
+      // 投影库不会自动更新——把激活命令直接写到提示里。
       createElement('span', { key: 'drs', className: 'dsws_setDesc' },
         status === null
           ? translate(t, 'card.drsStatus.reading')
-          : status.available === true
-            ? translate(t, 'card.drsStatus.up')
-            : translate(t, 'card.drsStatus.down', { reason: status.reason ?? 'drs-unavailable' })),
+          : status.notActivated === true
+            ? translate(t, 'card.drsStatus.inactive')
+            : status.available === true
+              ? `${translate(t, 'card.drsStatus.up')} ${translate(t, 'card.drsStatus.mode', { mode: modeText })}`
+              : translate(t, 'card.drsStatus.down', {
+                  reason: status.reason === undefined
+                    ? 'drs-unavailable'
+                    : translate(t, `card.drsReason.${status.reason}` as LocaleKey, {}),
+                })),
       // The archived count points at a capability this plugin does not own.
       // Left bare it read as a broken feature: "there are 72 archived sessions,
       // where do I manage them?" The wording follows the host's probe — telling
@@ -612,6 +628,20 @@ function createCardBody(props: {
           if (e.key === 'Enter') e.currentTarget.blur()
         },
       }),
+    }),
+    createElement(Row, {
+      key: 'contentTransport',
+      title: translate(t, 'card.contentTransport'),
+      desc: translate(t, 'card.contentTransport.desc'),
+      control: createElement('div', { className: 'dsws_seg', role: 'group' },
+        (['auto', 'http', 'in-process'] as const).map(mode => createElement('button', {
+          key: mode,
+          type: 'button',
+          className: `dsws_segBtn${(value.contentTransport ?? 'auto') === mode ? ' dsws_segBtnActive' : ''}`,
+          'aria-pressed': (value.contentTransport ?? 'auto') === mode,
+          disabled: !writable,
+          onClick: () => { void scope.set('contentTransport', mode) },
+        }, translate(t, `card.transport.${mode}` as LocaleKey)))),
     }),
   ]
 

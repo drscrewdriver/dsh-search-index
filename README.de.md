@@ -91,6 +91,8 @@ Daraus ergibt sich die Fehlersemantik: **Schatten vorhanden + aktiver Index vorh
 
 ## Installation
 
+> **Hinweis für DSH NEXT (Desktop):** Der Desktop-Host beantwortet Nicht-Renderer-Anfragen mit `403 Browser access is disabled`, daher nutzt die Inhaltssuche automatisch den prozessinternen Nur-Lese-Kanal (`contentTransport: auto`). Es ist nichts nachzuinstallieren — `dsh-reference-session-collector` kommt als reguläre Abhängigkeit mit. Achtung: installiert ≠ aktiviert — meldet die Karte `drs-not-activated` (Route 404), führe `dsh plugin --profile <name> add dsh-reference-session-collector` aus und starte den Host neu.
+
 ```sh
 # Variante 1: direkt aus GitHub installieren (empfohlen) — lib/ ist committet, kein lokaler Build nötig
 dsh plugin --profile web add github:drscrewdriver/dsh-search-index#master

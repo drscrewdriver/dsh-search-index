@@ -39,7 +39,10 @@ const hostConfig: UserConfig = {
   sourcemap: true,
   clean: false,
   deps: {
-    neverBundle: [/^node:/, '@deepseek-ai/dsh-session-query', '@deepseek-ai/dsh-session', 'better-sqlite3'],
+    // dsh-reference-session-collector：进程内只读臂在运行时用变量说明符动态 import。
+    // 必须 external——否则会把 node:sqlite DDL / tokenizer / blocks 逻辑内联一份，
+    // 既胀包又与 profile 里的单实例依赖分叉。
+    neverBundle: [/^node:/, '@deepseek-ai/dsh-session-query', '@deepseek-ai/dsh-session', 'better-sqlite3', 'dsh-reference-session-collector'],
   },
 }
 

@@ -146,6 +146,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
     indexDir: z<string, string, "defined">;
     corpusSource: z<"native" | "drs", "native" | "drs", "volatile-defined">;
     drsBaseUrl: z<string, string, "volatile-defined">;
+    contentTransport: z<"auto" | "http" | "in-process", "auto" | "http" | "in-process", "volatile-defined">;
 }>>, Schemastery.ObjectT<NoInfer<{
     enabled: z<boolean, boolean, "volatile-defined">;
     defaultMode: z<"title" | "content", "title" | "content", "volatile-defined">;
@@ -155,6 +156,7 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
     indexDir: z<string, string, "defined">;
     corpusSource: z<"native" | "drs", "native" | "drs", "volatile-defined">;
     drsBaseUrl: z<string, string, "volatile-defined">;
+    contentTransport: z<"auto" | "http" | "in-process", "auto" | "http" | "in-process", "volatile-defined">;
 }>>, "plain">;
 /** ------------------------------------------------------------------ index service */
 /** The per-activation index service state, carried in the apply closure. */

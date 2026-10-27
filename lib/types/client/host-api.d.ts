@@ -3,11 +3,13 @@
  * the settings card. Everything talks to the host through the fenced
  * `/switch-search/api` route; no official package is value-imported.
  */
-/** POST a JSON body to a fenced switch-search API method (items shape). */
+/** POST a JSON body to a fenced switch-search API method (items shape).
+ *  `code` 是 0.7.8 起的失败档位（旧宿主无此字段）；客户端优先按它取本地化文案。 */
 export declare function callHost<T>(method: string, body: unknown): Promise<{
     ok: boolean;
     items: T[];
     error?: string;
+    code?: string;
 }>;
 /** POST a body to a fenced switch-search API method, returning the whole record. */
 export declare function callHostAny<T>(method: string, body: unknown, timeout?: number): Promise<Partial<T> & {
@@ -67,6 +69,21 @@ export interface HostIndexStatus {
     ok: boolean;
     available: boolean;
     reason?: string;
+    /** 失败档位（0.7.8+，0.7.11 加 drs-not-activated）：browser-access-denied / drs-http-unreachable / drs-http-error / drs-not-activated / drs-missing / drs-empty / drs-schema-mismatch。 */
+    detail?: string;
+    /** 当前实际可用通道（0.7.8+）。 */
+    mode?: 'http' | 'in-process' | 'none';
+    /** DRSC 路由 404：插件未激活，投影库不会自动更新（0.7.11+，旧宿主缺省 false）。 */
+    notActivated?: boolean;
+    /** 配置面选择的通道（0.7.8+）。 */
+    transport?: 'auto' | 'http' | 'in-process';
+    /** 进程内只读库明细（0.7.8+）。 */
+    local?: {
+        schemaVersion?: string;
+        expected?: string;
+        sessions?: number;
+        dir?: string;
+    };
     dir?: string;
     archives?: string[];
     archivedSessions?: number;

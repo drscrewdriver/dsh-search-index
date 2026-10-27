@@ -16,6 +16,15 @@
  * 端可带 hostHeader 显式回显首个 trustedHosts 条目,规避「条目省略端口而
  * URL 带端口」的精确匹配失配;loopback + 无 trustedHosts 的老宿主天然放行。
  */
+import {
+  DrsUnavailableError,
+  classifyDrsFailure,
+  type DrsProbe,
+  type DrsSearchHit,
+  type DrsTransport,
+} from './drs-contract.ts'
+import type { DrsLocalArm, DrsLocalSearchRequest } from './drs-local.ts'
+
 /** DRS API 路径(与 dsh-reference-session-collector 的 DRS_API_PATH 字面一致;不跨包 import)。 */
 export const DRS_API_PATH = '/api/dsh-reference-session-collector'
 
@@ -55,6 +64,16 @@ export interface DrsCorpusSourceOptions {
   /** 显式 Host 头(trustedHosts 首条回显;缺省不覆盖)。 */
   hostHeader?: string
   log?: (message: string) => void
+  /** 通道选择读取面(每次调用实时解引：配置切换即时生效)。 */
+  transport?: () => DrsTransport
+  /** 进程内只读臂；缺省=无回退（单测与 http-only 部署保持既有抛错语义）。 */
+  inProcess?: () => DrsLocalArm | undefined
+}
+
+/** 分组检索请求（HTTP wire 与进程内调用共用一份参数面）。 */
+export type DrsGroupedRequest = DrsLocalSearchRequest & {
+  /** 同源 Host 覆盖（转发调用方请求头；优先于装配 baseUrl）。 */
+  atHost?: string
 }
 
 /**
@@ -148,33 +167,36 @@ export class DrsCorpusSource {
   }
 
   /**
+   * 分组内容搜索（通道分派器）：
+   * - `transport='http'`：只走 HTTP（强制，失败直抛）；
+   * - `transport='in-process'`：只走进程内只读臂；
+   * - `transport='auto'`（缺省）：先 HTTP，失败（403 / 不可达 / DRS 报错）降级进程内。
+   *   未装配进程内臂时保持既有语义（原样抛错）—— 测试与 http-only 部署零变化。
+   */
+  async searchGrouped(request: DrsGroupedRequest): Promise<DrsSearchHit[]> {
+    const transport = this.options.transport?.() ?? 'auto'
+    const local = this.options.inProcess?.()
+    if (transport === 'in-process') {
+      if (local === undefined) throw new DrsUnavailableError('drs-missing', '进程内臂未装配')
+      return local.searchGrouped(request)
+    }
+    try {
+      return await this.searchGroupedHttp(request)
+    } catch (err) {
+      const failure = classifyDrsFailure(err)
+      if (transport === 'http' || local === undefined) throw failure
+      this.options.log?.(`HTTP 臂失败(${failure.code})，降级进程内只读臂`)
+      return local.searchGrouped(request)
+    }
+  }
+
+  /**
    * 分组内容搜索直连臂（op=search&group=session，DRS surface.searchGrouped 同构）：
    * 会话分组/加权/过滤/锚定节选全部在 DRS 侧完成，本方法只搬 wire →
    * 引擎命中形状（SwitchSearchHit 字段同名）。失败（网络/非 2xx/包络）直抛，
    * 调用侧按硬依赖语义显式报错——**不回退本地索引**。
    */
-  async searchGrouped(request: {
-    query: string
-    /** 原事件 type 列表（调用方展开粗类）；空=DRS 缺省 user+assistant。 */
-    kinds?: readonly string[]
-    archived?: 'active' | 'archived' | 'all'
-    from?: number
-    to?: number
-    sortBy?: 'relevance' | 'time'
-    limit?: number
-    /** 命中展开（wire `expand=1`）：同会话多命中各自成行；缺省聚合。 */
-    expand?: boolean
-    /** 同源 Host 覆盖（转发调用方请求头；优先于装配 baseUrl）。 */
-    atHost?: string
-  }): Promise<{
-    sessionId: string
-    title: string
-    seq: number
-    type: string
-    time: number
-    updatedAt: number
-    snippet: string
-  }[]> {
+  private async searchGroupedHttp(request: DrsGroupedRequest): Promise<DrsSearchHit[]> {
     const params = new URLSearchParams()
     params.set('op', 'search')
     params.set('group', 'session')
@@ -240,13 +262,66 @@ export class DrsCorpusSource {
       return undefined
     }
   }
-  /** 可性探针（op=status）：硬依赖预检/降级提示用；失败返回 false。 */
+  /** 可性探针（op=status）：硬依赖预检/降级提示用；失败返回 false。
+   *  向后兼容的布尔面——需要区分通道时用 {@link probeDetail}。 */
   async probe(atHost?: string): Promise<boolean> {
-    try {
-      await this.getJson('?op=status', atHost)
-      return true
-    } catch {
-      return false
+    return (await this.probeDetail(atHost)).ok
+  }
+
+  /**
+   * 通道探针：`mode` 是当前**实际可用**通道（http / in-process / none）。
+   * - `transport='http'`：只看 HTTP；
+   * - `transport='in-process'`：只看进程内只读臂；
+   * - `auto`：HTTP 优先，失败再看进程内臂。
+   * HTTP 拿 404（DRSC 插件未激活）时额外标 `notActivated`，即使进程内臂接穗成功
+   * 也如实透出——诊断面要区分「可用」与「投影库不会再自动更新」。
+   */
+  async probeDetail(atHost?: string): Promise<DrsProbe> {
+    const transport = this.options.transport?.() ?? 'auto'
+    const local = this.options.inProcess?.()
+    if (transport !== 'in-process') {
+      try {
+        await this.getJson('?op=status', atHost)
+        return { ok: true, mode: 'http' }
+      } catch (err) {
+        const failure = classifyDrsFailure(err)
+        const notActivated = failure.code === 'drs-not-activated'
+        if (transport === 'http' || local === undefined) {
+          return { ok: false, mode: 'none', reason: failure.code, ...(notActivated ? { notActivated: true } : {}), detail: failure.detail }
+        }
+        const probe = await local.probe()
+        if (probe.ok) {
+          return {
+            ok: true,
+            mode: 'in-process',
+            ...(notActivated ? { notActivated: true } : {}),
+            schemaVersion: probe.schemaVersion,
+            expected: probe.expected,
+            sessions: probe.sessions,
+            dir: probe.dir,
+          }
+        }
+        return {
+          ok: false,
+          mode: 'none',
+          reason: (probe.reason as DrsProbe['reason']) ?? failure.code,
+          ...(notActivated ? { notActivated: true } : {}),
+          detail: probe.detail ?? failure.detail,
+        }
+      }
     }
+    if (local === undefined) return { ok: false, mode: 'none', reason: 'drs-missing', detail: '进程内臂未装配' }
+    const probe = await local.probe()
+    if (probe.ok) {
+      return {
+        ok: true,
+        mode: 'in-process',
+        schemaVersion: probe.schemaVersion,
+        expected: probe.expected,
+        sessions: probe.sessions,
+        dir: probe.dir,
+      }
+    }
+    return { ok: false, mode: 'none', reason: (probe.reason as DrsProbe['reason']) ?? 'drs-empty', detail: probe.detail }
   }
 }

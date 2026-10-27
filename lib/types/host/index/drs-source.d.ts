@@ -16,6 +16,8 @@
  * 端可带 hostHeader 显式回显首个 trustedHosts 条目,规避「条目省略端口而
  * URL 带端口」的精确匹配失配;loopback + 无 trustedHosts 的老宿主天然放行。
  */
+import { type DrsProbe, type DrsSearchHit, type DrsTransport } from './drs-contract.ts';
+import type { DrsLocalArm, DrsLocalSearchRequest } from './drs-local.ts';
 /** DRS API 路径(与 dsh-reference-session-collector 的 DRS_API_PATH 字面一致;不跨包 import)。 */
 export declare const DRS_API_PATH = "/api/dsh-reference-session-collector";
 /** 语料列表分页大小(百会话级一轮 1-2 页;DRS 侧 offset/limit 透传)。 */
@@ -50,7 +52,16 @@ export interface DrsCorpusSourceOptions {
     /** 显式 Host 头(trustedHosts 首条回显;缺省不覆盖)。 */
     hostHeader?: string;
     log?: (message: string) => void;
+    /** 通道选择读取面(每次调用实时解引：配置切换即时生效)。 */
+    transport?: () => DrsTransport;
+    /** 进程内只读臂；缺省=无回退（单测与 http-only 部署保持既有抛错语义）。 */
+    inProcess?: () => DrsLocalArm | undefined;
 }
+/** 分组检索请求（HTTP wire 与进程内调用共用一份参数面）。 */
+export type DrsGroupedRequest = DrsLocalSearchRequest & {
+    /** 同源 Host 覆盖（转发调用方请求头；优先于装配 baseUrl）。 */
+    atHost?: string;
+};
 /**
  * 基址解析:显式配置 > 首个 trustedHosts 条目(补 http:// 前缀)>
  * `http://127.0.0.1:8080`(宿主默认口;trustedHosts 缺席的老线 DRS 门本就放行)。
@@ -68,33 +79,20 @@ export declare class DrsCorpusSource {
     /** 一个会话的检索臂 docs；DRS 无此会话（session:null）返回 undefined。 */
     readSession(sessionId: string): Promise<DrsCorpusSession | undefined>;
     /**
+     * 分组内容搜索（通道分派器）：
+     * - `transport='http'`：只走 HTTP（强制，失败直抛）；
+     * - `transport='in-process'`：只走进程内只读臂；
+     * - `transport='auto'`（缺省）：先 HTTP，失败（403 / 不可达 / DRS 报错）降级进程内。
+     *   未装配进程内臂时保持既有语义（原样抛错）—— 测试与 http-only 部署零变化。
+     */
+    searchGrouped(request: DrsGroupedRequest): Promise<DrsSearchHit[]>;
+    /**
      * 分组内容搜索直连臂（op=search&group=session，DRS surface.searchGrouped 同构）：
      * 会话分组/加权/过滤/锚定节选全部在 DRS 侧完成，本方法只搬 wire →
      * 引擎命中形状（SwitchSearchHit 字段同名）。失败（网络/非 2xx/包络）直抛，
      * 调用侧按硬依赖语义显式报错——**不回退本地索引**。
      */
-    searchGrouped(request: {
-        query: string;
-        /** 原事件 type 列表（调用方展开粗类）；空=DRS 缺省 user+assistant。 */
-        kinds?: readonly string[];
-        archived?: 'active' | 'archived' | 'all';
-        from?: number;
-        to?: number;
-        sortBy?: 'relevance' | 'time';
-        limit?: number;
-        /** 命中展开（wire `expand=1`）：同会话多命中各自成行；缺省聚合。 */
-        expand?: boolean;
-        /** 同源 Host 覆盖（转发调用方请求头；优先于装配 baseUrl）。 */
-        atHost?: string;
-    }): Promise<{
-        sessionId: string;
-        title: string;
-        seq: number;
-        type: string;
-        time: number;
-        updatedAt: number;
-        snippet: string;
-    }[]>;
+    private searchGroupedHttp;
     /**
      * 触发 DRS 后台同步（`POST ?op=sync`）：慢速全扫，用于修复投影库自身的滞后。
      * **op 走 query**：DRS 的 POST 分发只读 `url.searchParams.get('op')`，落进 body 会
@@ -108,7 +106,17 @@ export declare class DrsCorpusSource {
     }>;
     /** DRS 状态明细（op=status 原始体；失败返回 undefined）。 */
     statusDetail(atHost?: string): Promise<Record<string, unknown> | undefined>;
-    /** 可性探针（op=status）：硬依赖预检/降级提示用；失败返回 false。 */
+    /** 可性探针（op=status）：硬依赖预检/降级提示用；失败返回 false。
+     *  向后兼容的布尔面——需要区分通道时用 {@link probeDetail}。 */
     probe(atHost?: string): Promise<boolean>;
+    /**
+     * 通道探针：`mode` 是当前**实际可用**通道（http / in-process / none）。
+     * - `transport='http'`：只看 HTTP；
+     * - `transport='in-process'`：只看进程内只读臂；
+     * - `auto`：HTTP 优先，失败再看进程内臂。
+     * HTTP 拿 404（DRSC 插件未激活）时额外标 `notActivated`，即使进程内臂接穗成功
+     * 也如实透出——诊断面要区分「可用」与「投影库不会再自动更新」。
+     */
+    probeDetail(atHost?: string): Promise<DrsProbe>;
 }
 //# sourceMappingURL=drs-source.d.ts.map

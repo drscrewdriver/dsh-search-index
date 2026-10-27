@@ -2,6 +2,20 @@
 
 Tutte le modifiche importanti e le correzioni di bug sono registrate qui. Le versioni seguono la versionazione semantica (installazione: `dsh plugin --profile web add github:drscrewdriver/dsh-search-index`).
 
+## 0.7.11
+
+- Rilevato e segnalato dsh-reference-session-collector non attivato come plugin (rotta 404): nuovo codice `drs-not-activated`, campo `notActivated` in `search-status`, e la card mostra il comando di attivazione `dsh plugin --profile <name> add dsh-reference-session-collector` più il riavvio dell'host. Nota: le voci dalla 0.6.6 sono solo in `CHANGELOG.md`.
+
+## 0.7.10
+
+- Completate tutte e nove le lingue: la riga «Trasporto DRS», le etichette dei canali, il canale attivo e i sei codici di errore (`card.drsReason.*` / `panel.contentErr.*`) esistevano solo in zh/en; ja/ko/fr/de/it/ru/es sono ora inclusi (18 chiavi per lingua).
+- Nuovo test di contratto del dizionario: le nove lingue devono avere le 18 chiavi e mantenere `{mode}` / `{error}` come zh.
+
+## 0.7.9
+
+- Su desktop (DSH NEXT) la ricerca dei contenuti usa automaticamente il canale in-process in sola lettura (`contentTransport: auto`); HTTP viene tentato solo se l'host lo consente. `search-status` non fallisce più nella finestra di avvio.
+- Nota: le voci 0.6.6–0.7.8 sono solo in `CHANGELOG.md`.
+
 ## 0.6.5 — Adattamento a DSH 0.2.1-rc.1 (correzione della cucitura webStartup)
 
 - **Crash al caricamento**: da 0.2.1-a.2 l'host ha rimosso `webRuntime` rinominandolo `webStartup`. Questa versione inietta `webStartup` e legge tramite una catena di fallback a doppio nome (`ctx.webStartup ?? ctx.webRuntime`); comportamento invariato su 0.2.0.
