@@ -158,3 +158,4 @@ pnpm test
 ## License
 
 MIT
+
