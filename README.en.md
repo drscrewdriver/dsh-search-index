@@ -49,7 +49,7 @@ The panel footer and the settings card each carry two buttons; they fix differen
 | Button | What it does | What it fixes |
 |---|---|---|
 | **Rebuild index** (`index-rebuild`) | Rebuilds the local FTS index from the host `sessionQuery` (shadow build → atomic swap → bounded archives) | dirty / incomplete local index, stale titles |
-| **Deep sync (drsc)** (`index-deep-sync`) | ① `POST {op:'sync'}` makes DRS slowly rescan its projection DB, polling `last_sync.busy=false` (180 s cap); ② then runs a rebuild | **hits that fail to locate** (stale DRS projection: `seq`/`on_surface` no longer match the rendered text) |
+| **Deep sync (drsc)** (`index-deep-sync`) | ① `POST {op:'sync'}` makes DRS slowly rescan its projection DB, polling `syncing=false` **and `last_sync.deferred=0`** (180 s cap); ② then runs a rebuild | **hits that fail to locate** (stale DRS projection: `seq`/`on_surface` no longer match the rendered text) |
 
 Locating never reads the local index: it takes the hit's `seq`, asks DRS `op=session` for that
 row and matches `search_text` / `surface_text` against the GUI. So "clicking a hit goes nowhere"
@@ -57,6 +57,17 @@ is only cured by deep sync — rebuilds never touch the DRS projection. Progress
 `index-status.deepSync` (`idle → drs-syncing → rebuilding → done | failed`). Neither button
 runs concurrently; pressing deep sync while a rebuild is running fails fast, so wait it out or
 press deep sync alone.
+
+> **Version coupling with drsc (from 0.7.15)**: drsc 0.2.6 puts a time budget on each sync round,
+> so `syncing=false` only means "this round stopped" — `deferred` sessions may remain. The settle
+> predicate is therefore `syncing === false && last_sync.deferred === 0`.
+>
+> - **this package ≥0.7.15 + drsc 0.2.6**: waits until everything is scanned (recommended).
+> - **this package <0.7.15 + drsc 0.2.6**: treats "budget exhausted" as settled and rebuilds the
+>   local index from **incomplete corpus** — exactly what deep sync exists to prevent. Upgrade this
+>   package **first**, then drsc.
+> - **this package ≥0.7.15 + older drsc**: safe. The field is absent, treated as 0, and behavior is
+>   row-for-row identical to before.
 
 ## Entry: two forms by host generation
 

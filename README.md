@@ -38,7 +38,7 @@ DSH 插件：**会话标题 / 内容全文检索**，自带独立 FTS5 索引；
 | 按钮 | 做什么 | 修什么 |
 |---|---|---|
 | **整理索引**（`index-rebuild`） | 读宿主 `sessionQuery` 全量重建本地 FTS 索引：影子库构建 → 原子切换 → 有界归档 | 本地索引脏 / 缺会话 / 标题陈旧 |
-| **深度同步（drsc）**（`index-deep-sync`） | ① `POST {op:'sync'}` 让 DRS 慢速重扫投影库，轮询 `last_sync.busy=false`（上限 180s）；② 再自动跑一遍整理 | **命中定位不到**（DRS 投影库滞后，`seq`/`on_surface` 与界面文本对不上） |
+| **深度同步（drsc）**（`index-deep-sync`） | ① `POST {op:'sync'}` 让 DRS 慢速重扫投影库，轮询 `syncing=false` **且 `last_sync.deferred=0`**（上限 180s）；② 再自动跑一遍整理 | **命中定位不到**（DRS 投影库滞后，`seq`/`on_surface` 与界面文本对不上） |
 
 命中定位不走本地索引：拿命中行 `seq` 回查 DRS `op=session`，取该行 `search_text` /
 `surface_text` 当 needle 到 GUI 里做文本匹配。所以「有些命中点进去不跳」只有深度同步对症，
@@ -46,6 +46,15 @@ DSH 插件：**会话标题 / 内容全文检索**，自带独立 FTS5 索引；
 （`idle → drs-syncing → rebuilding → done | failed`）暴露，两个按钮都在进行中拒绝并发；
 整理正在跑时点深度同步会直接失败，等它跑完或只点深度同步。DRSC 侧触发契约为
 `POST ?op=sync`（op 必须在 query，body 不作为判据），落定与否记在 `drsSettled`。
+
+> **与 drsc 的版本耦合（0.7.15 起）**：drsc 0.2.6 给单轮同步加了时间预算，
+> `syncing=false` 只说明「这一轮停了」，可能还剩 `deferred` 个会话没扫。所以本版的落定判据是
+> `syncing === false && last_sync.deferred === 0`。
+>
+> - **本包 ≥0.7.15 + drsc 0.2.6**：正确等扫完再整理（推荐组合）。
+> - **本包 <0.7.15 + drsc 0.2.6**：会把「预算用完」误判为扫完，**拿残缺语料重建本地索引**——
+>   这正是深度同步要防的事。升级时请**先升本包、再升 drsc**。
+> - **本包 ≥0.7.15 + 旧版 drsc**：安全。旧版没有 `deferred` 字段，按 0 处理，行为与升级前逐行一致。
 
 ## 入口双形态（宿主代际）
 
