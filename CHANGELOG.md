@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.15
+
+- **深度同步的落定判据跟上 DRSC 0.2.6 的单轮预算**：`syncing=false` 不再等于「扫完了」——DRSC 给单轮加了时间预算，一轮可能只处理一部分并把剩余记在 `last_sync.deferred`。只看 `syncing` 会把「预算用完」当成落定，接着用**残缺语料**重建本地索引，而那正是深度同步要防的事。现在判据是 `syncing === false && deferred === 0`；旧 DRSC 无该字段 ⇒ 按 0 处理，**新旧两版行为逐行一致**（所以本版可先于 DRSC 0.2.6 发）。180s 等待上限不变，超时仍如实记 `drsSettled:false` 后继续整理。
+
 ## 0.7.12
 
 - **搜索冷数据区分与深度回溯定位**：内容命中按回合距分三档——目标距会话最新回合 `turn_gap ≤40` 热（直达）、`41..200` 冷（会话名后标 🧊，点击先弹面板内联确认卡）、`>200` 过冷（标 ❄️，仅打开会话不自动回溯）；已在 DOM 的命中（用户手动翻过页）走 `probeHitInDom` 秒跳豁免。回合富化**零改 DRSC**：进程内臂只读 SQL（`segments.turn` + `sessions.turn_count`），HTTP 臂走 `op=session` 现成 `turn` 字段；富化失败降级 `turnGap=undefined` 按热处理，绝不影响搜索本身。
