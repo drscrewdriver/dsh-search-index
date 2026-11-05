@@ -85,7 +85,7 @@ test('probe + searchGrouped: 只读打开、命中形状与 HTTP 臂同形、库
     assert.equal(hits.length, 1)
     // 命中核心形状与 HTTP 臂逐字同形；turn/turnGap/onSurface 为回合富化新增可选字段，
     // 解构排除后只校 7 个基础字段（新字段存在性另测）。
-    // eslint-disable-next-line no-unused-vars -- hitSurface 仅用于从 core 中剔除 onSurface，本例不断言其值
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- hitSurface 仅用于从 core 中剔除 onSurface，本例不断言其值
     const { turn: hitTurn, turnGap: hitGap, onSurface: hitSurface, ...core } = hits[0]
     assert.deepEqual(core, {
       sessionId: 's1',
