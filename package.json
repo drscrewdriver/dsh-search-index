@@ -3,7 +3,7 @@
   "version": "0.7.16",
   "publishConfig": {
     "registry": "https://registry.npmjs.org",
-    "tag": "dsh-0.2.1-rc.1"
+    "tag": "latest"
   },
   "description": "DSH 会话检索插件：标题 / 内容双模式 FTS5 检索（内容检索硬依赖 dsh-reference-session-collector 投影库，按会话聚合展示标题与命中片段并支持命中定位），自带独立索引（增量同步、非破坏性整理、深度同步自愈、快照导入导出）。入口双形态：宿主 ≥0.1.7 走「插件页式」主栏整页，<0.1.7 走侧栏弹窗。",
   "type": "module",
