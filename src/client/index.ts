@@ -17,7 +17,7 @@ import { createElement, useSyncExternalStore, type ReactElement } from 'react'
 import type { SwitchSearchConfig } from '../config.ts'
 import { SearchSettingsCard, type SwitchCardScope } from './card.tsx'
 import { searchBridgeScope, withBridgeFallback, type BridgeScope } from './bridge-scope.ts'
-import { dictionaries, NS, translate, type LocaleKey } from './locales.ts'
+import { bindDefaultSeat, dictionaries, NS, translate, type LocaleKey } from './locales.ts'
 import { injectStyles, SwitchFooter, SwitchPanel } from './panel.tsx'
 import { openSessionThrough } from './host-api.ts'
 import { configureLocator } from './locate.ts'
@@ -109,6 +109,9 @@ export function apply(ctx: Context): void {
   const locale = ctx.get('locale') as SwitchLocaleService | undefined
   if (locale !== undefined && typeof locale.register === 'function') {
     ctx.effect(() => locale.register(NS, dictionaries), 'dsh-search-index: dictionaries')
+    // Slot components are not guaranteed `t` in their props: translate through the
+    // namespace bound here, so the panel follows the host locale on its own.
+    if (typeof locale.bind === 'function') bindDefaultSeat(locale.bind(NS))
   }
 
   // 设置面回退链：configForms 原生句柄优先，观测到 unavailable 就地落桥（A2 死路）。

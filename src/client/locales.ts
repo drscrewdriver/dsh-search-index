@@ -1102,9 +1102,23 @@ export const es: Partial<Dict> = {
 /** All shipped dictionaries by locale id. */
 export const dictionaries: Record<string, Record<string, string>> = { zh, en, ja, ko, fr, de, it, ru, es }
 
+/** A translate function bound to one namespace, as returned by `locale.bind(ns)`. */
+export type TranslateFn = (key: LocaleKey, params?: Record<string, unknown>) => string
+
+let defaultSeat: TranslateFn | undefined
+
+/**
+ * Bind the plugin's own locale namespace as the fallback seat.
+ * Slot components are not guaranteed to receive `t` in their props, so the
+ * plugin must be able to translate without one.
+ */
+export function bindDefaultSeat(seat: TranslateFn | undefined): void {
+  defaultSeat = seat
+}
+
 /** Translate with {param} interpolation; falls back to zh, then the key itself. */
-export function translate(locale: ((key: LocaleKey, params?: Record<string, unknown>) => string) | undefined, key: LocaleKey, params?: Record<string, unknown>): string {
-  const raw = locale?.(key, params)
+export function translate(locale: TranslateFn | undefined, key: LocaleKey, params?: Record<string, unknown>): string {
+  const raw = locale?.(key, params) ?? defaultSeat?.(key, params)
   if (typeof raw === 'string' && raw !== '' && raw !== key) return raw
   const template = (dictionaries.zh[key] ?? key) as string
   if (params === undefined) return template
