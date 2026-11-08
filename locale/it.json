@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Indice di ricerca",
+    "description": "Ricerca sessioni nella barra laterale con commutazione titolo/contenuto. La ricerca per contenuto utilizza l\\'indice indipendente del plugin e non dipende mai dall\\'indice full-text ufficiale DSH."
+  }
+}

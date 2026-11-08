@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Search Index",
+    "description": "Sidebar session search with title/content mode switching. Content search uses the plugin-owned index and never depends on the official DSH full-text index."
+  }
+}

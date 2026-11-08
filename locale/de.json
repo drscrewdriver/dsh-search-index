@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Suchindex",
+    "description": "Sidebar-Sitzungssuche mit Titel-/Inhaltsmodus-Umschaltung. Die Inhaltssuche verwendet den plugin-eigenen Index und hängt nie vom offiziellen DSH-Volltextindex ab."
+  }
+}

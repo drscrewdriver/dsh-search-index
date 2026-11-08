@@ -23,6 +23,7 @@
       "types": "./lib/types/client/index.d.ts",
       "default": "./lib/client.js"
     },
+    "./locale/*.json": "./locale/*.json",
     "./package.json": "./package.json"
   },
   "files": [
@@ -34,6 +35,17 @@
     "dsh.plugin.json",
     "README.md",
     "README.en.md",
+    "README.de.md",
+    "README.fr.md",
+    "README.it.md",
+    "README.ru.md",
+    "README.es.md",
+    "CHANGELOG.de.md",
+    "CHANGELOG.fr.md",
+    "CHANGELOG.it.md",
+    "CHANGELOG.ru.md",
+    "CHANGELOG.es.md",
+    "locale",
     "CHANGELOG.md",
     "LICENSE"
   ],
