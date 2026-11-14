@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.19
+
+- 终端面（dsh-tui / Desktop 命令面板同源）：/sfind 终端面（--title/--content 双模）。
+
 ## 0.7.15
 
 - **深度同步的落定判据跟上 DRSC 0.2.6 的单轮预算**：`syncing=false` 不再等于「扫完了」——DRSC 给单轮加了时间预算，一轮可能只处理一部分并把剩余记在 `last_sync.deferred`。只看 `syncing` 会把「预算用完」当成落定，接着用**残缺语料**重建本地索引，而那正是深度同步要防的事。现在判据是 `syncing === false && deferred === 0`；旧 DRSC 无该字段 ⇒ 按 0 处理，**新旧两版行为逐行一致**（所以本版可先于 DRSC 0.2.6 发）。180s 等待上限不变，超时仍如实记 `drsSettled:false` 后继续整理。
