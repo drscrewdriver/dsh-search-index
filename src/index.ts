@@ -21,6 +21,7 @@ import type { Context } from 'cordis'
 import z from '@deepseek-ai/schemastery'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { SwitchIndexEngine, resolveTypes, type SwitchIndexContentType, type SwitchSearchSort } from './host/index/engine.ts'
+import { registerSfindCommand } from './tui-command.ts'
 import { SwitchWatermarkSync, type SwitchSyncState } from './host/index/sync.ts'
 import { createArchiveSource, type SwitchArchiveDiagnostics } from './host/index/archive-source.ts'
 import { detectSteward } from './host/index/peers.ts'
@@ -816,6 +817,19 @@ export function apply(ctx: Context, entry: Partial<SwitchSearchConfig> = {}): vo
     registry: () => ({ archivedSessionIds: archiveReader.read().ids }),
     log,
   }
+
+  // ── dsh-tui 终端面：`/sfind` ───────────────────────────────────────────
+  // TUI 不加载 client 半边，> =0.1.7 的「主栏整页」在终端里没有入口 → 补宿主命令。
+  // 只复用 listSessions / contentSearch / searchStatus，不新增查询逻辑。
+  ;(ctx as unknown as {
+    inject?: (deps: string[], cb: (scope: Context) => void) => void
+  }).inject?.(['commands'], (scope) => {
+    registerSfindCommand(scope, {
+      status: () => searchStatus(runtime),
+      titles: () => listSessions(runtime),
+      content: (query, limit) => contentSearch(runtime, { query, limit }),
+    })
+  })
 
   // 双名回退链：0.2.1-a.2 起宿主服务 webRuntime 更名 webStartup；注入主名
   // webStartup 在新代必有，旧代（≤0.2.0）回退 webRuntime，两代通吃。
