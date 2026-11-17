@@ -84,12 +84,14 @@ declare module 'cordis' {
 export declare function injectStyles(): () => void;
 /** ------------------------------------------------------------------ view */
 /** The floating search panel. */
-export declare function SwitchPanel({ t, onClose, open, variant, }: {
+export declare function SwitchPanel({ t, onClose, open, variant, scope, }: {
     t?: CardLocale;
     onClose: () => void;
     open: (sessionId: string) => void;
     /** `dialog` = 遮罩上的浮动面板（017-）；`page` = 填满主栏的整页（017+）。 */
     variant?: 'dialog' | 'page';
+    /** 设置 scope：读「保留搜索历史」开关。缺席按关处理。 */
+    scope?: SwitchCardScope;
 }): ReactElement;
 /** The footer entry: one icon button that opens the search panel. */
 export declare function SwitchFooter({ t, wide, open, scope, }: SwitchFooterProps & {

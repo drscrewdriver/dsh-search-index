@@ -188,6 +188,7 @@ export const Config = z.object({
   corpusSource: z.union(['native', 'drs']).default('drs').volatile(),
   drsBaseUrl: z.string().default('').volatile(),
   contentTransport: z.union(['auto', 'http', 'in-process']).default('auto').volatile(),
+  rememberQuery: z.boolean().default(false).volatile(),
 })
 
 /** Live reference the 0.1.7 loader hands `apply` for `.volatile()` config fields. */
@@ -738,6 +739,9 @@ export function apply(ctx: Context, entry: Partial<SwitchSearchConfig> = {}): vo
       corpusSource: corpus(readVolatileValue(entry.corpusSource) ?? DEFAULT_CONFIG.corpusSource),
       drsBaseUrl: str('drsBaseUrl', readVolatileValue(entry.drsBaseUrl) ?? DEFAULT_CONFIG.drsBaseUrl),
       contentTransport: transport(readVolatileValue(entry.contentTransport) ?? DEFAULT_CONFIG.contentTransport),
+      // 出厂关：读不到就按「不记忆」处理，绝不能退化成「记忆」——方向反了就是
+      // 一次未经同意的行为变更。
+      rememberQuery: bool('rememberQuery', readVolatileValue(entry.rememberQuery) ?? DEFAULT_CONFIG.rememberQuery),
     }
   }
 

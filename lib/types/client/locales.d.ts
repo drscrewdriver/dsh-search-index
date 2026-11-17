@@ -51,6 +51,8 @@ export declare const zh: {
     readonly 'card.enabled.desc': "在侧边栏底部显示\"搜索\"入口。";
     readonly 'card.defaultMode': "默认搜索模式";
     readonly 'card.defaultMode.desc': "面板打开时默认进入标题搜索还是内容搜索。";
+    readonly 'card.rememberQuery': "保留搜索历史";
+    readonly 'card.rememberQuery.desc': "再次打开搜索时恢复上次的关键词、筛选与滚动位置（12 小时内有效）。关闭时不保存任何检索内容。";
     readonly 'card.mode.title': "标题";
     readonly 'card.mode.content': "内容";
     readonly 'card.autoSync': "自动同步索引";
@@ -84,6 +86,8 @@ export declare const zh: {
     readonly 'panel.searchTitle': "搜索会话标题…";
     readonly 'panel.searchContent': "搜索会话内容…";
     readonly 'panel.entry': "搜索";
+    readonly 'panel.history.clear': "清除";
+    readonly 'panel.history.clear.hint': "清除已保存的搜索现场，回到空白检索。";
     readonly 'panel.buildIndex': "建立索引";
     readonly 'panel.archived': "已排除 {count} 个已归档会话";
     readonly 'panel.rebuilding': "正在整理索引… {done}/{total}（整理期间旧索引仍可搜索）";

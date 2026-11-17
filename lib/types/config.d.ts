@@ -37,6 +37,14 @@ export interface SwitchSearchConfig {
      * - `in-process`=只走进程内只读臂（桌面版强制离线通道）。
      */
     contentTransport?: 'auto' | 'http' | 'in-process';
+    /**
+     * 是否记住上次的搜索现场（关键词、筛选、滚动位置、面板模式）。
+     *
+     * 出厂 **关**：不改变升级前的行为，也符合「记忆用户输入需要在设置里被同意」。
+     * 关闭时不写快照，并清掉已有快照——否则用户关掉开关再打开，会恢复一个
+     * 「关开关之前」的旧现场，语义错乱。
+     */
+    rememberQuery?: boolean;
 }
 /** Defaults when nothing is configured. */
 export declare const DEFAULT_CONFIG: Required<SwitchSearchConfig>;

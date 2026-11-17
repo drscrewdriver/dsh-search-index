@@ -87,10 +87,12 @@ function FooterEntry(props: SwitchFooterProps & {
  * 整页形态：搜索面板占满主栏（017+）。
  * @param props - 关闭动作 + 打开会话回调（真实导航，不是空函数）。
  */
-function SearchPage(props: { onClose: () => void; openSession: (sessionId: string) => void }): ReactElement {
+function SearchPage(props: { onClose: () => void; openSession: (sessionId: string) => void; scope?: SwitchCardScope }): ReactElement {
   return createElement(SwitchPanel, {
     variant: 'page',
     onClose: props.onClose,
+    // 「保留搜索历史」开关与设置卡同源：同一个 bound scope，一处绑定两处消费。
+    scope: props.scope,
     // 点结果：先退回会话（卸载本页），再打开目标会话；定位巡逻在模块级继续。
     open: (sessionId: string) => {
       props.onClose()
@@ -198,7 +200,7 @@ export function apply(ctx: Context): void {
         name: MAIN_SEAT,
         key: PANEL_ID,
         locale: NS,
-      }, () => createElement(PageHost, { onClose: closePage, openSession: openHit })), 'dsh-search-index: main page')
+      }, () => createElement(PageHost, { onClose: closePage, openSession: openHit, scope: bound as unknown as SwitchCardScope })), 'dsh-search-index: main page')
       return () => { page(); row() }
     }
 
@@ -292,8 +294,8 @@ export function apply(ctx: Context): void {
 }
 
 /** 017+ 页宿主：把 closePage / 打开会话绑进 SwitchPanel（page 形态）。 */
-function PageHost(props: { onClose: () => void; openSession: (sessionId: string) => void }): ReactElement {
-  return SearchPage({ onClose: props.onClose, openSession: props.openSession })
+function PageHost(props: { onClose: () => void; openSession: (sessionId: string) => void; scope?: SwitchCardScope }): ReactElement {
+  return SearchPage({ onClose: props.onClose, openSession: props.openSession, scope: props.scope })
 }
 
 /** 顶栏行图标：放大镜（随行字色）。 */

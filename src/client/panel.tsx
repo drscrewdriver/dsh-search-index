@@ -18,6 +18,13 @@ import { locateSearchHit, classifyHit, probeHitInDom, RAIL_INDEX_TURNS, DEEP_MAX
 import { showLocateHud, updateLocateHud, hideLocateHud, type HudButton } from './locate-hud.ts'
 import { callHost, callHostAny, callSteward, deepSyncIndex, type HostContentHit, type HostIndexStatus, type HostSessionItem, type HostSortMode, type SwitchSessionsService, type SwitchUiWorkspaceService } from './host-api.ts'
 import type { SwitchCardScope } from './card.tsx'
+import {
+  clampScroll,
+  clearSnapshot,
+  readSnapshot,
+  writeSnapshot,
+  type QuerySnapshot,
+} from './query-history.ts'
 import { translate, type LocaleKey } from './locales.ts'
 import { LABELS, isInvokeChord } from './platform.ts'
 
@@ -344,28 +351,48 @@ export function SwitchPanel({
   onClose,
   open,
   variant = 'dialog',
+  scope,
 }: {
   t?: CardLocale
   onClose: () => void
   open: (sessionId: string) => void
   /** `dialog` = 遮罩上的浮动面板（017-）；`page` = 填满主栏的整页（017+）。 */
   variant?: 'dialog' | 'page'
+  /** 设置 scope：读「保留搜索历史」开关。缺席按关处理。 */
+  scope?: SwitchCardScope
 }): ReactElement {
+  const remember = useRememberQuery(scope)
+
+  // 首帧取一次快照。用 ref 而不是 `useState(readSnapshot)`，因为后者会在每次
+  // 渲染都求值一遍参数；用 ref + 一次性标记，保证整个面板生命周期只读一次
+  // localStorage。
+  const bootedRef = useRef(false)
+  const bootRef = useRef<QuerySnapshot | null>(null)
+  if (!bootedRef.current) {
+    bootedRef.current = true
+    bootRef.current = remember ? readSnapshot() : null
+    // 开关关着却还留着旧快照 → 立刻清掉。否则用户「关→开」会恢复一个关之前
+    // 的旧现场，语义错乱。
+    if (!remember) clearSnapshot()
+  }
+  const boot = bootRef.current
+
   // Mode memory: the panel reopens in the mode last used in this web session
   // (first open falls back to 'title'). Session-scoped on purpose — no
   // persistence, the settings card's defaultMode stays the durable preference.
-  const [mode, setModeState] = useState<PanelMode>(lastPanelMode)
+  // 「保留搜索历史」开着时，快照里的 mode 优先于模块级记忆。
+  const [mode, setModeState] = useState<PanelMode>(boot?.mode ?? lastPanelMode)
   const setMode = (next: PanelMode): void => {
     lastPanelMode = next
     setModeState(next)
   }
-  const [query, setQuery] = useState('')
-  const [contentType, setContentType] = useState<ContentType>('all')
+  const [query, setQuery] = useState(boot?.query ?? '')
+  const [contentType, setContentType] = useState<ContentType>((boot?.contentType as ContentType) ?? 'all')
   // 检索域 chip：标题/内容两模式共用（R1——归档正文已入索引）。
-  const [archivedFilter, setArchivedFilter] = useState<ArchivedDomain>('all')
+  const [archivedFilter, setArchivedFilter] = useState<ArchivedDomain>((boot?.archivedFilter as ArchivedDomain) ?? 'all')
   // 日期范围（R6）:YYYY-MM-DD,空串 = 不限;结束日含当天（宿主半排他上界 +1d）。
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
+  const [dateFrom, setDateFrom] = useState(boot?.dateFrom ?? '')
+  const [dateTo, setDateTo] = useState(boot?.dateTo ?? '')
   // 定位诊断徽标（T7.4 v3）：点过命中行的定位态 ⏳/✓/✗——「停在底部」不再靠猜。
   const [locateStatus, setLocateStatus] = useState<Record<string, 'pending' | 'ok' | 'fail'>>({})
   // 冷数据（turn_gap>40）交互：pendingCold=待确认的命中；deepProgress=回溯进度；
@@ -411,6 +438,53 @@ export function SwitchPanel({
   }>({ available: null, rebuilding: false, done: 0, total: 0, count: 0 })
   const inputRef = useRef<HTMLInputElement | null>(null)
   const listRef = useRef<HTMLUListElement | null>(null)
+
+  // ── 搜索现场暂存（「保留搜索历史」开关）────────────────────────────────
+  // 滚动位置单独用 ref 持有：它来自 onScroll（高频），进 state 会让每次滚动都
+  // 重渲染整个列表。写快照时再取。
+  const scrollRef = useRef<number>(boot?.scrollTop ?? 0)
+  // 待恢复的滚动目标。null = 没有待办（避免每渲染都重复写 scrollTop）。
+  const restoreRef = useRef<number | null>(boot !== null && boot.scrollTop > 0 ? boot.scrollTop : null)
+  // 卸载 cleanup 读它而不是闭包里的 state：cleanup 捕获的是创建那次渲染的值，
+  // 用户最后 300ms 内的修改会被丢掉。
+  const latestRef = useRef({ mode, query, contentType, archivedFilter, dateFrom, dateTo })
+  latestRef.current = { mode, query, contentType, archivedFilter, dateFrom, dateTo }
+
+  // 写盘一路：筛选条件变更（防抖 300ms）——覆盖「改完就按 F5」。
+  useEffect(() => {
+    if (!remember) return undefined
+    const timer = window.setTimeout(() => {
+      const cur = latestRef.current
+      writeSnapshot({
+        mode: cur.mode,
+        query: cur.query,
+        contentType: cur.contentType,
+        archivedFilter: cur.archivedFilter,
+        dateFrom: cur.dateFrom,
+        dateTo: cur.dateTo,
+        scrollTop: scrollRef.current,
+      })
+    }, 300)
+    return () => { window.clearTimeout(timer) }
+  }, [remember, mode, query, contentType, archivedFilter, dateFrom, dateTo])
+
+  // 写盘二路：卸载前补一次。主路径是「点结果 → onClose() 卸载 → 开目标会话」，
+  // 那条路上防抖往往还没落地。
+  useEffect(() => {
+    if (!remember) return undefined
+    return () => {
+      const cur = latestRef.current
+      writeSnapshot({
+        mode: cur.mode,
+        query: cur.query,
+        contentType: cur.contentType,
+        archivedFilter: cur.archivedFilter,
+        dateFrom: cur.dateFrom,
+        dateTo: cur.dateTo,
+        scrollTop: scrollRef.current,
+      })
+    }
+  }, [remember])
 
   const normalized = query.trim().toLowerCase()
 
@@ -724,6 +798,44 @@ export function SwitchPanel({
   }
   const activeRequestKey = contentRequestKey(normalized, contentType, sortBy, archivedFilter, { from: dateFrom, to: dateTo }, groupMode)
   const activeContent = content.query === activeRequestKey ? content : { query: activeRequestKey, status: 'loading' as const, items: [] }
+
+  // 恢复滚动位置。必须等列表真的渲染出来：内容模式重开会重新发一次
+  // `content-search`，`loading` 期间渲染的是状态行、`listRef.current === null`，
+  // 此时写 scrollTop 会静默打在 null 上并把 restoreRef 白白消耗掉。
+  // 依赖里带 `activeContent.status` 就是为了等这一跳。
+  const listReady = mode === 'title' ? sessions !== null && titleRows.length > 0 : activeContent.status === 'ready' && activeContent.items.length > 0
+  useEffect(() => {
+    const target = restoreRef.current
+    if (target === null || target <= 0) return
+    if (!listReady) return
+    const list = listRef.current
+    if (list === null) return
+    list.scrollTop = clampScroll(target, list.scrollHeight, list.clientHeight)
+    restoreRef.current = null
+  }, [listReady, mode])
+
+  // 有没有「可以清掉的东西」：任一筛选偏离默认值，或仍有待恢复的滚动目标。
+  // 用它决定「清除」按钮出不出现——空面板上摆一个「清除」是噪音。
+  const hasRestorable = query !== ''
+    || contentType !== 'all'
+    || archivedFilter !== 'all'
+    || dateFrom !== ''
+    || dateTo !== ''
+    || restoreRef.current !== null
+
+  /** 一键回到空白检索：重置六项 + 清快照 + 丢掉待恢复的滚动目标。 */
+  const clearHistory = (): void => {
+    setQuery('')
+    setContentType('all')
+    setArchivedFilter('all')
+    setDateFrom('')
+    setDateTo('')
+    scrollRef.current = 0
+    restoreRef.current = null
+    clearSnapshot()
+    if (listRef.current !== null) listRef.current.scrollTop = 0
+  }
+
   if (mode === 'title') {
     if (sessions === null) {
       children.push(createElement('div', { key: 'loading', className: 'dsws_status' }, translate(t, 'panel.loadingSessions')))
@@ -736,6 +848,7 @@ export function SwitchPanel({
         className: 'dsws_list',
         role: 'listbox',
         'aria-label': translate(t, 'panel.titleSearch'),
+        onScroll: (e: { currentTarget: { scrollTop: number } }) => { scrollRef.current = e.currentTarget.scrollTop },
       }, titleRows.slice(0, 200).map(item => createElement('li', { key: item.sessionId, role: 'option' }, createElement('div', { className: 'dsws_rowLine' }, [
         createElement('button', {
           key: 'row',
@@ -800,6 +913,7 @@ export function SwitchPanel({
         className: 'dsws_list',
         role: 'listbox',
         'aria-label': translate(t, 'panel.contentSearch'),
+        onScroll: (e: { currentTarget: { scrollTop: number } }) => { scrollRef.current = e.currentTarget.scrollTop },
       }, activeContent.items.slice(0, 200).map(item => createElement('li', { key: `${item.sessionId}:${item.seq}`, role: 'option' }, createElement('div', { className: 'dsws_rowLine' }, [
         createElement('button', {
           key: 'row',
@@ -922,6 +1036,15 @@ export function SwitchPanel({
             title: chip.id === 'time' ? translate(t, 'sort.time.hint') : translate(t, 'sort.relevance.hint'),
             onClick: () => { setSortBy(chip.id) },
           }, translate(t, chip.labelKey))))] : []),
+        // 「保留搜索历史」开着且确实恢复了现场时，给一条显式出口：
+        // 没有它，用户想换一个全新检索只能挨个清筛选，而且不确定旧状态还会不会回来。
+        remember && hasRestorable ? createElement('button', {
+          key: 'clearHistory',
+          type: 'button',
+          className: 'dsws_chip',
+          title: translate(t, 'panel.history.clear.hint'),
+          onClick: clearHistory,
+        }, translate(t, 'panel.history.clear')) : null,
       ]),
       children,
       // The key bar. It advertises only chords that are actually bound: the
@@ -1004,6 +1127,27 @@ function useEntryEnabled(scope: SwitchCardScope | undefined): boolean {
   return snapshot?.value?.enabled !== false
 }
 
+/**
+ * Whether the panel should remember the last search scene.
+ *
+ * 与 {@link useEntryEnabled} 结构同款，但**默认方向相反**：读不到设置时按
+ * **关**处理。理由：`enabled` 缺省是开（入口消失会让用户找不到回来的路），
+ * 而「记忆用户输入」是一件需要被同意的事——读不到同意就不做。
+ *
+ * 特别注意这里必须写 `=== true` 而不是 `!== false`：后者会把 undefined
+ * 判成「开」，一次符号写反就是一次未经同意的行为变更。
+ *
+ * @param scope - the bound `switch-search` namespace scope, when available.
+ * @returns `true` only when a readable scope says `rememberQuery` is on.
+ */
+function useRememberQuery(scope: SwitchCardScope | undefined): boolean {
+  const snapshot = useSyncExternalStore(
+    (listener) => scope?.subscribe(listener) ?? (() => {}),
+    () => scope?.getSnapshot(),
+  )
+  return snapshot?.value?.rememberQuery === true
+}
+
 /** The footer entry: one icon button that opens the search panel. */
 export function SwitchFooter({
   t,
@@ -1053,6 +1197,8 @@ export function SwitchFooter({
     openPanel && createElement(SwitchPanel, {
       key: 'panel',
       t,
+      // 弹窗形态同样接开关：scope 由 footer 入口透传进来（见 index.ts 的 mountFooter）。
+      scope,
       onClose: () => { setOpenPanel(false) },
       open: (sessionId: string) => {
         setOpenPanel(false)

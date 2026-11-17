@@ -43,6 +43,9 @@ const SwitchNsSchema = z.object({
   indexDir: z.string().default(''),
   corpusSource: z.union(['native', 'drs']).default('drs'),
   drsBaseUrl: z.string().default(''),
+  // 老线 schema 必须纯 plain（`settings.register` 拒收 volatile 节点）。
+  // 出厂关，与 src/config.ts / src/index.ts 的 Config 三处同值。
+  rememberQuery: z.boolean().default(false),
 })
 
 /** settings.get 返回值是否像一份文档（老宿主对未写过的 ns 可能回 undefined）。 */

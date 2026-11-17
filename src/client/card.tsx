@@ -552,6 +552,18 @@ function createCardBody(props: {
           onClick: () => { void scope.set('defaultMode', mode) },
         }, mode === 'title' ? translate(t, 'card.mode.title') : translate(t, 'card.mode.content')))),
     }),
+    // 「保留搜索历史」：出厂关。`?? false` 而不是 `?? true`——读不到就按不记忆，
+    // 与 panel.tsx 的 `useRememberQuery` 同一方向，两处一起反了才会翻车。
+    createElement(Row, {
+      key: 'remember',
+      title: translate(t, 'card.rememberQuery'),
+      desc: translate(t, 'card.rememberQuery.desc'),
+      control: createElement(Toggle, {
+        checked: value.rememberQuery ?? false,
+        writable,
+        onChange: (checked) => { void scope.set('rememberQuery', checked) },
+      }),
+    }),
     createElement(Row, {
       key: 'autoSync',
       title: translate(t, 'card.autoSync'),

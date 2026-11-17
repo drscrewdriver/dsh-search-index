@@ -54,6 +54,9 @@ test('every dictionary carries the transport + failure-code keys', () => {
     'panel.contentErr.browser-access-denied', 'panel.contentErr.drs-http-unreachable', 'panel.contentErr.drs-http-error',
     'panel.contentErr.drs-not-activated',
     'panel.contentErr.drs-missing', 'panel.contentErr.drs-empty', 'panel.contentErr.drs-schema-mismatch',
+    // 0.7.21「保留搜索历史」开关：设置卡两键 + 面板清除按钮两键，九语不得只靠 zh 回退。
+    'card.rememberQuery', 'card.rememberQuery.desc',
+    'panel.history.clear', 'panel.history.clear.hint',
   ]
   const missing = []
   const placeholderProblems = []
