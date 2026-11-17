@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.20
+
+- **修复 peer range 让安装器解不出 rc**：0.7.18 把四个 `@deepseek-ai/dsh-client-*` peer 从精确枚举改成有界区间 `>=0.1.0-rc.2 <0.3.0-0`，但 node-semver 只在**共享边界元组**时才让预发布版满足区间——`0.2.1-rc.5` 对 `<0.3.0-0` 的边界是 `0.3.0`，元组不同，于是判定不满足（实测 `semver.satisfies('0.2.1-rc.5','>=0.1.0-rc.2 <0.3.0-0') === false`）。结果 pnpm/npm 装不上 peer，CI 在 install 阶段就红（`ERR_PNPM_OUTDATED_LOCKFILE` / `ETARGET` / `EUSAGE`）。本版把 peer 恢复为精确枚举，`engines.dsh` 保留有界区间——宿主读它时用 `includePrerelease`，只有 npm 解析器需要枚举。**纯元数据修复，运行时代码零 diff**。
+
 ## 0.7.19
 
 - 终端面（dsh-tui / Desktop 命令面板同源）：/sfind 终端面（--title/--content 双模）。
