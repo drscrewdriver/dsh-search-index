@@ -17,6 +17,11 @@ export const zh = {
   'panel.deepSync.failed': '同步失败',
   'panel.deepSync.failedReason': '深度同步失败：{error}',
   'panel.deepSync.retry': '重试同步',
+  'panel.doctor': '诊断报告',
+  'panel.doctor.hint': '把异常台账与探针现状编排成一份可粘贴的报告（含可执行命令），复制到剪贴板；复制成功后会清空台账。',
+  'panel.doctor.copied': '诊断报告已复制：直接贴进 issue 即可。',
+  'panel.doctor.failed': '生成诊断报告失败：{error}',
+  'panel.doctor.copyFailed': '报告已生成但复制失败（{error}），已打印到浏览器控制台。',
   'card.corpusSource': '语料源',
   'card.corpusSource.desc': '内容检索的语料来自 DRS 投影库；native 仅保留标题/头部元数据面。',
   'card.mode.drs': 'DRS 投影库',
@@ -204,6 +209,11 @@ export const en: Dict = {
   'panel.deepSync.failed': 'Sync failed',
   'panel.deepSync.failedReason': 'Deep sync failed: {error}',
   'panel.deepSync.retry': 'Retry sync',
+  'panel.doctor': 'Diagnostics',
+  'panel.doctor.hint': 'Compose the failure ledger and probe state into a pasteable report with runnable commands, then copy it. The ledger is cleared once copied.',
+  'panel.doctor.copied': 'Diagnostic report copied — paste it straight into the issue.',
+  'panel.doctor.failed': 'Could not build the diagnostic report: {error}',
+  'panel.doctor.copyFailed': 'Report built but copy failed ({error}); it was printed to the browser console.',
   'card.corpusSource': 'Corpus source',
   'card.corpusSource.desc': 'Content search reads the DRS projection DB; native keeps title/header metadata only.',
   'card.mode.drs': 'DRS projection',
@@ -485,6 +495,11 @@ export const ja: Partial<Dict> = {
   'panel.deepSync.failed': '同期失敗',
   'panel.deepSync.failedReason': 'ディープ同期に失敗しました：{error}',
   'panel.deepSync.retry': '同期を再試行',
+  'panel.doctor': '診断レポート',
+  'panel.doctor.hint': '障害台帳とプローブ状態を、実行可能なコマンド付きの貼り付け用レポートにまとめてクリップボードへコピーします。コピー後は台帳を消去します。',
+  'panel.doctor.copied': '診断レポートをコピーしました。そのまま issue に貼り付けてください。',
+  'panel.doctor.failed': '診断レポートの生成に失敗しました：{error}',
+  'panel.doctor.copyFailed': 'レポートは生成されましたがコピーに失敗しました（{error}）。ブラウザのコンソールに出力しました。',
 }
 
 /** Korean dictionary. */
@@ -603,6 +618,11 @@ export const ko: Partial<Dict> = {
   'panel.deepSync.failed': '동기화 실패',
   'panel.deepSync.failedReason': '딥 동기화 실패: {error}',
   'panel.deepSync.retry': '동기화 재시도',
+  'panel.doctor': '진단 보고서',
+  'panel.doctor.hint': '장애 원장과 프로브 상태를 실행 가능한 명령이 포함된 붙여넣기용 보고서로 정리해 클립보드에 복사합니다. 복사 후 원장을 비웁니다.',
+  'panel.doctor.copied': '진단 보고서를 복사했습니다. 그대로 issue 에 붙여넣으세요.',
+  'panel.doctor.failed': '진단 보고서 생성 실패: {error}',
+  'panel.doctor.copyFailed': '보고서는 생성되었지만 복사에 실패했습니다({error}). 브라우저 콘솔에 출력했습니다.',
 }
 
 /** French dictionary. */
@@ -721,6 +741,11 @@ export const fr: Partial<Dict> = {
   'panel.deepSync.failed': 'Échec de la synchronisation',
   'panel.deepSync.failedReason': 'Échec de la synchronisation approfondie : {error}',
   'panel.deepSync.retry': 'Réessayer',
+  'panel.doctor': 'Diagnostic',
+  'panel.doctor.hint': "Compose le registre des échecs et l'état des sondes en un rapport collable avec des commandes exécutables, puis le copie. Le registre est vidé après la copie.",
+  'panel.doctor.copied': "Rapport de diagnostic copié — collez-le directement dans l'issue.",
+  'panel.doctor.failed': 'Échec de génération du rapport de diagnostic : {error}',
+  'panel.doctor.copyFailed': "Rapport généré mais copie impossible ({error}) ; il a été affiché dans la console du navigateur.",
 }
 
 /** German dictionary. */
@@ -839,6 +864,11 @@ export const de: Partial<Dict> = {
   'panel.deepSync.failed': 'Synchronisierung fehlgeschlagen',
   'panel.deepSync.failedReason': 'Tiefensynchronisierung fehlgeschlagen: {error}',
   'panel.deepSync.retry': 'Synchronisierung wiederholen',
+  'panel.doctor': 'Diagnosebericht',
+  'panel.doctor.hint': 'Fehlerprotokoll und Prüfstatus zu einem einfügbaren Bericht mit ausführbaren Befehlen zusammenstellen und kopieren. Nach dem Kopieren wird das Protokoll geleert.',
+  'panel.doctor.copied': 'Diagnosebericht kopiert – direkt ins Issue einfügen.',
+  'panel.doctor.failed': 'Diagnosebericht konnte nicht erstellt werden: {error}',
+  'panel.doctor.copyFailed': 'Bericht erstellt, aber Kopieren fehlgeschlagen ({error}); in der Browser-Konsole ausgegeben.',
 }
 
 /** Italian dictionary. */
@@ -957,6 +987,11 @@ export const it: Partial<Dict> = {
   'panel.deepSync.failed': 'Sincronizzazione non riuscita',
   'panel.deepSync.failedReason': 'Sincronizzazione profonda non riuscita: {error}',
   'panel.deepSync.retry': 'Riprova sincronizzazione',
+  'panel.doctor': 'Diagnostica',
+  'panel.doctor.hint': "Compone il registro degli errori e lo stato delle sonde in un report incollabile con comandi eseguibili, poi lo copia. Il registro viene svuotato dopo la copia.",
+  'panel.doctor.copied': "Report di diagnostica copiato: incollalo direttamente nell'issue.",
+  'panel.doctor.failed': 'Impossibile generare il report di diagnostica: {error}',
+  'panel.doctor.copyFailed': 'Report generato ma copia non riuscita ({error}); è stato stampato nella console del browser.',
 }
 
 /** Russian dictionary. */
@@ -1075,6 +1110,11 @@ export const ru: Partial<Dict> = {
   'panel.deepSync.failed': 'Синхронизация не удалась',
   'panel.deepSync.failedReason': 'Глубокая синхронизация не удалась: {error}',
   'panel.deepSync.retry': 'Повторить синхронизацию',
+  'panel.doctor': 'Диагностика',
+  'panel.doctor.hint': 'Собрать журнал сбоев и состояние проб в готовый к вставке отчёт с выполнимыми командами и скопировать его. После копирования журнал очищается.',
+  'panel.doctor.copied': 'Отчёт диагностики скопирован — вставьте его прямо в issue.',
+  'panel.doctor.failed': 'Не удалось построить отчёт диагностики: {error}',
+  'panel.doctor.copyFailed': 'Отчёт построен, но копирование не удалось ({error}); он выведен в консоль браузера.',
 }
 
 /** Spanish dictionary. */
@@ -1193,6 +1233,11 @@ export const es: Partial<Dict> = {
   'panel.deepSync.failed': 'Sincronización fallida',
   'panel.deepSync.failedReason': 'Error en la sincronización profunda: {error}',
   'panel.deepSync.retry': 'Reintentar sincronización',
+  'panel.doctor': 'Diagnóstico',
+  'panel.doctor.hint': 'Compone el registro de fallos y el estado de las sondas en un informe pegable con comandos ejecutables, y lo copia. El registro se vacía tras copiar.',
+  'panel.doctor.copied': 'Informe de diagnóstico copiado: pégalo directamente en el issue.',
+  'panel.doctor.failed': 'No se pudo generar el informe de diagnóstico: {error}',
+  'panel.doctor.copyFailed': 'Informe generado pero la copia falló ({error}); se imprimió en la consola del navegador.',
 }
 
 /** All shipped dictionaries by locale id. */

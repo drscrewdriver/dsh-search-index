@@ -43,6 +43,7 @@ import { exportSnapshot, parseSnapshot } from './host/index/snapshot.ts'
 import { DrsCorpusSource, resolveDrsBaseUrl } from './host/index/drs-source.ts'
 import { createDrsLocalArm, resolveDrsDir, type DrsLocalArm } from './host/index/drs-local.ts'
 import { classifyDrsFailure, messageForDrsFailure } from './host/index/drs-contract.ts'
+import { FailureLedger, renderDoctorReport, diagnose, type DoctorInput } from './host/index/doctor.ts'
 import {
   bridgeOverlay,
   installLegacySettingsBridge,
@@ -434,6 +435,11 @@ async function contentSearch(
     const failure = classifyDrsFailure(err)
     runtime.log(`[switch-search] content-search failed: ${failure.code} ${failure.detail}`)
     /**
+     * 记账（issue #4 后续）：单次失败的 detail 已经能显示，但用户连续踩坑时真正
+     * 有用的是「这一段时间失败了几次、分别哪一档」。台账是内存环形缓冲，不写盘。
+     */
+    runtime.ledger.record({ code: failure.code, detail: failure.detail, op: 'content-search', at: Date.now() })
+    /**
      * `detail` 必须随 error 一起回传（issue #4）。
      *
      * 它此前只进日志：界面拿到的是一个没有细节的档位文案，用户看到「投影库尚未
@@ -442,6 +448,47 @@ async function contentSearch(
      * 报 issue 的人拿不到 —— 而这几条 detail 恰恰是分诊的唯一依据。
      */
     return { ok: false, code: failure.code, error: messageForDrsFailure(failure.code, failure.detail) }
+  }
+}
+
+/**
+ * doctor：把「异常台账 + 探针现状」编排成一份可粘贴的排查报告（issue #4 后续）。
+ *
+ * 为什么不复用 search-status：那个方法回答「现在能不能用」，这个方法回答
+ * 「坏了的话按什么顺序查、每一步跑什么命令」。前者是状态，后者是可执行的编排 ——
+ * 报 issue 的人需要的是后者（他们拿不到宿主日志）。
+ * @param runtime - 运行时依赖。
+ * @param requestHost - 调用方 Host（同源探针要用）。
+ * @param platform - 决定命令形态（测试注入）。
+ */
+async function doctorReport(
+  runtime: SwitchRuntime,
+  requestHost = '',
+  platform: NodeJS.Platform = process.platform,
+): Promise<{ ok: boolean; report: string; steps: unknown[]; failures: unknown[] }> {
+  const index = runtime.index
+  const probe = await runtime.drsSource.probeDetail(requestHost)
+  const failures = runtime.ledger.snapshot()
+  const input: DoctorInput = {
+    mode: probe.mode,
+    reason: probe.reason,
+    detail: probe.detail,
+    notActivated: probe.notActivated === true,
+    transport: runtime.config().contentTransport ?? 'auto',
+    local: {
+      schemaVersion: probe.schemaVersion,
+      expected: probe.expected,
+      sessions: probe.sessions,
+      dir: probe.dir,
+    },
+    indexed: index.engine.isOpen ? index.engine.countSessions() : 0,
+    failures,
+  }
+  return {
+    ok: true,
+    report: renderDoctorReport(input, platform),
+    steps: diagnose(input, platform),
+    failures,
   }
 }
 
@@ -604,12 +651,15 @@ async function indexDeepSync(
       while (index.rebuild.state === 'building' || index.rebuild.state === 'swapping') await sleepMs(1500)
       index.deepSync = { state: 'done', startedAt: index.deepSync.startedAt, finishedAt: Date.now(), drsSettled: settled }
     } catch (err) {
+      const message = String(err instanceof Error ? err.message : err)
       index.deepSync = {
         state: 'failed',
         startedAt: index.deepSync.startedAt,
         finishedAt: Date.now(),
-        error: String(err instanceof Error ? err.message : err),
+        error: message,
       }
+      // 记账：深度同步失败也进台账，诊断报告里与内容检索失败并列。
+      runtime.ledger.record({ code: 'deep-sync-failed', detail: message, op: 'index-deep-sync', at: Date.now() })
     }
   })()
   return { ok: true, started: true }
@@ -711,6 +761,11 @@ interface SwitchRuntime {
   registry: () => { archivedSessionIds: readonly string[] }
   /** Cordis logger bridge ([switch-search] prefixed). */
   log: (msg: string) => void
+  /**
+   * 失败台账（issue #4 后续）：内存环形缓冲，记录每次内容检索/重建失败的档位
+   * 与 detail。用户连续踩坑时，「先后踩了哪几个坑」比「当下这一次」更有用。
+   */
+  ledger: FailureLedger
 }
 
 /**
@@ -828,6 +883,7 @@ export function apply(ctx: Context, entry: Partial<SwitchSearchConfig> = {}): vo
     config: () => current(),
     registry: () => ({ archivedSessionIds: archiveReader.read().ids }),
     log,
+    ledger: new FailureLedger(),
   }
 
   // ── dsh-tui 终端面：`/sfind` ───────────────────────────────────────────
@@ -981,6 +1037,15 @@ export function apply(ctx: Context, entry: Partial<SwitchSearchConfig> = {}): vo
           // 同源转发臂：DSR 由宿主进程自身提供（/api/dsh-reference-session-collector），
           // 端口是动态分配的——必须把调用方 Host 透传下去，否则会落到 8080 缺省口。
           writeJson(res, 200, await contentSearch(runtime, payload, String(req.headers.host ?? '')))
+          return
+        }
+        if (method === 'doctor') {
+          writeJson(res, 200, await doctorReport(runtime, String(req.headers.host ?? '')))
+          return
+        }
+        if (method === 'doctor-clear') {
+          runtime.ledger.clear()
+          writeJson(res, 200, { ok: true })
           return
         }
         if (method === 'search-status' || method === 'index-status') {

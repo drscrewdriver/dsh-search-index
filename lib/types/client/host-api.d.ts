@@ -132,6 +132,23 @@ export declare function deepSyncIndex(): Promise<{
     started?: boolean;
     error?: string;
 }>;
+/**
+ * 诊断报告（issue #4 后续）：宿主把「异常台账 + 探针现状」编排成一份可粘贴的
+ * Markdown，每一步带可执行命令。
+ *
+ * 为什么返回整段文本而不是结构化步骤：用户要的动作是**把它贴进 issue**，
+ * 排版在宿主侧一次成型，客户端只负责复制，不在浏览器里重新拼一遍（两边拼法
+ * 迟早会分叉）。
+ */
+export declare function fetchDoctorReport(): Promise<{
+    ok: boolean;
+    report?: string;
+    error?: string;
+}>;
+/** 清空异常台账（用户手动清 / 已贴完 issue）。 */
+export declare function clearDoctorLedger(): Promise<{
+    ok: boolean;
+}>;
 /** Trigger a browser download of the index snapshot from the host route. */
 export declare function downloadSnapshot(): Promise<void>;
 /**

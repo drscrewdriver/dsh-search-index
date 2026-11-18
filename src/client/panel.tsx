@@ -16,7 +16,7 @@ import type { SwitchSearchConfig } from '../config.ts'
 // 子席位；本仓不依赖 ui-slots 类型包，席位键以运行时 children 表为准）。
 import { locateSearchHit, classifyHit, probeHitInDom, RAIL_INDEX_TURNS, DEEP_MAX_PAGES } from './locate.ts'
 import { showLocateHud, updateLocateHud, hideLocateHud, type HudButton } from './locate-hud.ts'
-import { callHost, callHostAny, callSteward, deepSyncIndex, type HostContentHit, type HostIndexStatus, type HostSessionItem, type HostSortMode, type SwitchSessionsService, type SwitchUiWorkspaceService } from './host-api.ts'
+import { callHost, callHostAny, callSteward, clearDoctorLedger, deepSyncIndex, fetchDoctorReport, type HostContentHit, type HostIndexStatus, type HostSessionItem, type HostSortMode, type SwitchSessionsService, type SwitchUiWorkspaceService } from './host-api.ts'
 import type { SwitchCardScope } from './card.tsx'
 import {
   clampScroll,
@@ -408,6 +408,9 @@ export function SwitchPanel({
   const [armedDelete, setArmedDelete] = useState<string | null>(null)
   const [deleteBusy, setDeleteBusy] = useState(false)
   const [deleteNote, setDeleteNote] = useState<{ text: string; failed: boolean } | null>(null)
+  // 诊断报告（issue #4 后续）：拿到的是一整段 Markdown，直接进剪贴板。
+  // 放在状态里是为了失败时能把原因显示出来（复制失败也常见：无剪贴板权限）。
+  const [doctorNote, setDoctorNote] = useState<{ text: string; failed: boolean } | null>(null)
   const [sortBy, setSortByState] = useState<HostSortMode>(readStoredSort)
   const setSortBy = (next: HostSortMode): void => {
     writeStoredSort(next)
@@ -548,6 +551,36 @@ export function SwitchPanel({
   const startDeepSync = (): void => {
     setSearchStatus(prev => ({ ...prev, deepSync: 'drs-syncing' }))
     void deepSyncIndex()
+  }
+
+  /**
+   * 生成诊断报告并复制（issue #4 后续）。
+   *
+   * 编排在宿主侧做（`doctor` 路由）：报告要含环境、结论、每步观测值与可执行命令，
+   * 这些只有宿主拿得到（探针、台账、库路径）。客户端只负责复制 —— 两边各拼一份
+   * 迟早会分叉。
+   *
+   * 复制成功顺手清台账：用户已经把它贴进 issue 了，留着只会让下次报告带着
+   * 上一轮的旧失败，反而干扰判断。
+   */
+  const copyDoctorReport = async (): Promise<void> => {
+    const res = await fetchDoctorReport()
+    if (!res.ok || typeof res.report !== 'string') {
+      setDoctorNote({ text: translate(t, 'panel.doctor.failed', { error: res.error ?? '?' }), failed: true })
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(res.report)
+      setDoctorNote({ text: translate(t, 'panel.doctor.copied'), failed: false })
+      void clearDoctorLedger()
+    } catch (err) {
+      // 剪贴板被拒（非安全上下文 / 无权限）时把报告留在控制台，至少能手动捞。
+      setDoctorNote({
+        text: translate(t, 'panel.doctor.copyFailed', { error: String(err instanceof Error ? err.message : err) }),
+        failed: true,
+      })
+      console.info(res.report)
+    }
   }
 
   /**
@@ -781,6 +814,9 @@ export function SwitchPanel({
   const children: ReactElement[] = []
   if (deleteNote !== null) {
     children.push(createElement('div', { key: 'delnote', className: deleteNote.failed ? 'dsws_error' : 'dsws_status' }, deleteNote.text))
+  }
+  if (doctorNote !== null) {
+    children.push(createElement('div', { key: 'doctornote', className: doctorNote.failed ? 'dsws_error' : 'dsws_status' }, doctorNote.text))
   }
   if (coldNote !== null) {
     children.push(createElement('div', { key: 'coldnote', className: 'dsws_status' }, coldNote))
@@ -1119,6 +1155,19 @@ export function SwitchPanel({
                 : searchStatus.deepSync === 'failed'
                   ? translate(t, 'panel.deepSync.failed')
                   : translate(t, 'panel.deepSync')),
+          createElement('button', {
+            key: 'doctor',
+            type: 'button',
+            className: 'dsws_actBtn',
+            style: { height: '20px', padding: '0 8px', fontSize: '11px', lineHeight: '18px' },
+            /**
+             * 诊断报告（issue #4 后续）：把异常台账 + 探针现状编排成一份可粘贴的
+             * Markdown，每步带可执行命令。报 issue 的人拿不到宿主日志，这份报告
+             * 就是替代品 —— 复制成功会顺手清台账，避免下次报告带着旧失败。
+             */
+            title: translate(t, 'panel.doctor.hint'),
+            onClick: () => { void copyDoctorReport() },
+          }, translate(t, 'panel.doctor')),
         ]),
         createElement('span', { key: 'invoke', className: 'dsws_footItem' }, [
           createElement('kbd', { key: 'k', className: 'dsws_kbd' }, LABELS.invokeLabel),

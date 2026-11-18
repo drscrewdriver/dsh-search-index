@@ -62,6 +62,9 @@ test('every dictionary carries the transport + failure-code keys', () => {
     'panel.deepSync', 'panel.deepSync.hint', 'panel.deepSync.drs',
     'panel.deepSync.rebuild', 'panel.deepSync.done', 'panel.deepSync.failed',
     'panel.deepSync.failedReason', 'panel.deepSync.retry',
+    // issue #4 后续：诊断报告的按钮与四种反馈（成功 / 生成失败 / 复制失败 / 提示）。
+    'panel.doctor', 'panel.doctor.hint', 'panel.doctor.copied',
+    'panel.doctor.failed', 'panel.doctor.copyFailed',
   ]
   const missing = []
   const placeholderProblems = []

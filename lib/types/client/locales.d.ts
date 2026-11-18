@@ -15,6 +15,11 @@ export declare const zh: {
     readonly 'panel.deepSync.failed': "同步失败";
     readonly 'panel.deepSync.failedReason': "深度同步失败：{error}";
     readonly 'panel.deepSync.retry': "重试同步";
+    readonly 'panel.doctor': "诊断报告";
+    readonly 'panel.doctor.hint': "把异常台账与探针现状编排成一份可粘贴的报告（含可执行命令），复制到剪贴板；复制成功后会清空台账。";
+    readonly 'panel.doctor.copied': "诊断报告已复制：直接贴进 issue 即可。";
+    readonly 'panel.doctor.failed': "生成诊断报告失败：{error}";
+    readonly 'panel.doctor.copyFailed': "报告已生成但复制失败（{error}），已打印到浏览器控制台。";
     readonly 'card.corpusSource': "语料源";
     readonly 'card.corpusSource.desc': "内容检索的语料来自 DRS 投影库；native 仅保留标题/头部元数据面。";
     readonly 'card.mode.drs': "DRS 投影库";
