@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.23
+
+> 0.7.22 因 npm registry 的 staged-publish 元数据残留（`409 Cannot publish over previously staged version`，同 npm/cli#9889）无法落地，改用 0.7.23 发布。**代码与 0.7.22 完全一致**，本条只为让版本号能落地。
+
 ## 0.7.22
 
 issue [#4](https://github.com/drscrewdriver/dsh-search-index/issues/4)（内容搜索不可用）的处理结果：**失败原因此前抓到了但没显示**，这版把三处断链全部接通。报告里那句「装了 dsh-reference-session-collector 还是失败」之所以无从下手，根因不在 DRS 本身，而在诊断信息到不了用户眼前。
