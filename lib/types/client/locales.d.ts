@@ -13,6 +13,8 @@ export declare const zh: {
     readonly 'panel.deepSync.rebuild': "索引整理中…";
     readonly 'panel.deepSync.done': "同步完成";
     readonly 'panel.deepSync.failed': "同步失败";
+    readonly 'panel.deepSync.failedReason': "深度同步失败：{error}";
+    readonly 'panel.deepSync.retry': "重试同步";
     readonly 'card.corpusSource': "语料源";
     readonly 'card.corpusSource.desc': "内容检索的语料来自 DRS 投影库；native 仅保留标题/头部元数据面。";
     readonly 'card.mode.drs': "DRS 投影库";
@@ -36,13 +38,13 @@ export declare const zh: {
     readonly 'card.drsReason.drs-empty': "投影库尚未建立：重启宿主等首轮同步";
     readonly 'card.drsReason.drs-schema-mismatch': "投影库版本与插件预期不一致：请升级 dsh-reference-session-collector";
     readonly 'card.drsStatus.inactive': "依赖插件未激活：执行 dsh plugin --profile <name> add dsh-reference-session-collector 后重启宿主（当前走进程内只读库，投影数据不会自动更新）";
-    readonly 'panel.contentErr.browser-access-denied': "宿主禁止浏览器访问本地接口，且进程内只读库也不可用：请重启宿主后重试";
-    readonly 'panel.contentErr.drs-http-unreachable': "DRS 路由不可达：请确认 dsh-reference-session-collector 已启用";
+    readonly 'panel.contentErr.browser-access-denied': "宿主禁止浏览器访问本地接口，且进程内只读库也不可用：请重启宿主后重试（{error}）";
+    readonly 'panel.contentErr.drs-http-unreachable': "DRS 路由不可达：请确认 dsh-reference-session-collector 已启用（{error}）";
     readonly 'panel.contentErr.drs-http-error': "DRS 返回错误：{error}";
-    readonly 'panel.contentErr.drs-not-activated': "dsh-reference-session-collector 未作为插件激活（路由 404）：执行 dsh plugin --profile <name> add dsh-reference-session-collector 后重启宿主";
-    readonly 'panel.contentErr.drs-missing': "依赖未随包安装：请重装本插件（会自动带上 dsh-reference-session-collector）";
-    readonly 'panel.contentErr.drs-empty': "投影库尚未建立：重启宿主等待首轮同步完成";
-    readonly 'panel.contentErr.drs-schema-mismatch': "投影库版本不匹配：请升级 dsh-reference-session-collector（本插件不会清库）";
+    readonly 'panel.contentErr.drs-not-activated': "dsh-reference-session-collector 未作为插件激活（路由 404）：执行 dsh plugin --profile <name> add dsh-reference-session-collector 后重启宿主（{error}）";
+    readonly 'panel.contentErr.drs-missing': "依赖未随包安装：请重装本插件（会自动带上 dsh-reference-session-collector）（{error}）";
+    readonly 'panel.contentErr.drs-empty': "投影库尚未建立：重启宿主等待首轮同步完成（{error}）";
+    readonly 'panel.contentErr.drs-schema-mismatch': "投影库版本不匹配：请升级 dsh-reference-session-collector（本插件不会清库）（{error}）";
     readonly 'card.title': "搜索索引";
     readonly 'card.description': "侧边栏会话搜索增强：标题搜索与内容搜索一键切换。内容搜索使用插件自建索引，不依赖 DSH 官方全文索引。";
     readonly 'card.unavailable': "设置命名空间不可用：请确认插件已装配进 profile。";

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.7.22
+
+issue [#4](https://github.com/drscrewdriver/dsh-search-index/issues/4)（内容搜索不可用）的处理结果：**失败原因此前抓到了但没显示**，这版把三处断链全部接通。报告里那句「装了 dsh-reference-session-collector 还是失败」之所以无从下手，根因不在 DRS 本身，而在诊断信息到不了用户眼前。
+
+- **`detail` 被丢在宿主侧**：`contentSearch` 的 catch 调 `messageForDrsFailure(failure.code)` **没传 `failure.detail`** —— 而 `detail` 恰恰是唯一的分诊依据（`未找到投影库：<完整路径>`、`投影库无法打开：<权限/损坏原因>`、`投影库缺少 meta.schema_version（首轮同步没跑完）`、`投影库内尚无会话行`）。它只进了宿主日志，日志在宿主进程里，报 issue 的人拿不到。现在随 error 一起回传。
+- **三档文案吞掉 detail**：`drs-empty` / `drs-not-activated` / `drs-missing` 的兜底文案完全不带 `{detail}` 后缀，而这正是最常命中的三档。补齐。
+- **客户端九语无 `{error}` 占位**：`panel.contentErr.*` 的七条文案里，除 `drs-http-error` 外全都没有占位符 —— 即使宿主把 detail 传上来，`translate()` 也无处可插。九语 63 条全部补上。
+- **深度同步的失败原因此前完全不可见**：宿主半边一直把原因存进 `deepSync.error`，但面板只画「同步失败」四个字。现在列表区渲染可见的失败块（原样展示原因 + 「重试同步」按钮，复用既有 `startDeepSync`，不新开启动路径），按钮 `title` 在失败时也换成具体原因。
+- **顺带补掉一处既有缺口**：`panel.deepSync.*` 六条键此前只有 zh / en，另外七种语言一直靠 zh 回退（那七种语言的用户看到的是中文按钮）。九语补齐。
+- 新增测试 9 条：`client-panel-deepsync-error`（4，钉「失败原因必须在界面上可见」——数据在、渲染缺的缺陷形状）、`drs-detail-surface`（5，钉 detail 从 catch 到 UI 的四段链路，含「无 detail 时不留空括号」）。全量 86 passed / lint 干净 / typecheck 干净。
+
 ## 0.7.21
 
 - **「保留搜索历史」开关（出厂关）**：再次打开搜索面板时，恢复上次的关键词、检索域、类型筛选、日期范围、面板模式与**列表滚动位置**，覆盖「搜到多个结果、逐个点开确认、回来接着看」这条路径。开关在设置卡「默认搜索模式」下方，出厂 **关**——不改变升级前的行为，也符合「记忆用户输入需要在设置里被同意」。关闭时不写任何快照，并清掉已有快照（否则「关→开」会恢复一个关之前的旧现场）。

@@ -435,6 +435,14 @@ export function SwitchPanel({
     total: number
     count: number
     deepSync?: 'idle' | 'drs-syncing' | 'rebuilding' | 'done' | 'failed'
+    /**
+     * 深度同步失败的具体原因（issue #4）。
+     *
+     * 宿主半边一直把它存在 `deepSync.error` 里，但面板此前只画「同步失败」四个字 ——
+     * 用户看得见失败、看不见为什么，于是只能报「装了这个插件还是失败」。
+     * 这行字是排查的唯一入口，必须显示。
+     */
+    deepSyncError?: string
   }>({ available: null, rebuilding: false, done: 0, total: 0, count: 0 })
   const inputRef = useRef<HTMLInputElement | null>(null)
   const listRef = useRef<HTMLUListElement | null>(null)
@@ -514,6 +522,8 @@ export function SwitchPanel({
           total: status.rebuild?.total ?? 0,
           count: status.sync?.indexed ?? 0,
           deepSync: deepState,
+          // 只在 failed 时取；其余状态宿主不写 error，带过去会是上一轮的残值。
+          deepSyncError: deepState === 'failed' ? status.deepSync?.error : undefined,
         })
         // 深度同步（DRS 慢扫 → 本地重建）也在跑：继续轮询到它落定。
         if (rebuilding || deepState === 'drs-syncing' || deepState === 'rebuilding') timer = window.setTimeout(probe, 1500)
@@ -896,6 +906,24 @@ export function SwitchPanel({
           onClick: startIndexBuild,
         }, translate(t, 'panel.buildIndex')),
       ]))
+    } else if (searchStatus.deepSync === 'failed' && searchStatus.deepSyncError !== undefined) {
+      /**
+       * 深度同步失败的可见原因（issue #4）。
+       *
+       * 放在列表区而不是只挂在按钮 title 上：`title` 悬停才出现，而用户报 issue 时
+       * 能贴出来的只有屏幕上看得见的字。宿主半边抓到的 `deepSync.error` 原样展示，
+       * 因为它通常就是 `HTTP 404` / `fetch failed` 这类可直接对照原因的短语。
+       */
+      children.push(createElement('div', { key: 'deepsync-failed', className: 'dsws_error' }, [
+        createElement('div', { key: 'msg' }, translate(t, 'panel.deepSync.failedReason', { error: searchStatus.deepSyncError })),
+        createElement('button', {
+          key: 'retry',
+          type: 'button',
+          className: 'dsws_actBtn',
+          style: { marginTop: '6px' },
+          onClick: startDeepSync,
+        }, translate(t, 'panel.deepSync.retry')),
+      ]))
     } else if (activeContent.status === 'loading') {
       children.push(createElement('div', { key: 'loading', className: 'dsws_status' }, translate(t, 'panel.loadingContent')))
     } else if (activeContent.status === 'error') {
@@ -1073,7 +1101,14 @@ export function SwitchPanel({
             className: 'dsws_actBtn',
             style: { height: '20px', padding: '0 8px', fontSize: '11px', lineHeight: '18px' },
             disabled: searchStatus.deepSync === 'drs-syncing' || searchStatus.deepSync === 'rebuilding',
-            title: translate(t, 'panel.deepSync.hint'),
+            /**
+             * 失败时 title 换成具体原因（issue #4）：宿主半边抓到的错误一直存在
+             * `deepSync.error` 里，但面板此前只画「同步失败」，用户拿不到任何可排查
+             * 的线索。成功/进行中的 title 仍是操作提示。
+             */
+            title: searchStatus.deepSync === 'failed' && searchStatus.deepSyncError !== undefined
+              ? searchStatus.deepSyncError
+              : translate(t, 'panel.deepSync.hint'),
             onClick: startDeepSync,
           }, searchStatus.deepSync === 'drs-syncing'
             ? translate(t, 'panel.deepSync.drs')

@@ -433,7 +433,15 @@ async function contentSearch(
     // 客户端按 code 取本地化文案（旧客户端仍读 error 原文）。
     const failure = classifyDrsFailure(err)
     runtime.log(`[switch-search] content-search failed: ${failure.code} ${failure.detail}`)
-    return { ok: false, code: failure.code, error: messageForDrsFailure(failure.code) }
+    /**
+     * `detail` 必须随 error 一起回传（issue #4）。
+     *
+     * 它此前只进日志：界面拿到的是一个没有细节的档位文案，用户看到「投影库尚未
+     * 建立」却不知道是库文件不存在（detail 带完整路径）、打不开（权限）、缺
+     * meta.schema_version（首轮同步没跑完），还是零会话行。日志在宿主进程里，
+     * 报 issue 的人拿不到 —— 而这几条 detail 恰恰是分诊的唯一依据。
+     */
+    return { ok: false, code: failure.code, error: messageForDrsFailure(failure.code, failure.detail) }
   }
 }
 

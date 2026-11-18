@@ -57,6 +57,11 @@ test('every dictionary carries the transport + failure-code keys', () => {
     // 0.7.21「保留搜索历史」开关：设置卡两键 + 面板清除按钮两键，九语不得只靠 zh 回退。
     'card.rememberQuery', 'card.rememberQuery.desc',
     'panel.history.clear', 'panel.history.clear.hint',
+    // issue #4：深度同步失败的可见原因。失败原因一直是排查的唯一入口，
+    // 九语必须齐 —— 少一种，那种语言的用户就只能看到 zh 回退的报错原文。
+    'panel.deepSync', 'panel.deepSync.hint', 'panel.deepSync.drs',
+    'panel.deepSync.rebuild', 'panel.deepSync.done', 'panel.deepSync.failed',
+    'panel.deepSync.failedReason', 'panel.deepSync.retry',
   ]
   const missing = []
   const placeholderProblems = []
