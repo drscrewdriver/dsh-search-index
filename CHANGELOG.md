@@ -38,6 +38,8 @@ issue [#4](https://github.com/drscrewdriver/dsh-search-index/issues/4) 的第二
 
 新增 21 条（`tests/doctor.test.mjs`）：台账 6 条（重复合并 / 不同 detail 分开 / 容量淘汰 / 倒序 / 跨 detail 汇总 / clear）+ 编排 11 条（各档位的命令形态、平台差异、错动作拦截、ok 不带 why）+ 报告 4 条（结论前置量化、fail 带命令与解释、台账段、无台账不出空标题）。全量 106 passed / lint 干净 / typecheck 干净。
 
+- i18n: add Portuguese (pt-BR) locale — runtime dictionary, package metadata and README/INSTALL/CHANGELOG mirrors.
+
 ## 0.7.23
 
 > 0.7.22 因 npm registry 的 staged-publish 元数据残留（`409 Cannot publish over previously staged version`，同 npm/cli#9889）无法落地，改用 0.7.23 发布。**代码与 0.7.22 完全一致**，本条只为让版本号能落地。

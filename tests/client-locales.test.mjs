@@ -42,7 +42,7 @@ test('no dictionary value is empty', () => {
 })
 
 // 0.7.8 起内容检索通道与六档诊断文案，0.7.11 加 drs-not-activated 档与未激活提示：
-// 九语字典必须全部带键，不得只靠 zh 回退。
+// 十语字典必须全部带键，不得只靠 zh 回退。
 test('every dictionary carries the transport + failure-code keys', () => {
   const keys = [
     'card.contentTransport', 'card.contentTransport.desc',
@@ -54,11 +54,11 @@ test('every dictionary carries the transport + failure-code keys', () => {
     'panel.contentErr.browser-access-denied', 'panel.contentErr.drs-http-unreachable', 'panel.contentErr.drs-http-error',
     'panel.contentErr.drs-not-activated',
     'panel.contentErr.drs-missing', 'panel.contentErr.drs-empty', 'panel.contentErr.drs-schema-mismatch',
-    // 0.7.21「保留搜索历史」开关：设置卡两键 + 面板清除按钮两键，九语不得只靠 zh 回退。
+    // 0.7.21「保留搜索历史」开关：设置卡两键 + 面板清除按钮两键，十语不得只靠 zh 回退。
     'card.rememberQuery', 'card.rememberQuery.desc',
     'panel.history.clear', 'panel.history.clear.hint',
     // issue #4：深度同步失败的可见原因。失败原因一直是排查的唯一入口，
-    // 九语必须齐 —— 少一种，那种语言的用户就只能看到 zh 回退的报错原文。
+    // 十语必须齐 —— 少一种，那种语言的用户就只能看到 zh 回退的报错原文。
     'panel.deepSync', 'panel.deepSync.hint', 'panel.deepSync.drs',
     'panel.deepSync.rebuild', 'panel.deepSync.done', 'panel.deepSync.failed',
     'panel.deepSync.failedReason', 'panel.deepSync.retry',

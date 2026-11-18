@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Índice de busca",
+    "description": "Busca de sessões na barra lateral com alternância entre título e conteúdo. A busca de conteúdo usa o índice próprio do plugin e nunca depende do índice de texto completo oficial do DSH."
+  }
+}

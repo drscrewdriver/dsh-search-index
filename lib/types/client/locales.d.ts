@@ -1,4 +1,4 @@
-/** `switch-search` client dictionaries (zh / en / ja / ko / fr / de / it / ru / es), thinking-levels pattern. */
+/** `switch-search` client dictionaries (zh / en / ja / ko / fr / de / it / ru / es / pt), thinking-levels pattern. */
 /** Dictionary namespace owned by this plugin (the host settings namespace). */
 export declare const NS = "switch-search";
 /** Simplified Chinese dictionary (the key-set source of truth). */
@@ -202,6 +202,8 @@ export declare const it: Partial<Dict>;
 export declare const ru: Partial<Dict>;
 /** Spanish dictionary. */
 export declare const es: Partial<Dict>;
+/** Brazilian Portuguese dictionary (full zh key set). */
+export declare const pt: Partial<Dict>;
 /** All shipped dictionaries by locale id. */
 export declare const dictionaries: Record<string, Record<string, string>>;
 /** Translate with {param} interpolation; falls back to zh, then the key itself. */

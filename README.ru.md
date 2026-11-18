@@ -5,7 +5,7 @@
   <strong>Поиск по сессиям с собственным индексом для боковой панели DeepSeek Harness — переключение между заголовком и содержимым в один клик, с фильтрами по пользователю / ответу / инструменту</strong>
 </p>
 <p align="center">
-  <a href="README.md">简体中文</a> · <a href="README.en.md">English</a> · <a href="README.fr.md">Français</a> · <a href="README.de.md">Deutsch</a> · <a href="README.it.md">Italiano</a> · <strong>Русский</strong> · <a href="README.es.md">Español</a>
+  <a href="README.md">简体中文</a> · <a href="README.en.md">English</a> · <a href="README.fr.md">Français</a> · <a href="README.de.md">Deutsch</a> · <a href="README.it.md">Italiano</a> · <strong>Русский</strong> · <a href="README.es.md">Español</a> · <a href="README.pt.md">Português</a>
 </p>
 <p align="center">
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-263146?style=flat-square"></a>

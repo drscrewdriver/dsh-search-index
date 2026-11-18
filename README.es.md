@@ -5,7 +5,7 @@
   <strong>Una búsqueda de sesiones con índice propio para la barra lateral de DeepSeek Harness — conmutación en un clic entre título y contenido, con filtros por usuario / respuesta / herramienta</strong>
 </p>
 <p align="center">
-  <a href="README.md">简体中文</a> · <a href="README.en.md">English</a> · <a href="README.fr.md">Français</a> · <a href="README.de.md">Deutsch</a> · <a href="README.it.md">Italiano</a> · <a href="README.ru.md">Русский</a> · <strong>Español</strong>
+  <a href="README.md">简体中文</a> · <a href="README.en.md">English</a> · <a href="README.fr.md">Français</a> · <a href="README.de.md">Deutsch</a> · <a href="README.it.md">Italiano</a> · <a href="README.ru.md">Русский</a> · <strong>Español</strong> · <a href="README.pt.md">Português</a>
 </p>
 <p align="center">
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-263146?style=flat-square"></a>

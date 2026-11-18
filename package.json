@@ -1,6 +1,6 @@
 {
   "name": "dsh-search-index",
-  "version": "0.7.24",
+  "version": "0.7.25",
   "publishConfig": {
     "registry": "https://registry.npmjs.org",
     "tag": "latest"
@@ -40,11 +40,13 @@
     "README.it.md",
     "README.ru.md",
     "README.es.md",
+    "README.pt.md",
     "CHANGELOG.de.md",
     "CHANGELOG.fr.md",
     "CHANGELOG.it.md",
     "CHANGELOG.ru.md",
     "CHANGELOG.es.md",
+    "CHANGELOG.pt.md",
     "locale",
     "CHANGELOG.md",
     "LICENSE"

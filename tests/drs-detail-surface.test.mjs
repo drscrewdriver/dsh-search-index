@@ -12,7 +12,7 @@
  * 1. `contentSearch` 的 catch 把 `failure.detail` 传给 `messageForDrsFailure`；
  * 2. `drs-empty` / `drs-not-activated` / `drs-missing` 三档的文案带 detail 后缀
  *    （此前这三档**完全吞掉** detail，而它们正是最常见的一档）；
- * 3. 客户端九语文案都带 `{error}` 占位，否则 translate 无处可插；
+ * 3. 客户端十语文案都带 `{error}` 占位，否则 translate 无处可插；
  * 4. `drs-empty` 的四种成因各自的 detail 都真的被构造出来（不是空串）。
  *
  * Usage: node --import tsx tests/drs-detail-surface.test.mjs
@@ -61,7 +61,7 @@ test('issue #4：drs-empty 的四种成因都真的构造了 detail', () => {
   }
 })
 
-test('issue #4：客户端九语文案都带 {error} 占位', () => {
+test('issue #4：客户端十语文案都带 {error} 占位', () => {
   const LOCALES = readFileSync(join(ROOT, 'src', 'client', 'locales.ts'), 'utf8')
   const codes = [
     'browser-access-denied', 'drs-http-unreachable', 'drs-http-error',
@@ -79,7 +79,7 @@ test('issue #4：客户端九语文案都带 {error} 占位', () => {
     seen += 1
     if (!m[2].includes('{error}')) missing.push(`${m[1]}: ${m[2].slice(0, 40)}`)
   }
-  assert.equal(seen, codes.length * 9, `应扫到 ${codes.length * 9} 条 contentErr 文案，实际 ${seen}`)
+  assert.equal(seen, codes.length * 10, `应扫到 ${codes.length * 10} 条 contentErr 文案，实际 ${seen}`)
   assert.deepEqual(missing, [], '这些 contentErr 文案缺 {error} 占位，detail 会无处可插')
 })
 
