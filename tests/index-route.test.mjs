@@ -199,7 +199,10 @@ test('contentTransport=http：仍复现旧行为（code=browser-access-denied，
       assert.equal(res.body.ok, false)
       assert.equal(res.body.code, 'browser-access-denied')
       assert.equal(res.body.items, undefined)
-      assert.doesNotMatch(res.body.error, /安装|reinstall/u, '403 不得被说成"没装依赖"')
+      // issue #5：宿主不再发 error 散文，档位语义由 code 承载；403 归类守卫
+      // 迁移到 detail —— 原始细节应是 403 本身，不得被说成"没装依赖"。
+      assert.doesNotMatch(res.body.detail, /安装|reinstall/u, '403 不得被说成"没装依赖"')
+      assert.match(res.body.detail, /HTTP 403/, 'detail 应带原始 403 细节（issue #4 分诊依据）')
     } finally {
       fetchStub.restore()
       host.close()

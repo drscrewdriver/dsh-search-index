@@ -104,30 +104,9 @@ export function classifyDrsFailure(err: unknown): DrsUnavailableError {
   return new DrsUnavailableError('drs-http-unreachable', detail)
 }
 
-/** 服务端兜底文案（与客户端 `card.drsReason.*` / `panel.contentErr.*` 同义）。 */
-export function messageForDrsFailure(code: DrsFailureCode, detail?: string): string {
-  const suffix = detail === undefined || detail === '' ? '' : `（${detail}）`
-  switch (code) {
-    case 'browser-access-denied':
-      return `宿主禁止非渲染进程访问本地 HTTP，已改用进程内只读通道${suffix}`
-    case 'drs-http-unreachable':
-      return `DRS 路由不可达${suffix}`
-    case 'drs-http-error':
-      return `DRS 返回错误${suffix}`
-    case 'drs-not-activated':
-      // detail 是路由 404 的原始响应；带上它才能区分「插件没装」与「装了没激活」。
-      return `dsh-reference-session-collector 未作为插件激活（路由 404）：执行 dsh plugin --profile <name> add dsh-reference-session-collector 后重启宿主；内容检索已改走进程内只读通道，但投影库不会自动更新${suffix}`
-    case 'drs-missing':
-      return `内容检索依赖未随包安装（dsh-reference-session-collector），请重装本插件；依赖会自动带上${suffix}`
-    case 'drs-empty':
-      /**
-       * detail 是**分诊关键**：这一档有四种成因（库文件不存在 / 打不开 /
-       * 缺 meta.schema_version / 零会话行），其中「库不存在」的 detail 直接给出
-       * 完整路径。此前这里吞掉 detail，界面只剩「投影库尚未建立」一句 —— 用户
-       * 无法判断是路径不对、权限不够，还是首轮同步没跑完（issue #4）。
-       */
-      return `投影库尚未建立：请重启宿主等待首轮同步完成（或确认 dsh-reference-session-collector 已启用）${suffix}`
-    case 'drs-schema-mismatch':
-      return `投影库版本与插件预期不一致${suffix}；请升级 dsh-reference-session-collector（本插件不会清库）`
-  }
-}
+/**
+ * 失败文案按码由 client 字典本地化（`card.drsReason.*` / `panel.contentErr.*`，
+ * 10 locale 全覆盖）。宿主曾在此拼 7 档中文散文随 `error` 下发（issue #5），
+ * 非 zh locale 的面板会混排输出——现已整体删除，宿主只出 `{ code, detail }`。
+ */
+

@@ -424,7 +424,7 @@ export function SwitchPanel({
   }
   const [sessions, setSessions] = useState<HostSessionItem[] | null>(null)
   const [sessionsError, setSessionsError] = useState<string | null>(null)
-  const [content, setContent] = useState<{ query: string; status: 'idle' | 'loading' | 'ready' | 'error'; items: HostContentHit[]; error?: string; code?: string }>({
+  const [content, setContent] = useState<{ query: string; status: 'idle' | 'loading' | 'ready' | 'error'; items: HostContentHit[]; error?: string; code?: string; detail?: string }>({
     query: '',
     status: 'idle',
     items: [],
@@ -658,6 +658,7 @@ export function SwitchPanel({
           items: res.ok ? sortHits(res.items, sortBy) : [],
           error: res.ok ? undefined : (res.error ?? translate(t, 'panel.searchFailed')),
           code: res.ok ? undefined : res.code,
+          detail: res.ok ? undefined : res.detail,
         })
       })
     }, 250)
@@ -963,10 +964,11 @@ export function SwitchPanel({
     } else if (activeContent.status === 'loading') {
       children.push(createElement('div', { key: 'loading', className: 'dsws_status' }, translate(t, 'panel.loadingContent')))
     } else if (activeContent.status === 'error') {
-      // 有档位码时用本地化文案；旧宿主无 code 则回退宿主原文。
+      // 有档位码时用本地化文案；`{error}` 槽的宿主侧数据源是原始 detail（issue
+      // #5：宿主不再拼散文）。旧宿主无 code 则回退宿主原文。
       const text = activeContent.code === undefined
         ? translate(t, 'panel.contentError', { error: activeContent.error ?? translate(t, 'panel.unknownError') })
-        : translate(t, `panel.contentErr.${activeContent.code}` as LocaleKey, { error: activeContent.error ?? '' })
+        : translate(t, `panel.contentErr.${activeContent.code}` as LocaleKey, { error: activeContent.detail ?? '' })
       children.push(createElement('div', { key: 'error', className: 'dsws_error' }, text))
     } else if (activeContent.items.length === 0) {
       children.push(createElement('div', { key: 'empty', className: 'dsws_empty' }, normalized === '' ? translate(t, 'panel.contentHint') : translate(t, 'panel.noContent')))

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.28
+
+**drs 失败面错误码化收口（issue #5）：宿主停拼散文，失败响应 `{ ok:false, code, detail }`，非 zh locale 面板不再混排。**
+
+`content-search` 失败时宿主曾在 `error` 字段里拼 7 档中文散文（`messageForDrsFailure`），非 zh locale 的面板拿到的是英文模板（`panel.contentErr.*` 按码本地化，PR #3）内嵌中文散文的混排输出。本版删除该函数与 `error` 字段：
+
+- **宿主契约**：失败响应只出 `{ ok:false, code, detail }`——`code` 是既有的 7 档档位（browser-access-denied / drs-http-unreachable / drs-http-error / drs-not-activated / drs-missing / drs-empty / drs-schema-mismatch），`detail` 是原始分诊细节（此前 `（…）` 括号后缀的内容），不再有任何宿主侧加工。
+- **client 接线**：`{error}` 插槽的数据源从宿主散文换成宿主 `detail`；10 locale × 7 码共 70 条 `panel.contentErr.*` 模板**零改动**（占位符不变）。卡片档位说明（`card.drsReason.*`）本就不消费细节，不受影响。
+- **⚠ 字段变化（对外可见）**：直接调 `content-search` 端点的消费方注意——失败分支的 `error` 字段（中文散文）已移除，改读 `detail`（原始细节）。诊断台账（issue #4）记录形状 `{ code, detail, op, at }` 不变。
+
 ## 0.7.27
 
 **语料补齐首批（search-index-locale-live-audit 计划 task_9，所有者拍板）：7 语 ×20 个高频可见键，英文中间态从核心交互面退场。**

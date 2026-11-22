@@ -42,7 +42,7 @@ import {
 import { exportSnapshot, parseSnapshot } from './host/index/snapshot.ts'
 import { DrsCorpusSource, resolveDrsBaseUrl } from './host/index/drs-source.ts'
 import { createDrsLocalArm, resolveDrsDir, type DrsLocalArm } from './host/index/drs-local.ts'
-import { classifyDrsFailure, messageForDrsFailure } from './host/index/drs-contract.ts'
+import { classifyDrsFailure } from './host/index/drs-contract.ts'
 import { FailureLedger, renderDoctorReport, diagnose, type DoctorInput } from './host/index/doctor.ts'
 import {
   bridgeOverlay,
@@ -389,7 +389,7 @@ async function contentSearch(
   runtime: SwitchRuntime,
   payload: unknown,
   requestHost = '',
-): Promise<{ ok: boolean; items?: unknown[]; error?: string; code?: string }> {
+): Promise<{ ok: boolean; items?: unknown[]; error?: string; code?: string; detail?: string }> {
   const record = payload as { query?: unknown; limit?: unknown; types?: unknown; sortBy?: unknown; archived?: unknown; expand?: unknown; from?: unknown; to?: unknown } | null
   const query = typeof record?.query === 'string' ? record.query.trim() : ''
   if (query === '') return { ok: false, error: '缺少 query' }
@@ -440,14 +440,17 @@ async function contentSearch(
      */
     runtime.ledger.record({ code: failure.code, detail: failure.detail, op: 'content-search', at: Date.now() })
     /**
-     * `detail` 必须随 error 一起回传（issue #4）。
+     * `detail` 必须随失败响应一起回传（issue #4、#5）。
      *
      * 它此前只进日志：界面拿到的是一个没有细节的档位文案，用户看到「投影库尚未
      * 建立」却不知道是库文件不存在（detail 带完整路径）、打不开（权限）、缺
      * meta.schema_version（首轮同步没跑完），还是零会话行。日志在宿主进程里，
      * 报 issue 的人拿不到 —— 而这几条 detail 恰恰是分诊的唯一依据。
+     *
+     * issue #5：宿主只出错误码 + 原始 detail，本地化文案由 client 按码查字典
+     * （`panel.contentErr.*`），宿主不再拼任何语言的散文。
      */
-    return { ok: false, code: failure.code, error: messageForDrsFailure(failure.code, failure.detail) }
+    return { ok: false, code: failure.code, detail: failure.detail }
   }
 }
 

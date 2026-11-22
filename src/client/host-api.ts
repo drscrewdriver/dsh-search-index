@@ -8,8 +8,10 @@
 const FETCH_TIMEOUT = 10_000
 
 /** POST a JSON body to a fenced switch-search API method (items shape).
- *  `code` 是 0.7.8 起的失败档位（旧宿主无此字段）；客户端优先按它取本地化文案。 */
-export function callHost<T>(method: string, body: unknown): Promise<{ ok: boolean; items: T[]; error?: string; code?: string }> {
+ *  `code` 是 0.7.8 起的失败档位（旧宿主无此字段）；客户端优先按它取本地化文案。
+ *  `detail` 是 0.7.28 起的原始细节（issue #5）：宿主不再拼散文，`error` 只剩
+ *  通用兜底，drs 档位的 `{error}` 插槽数据源由 `detail` 提供。 */
+export function callHost<T>(method: string, body: unknown): Promise<{ ok: boolean; items: T[]; error?: string; code?: string; detail?: string }> {
   const controller = typeof AbortController === 'undefined' ? undefined : new AbortController()
   const timer = controller !== undefined && typeof setTimeout === 'function'
     ? setTimeout(() => { controller.abort() }, FETCH_TIMEOUT)
@@ -22,7 +24,7 @@ export function callHost<T>(method: string, body: unknown): Promise<{ ok: boolea
   })
     .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
     .then((data: unknown) => {
-      const record = data as { ok?: boolean; items?: T[]; error?: string; code?: string }
+      const record = data as { ok?: boolean; items?: T[]; error?: string; code?: string; detail?: string }
       if (record && record.ok === true && Array.isArray(record.items)) {
         return { ok: true, items: record.items }
       }
@@ -31,6 +33,7 @@ export function callHost<T>(method: string, body: unknown): Promise<{ ok: boolea
         items: [],
         error: record?.error ?? '请求失败',
         ...(typeof record?.code === 'string' ? { code: record.code } : {}),
+        ...(typeof record?.detail === 'string' ? { detail: record.detail } : {}),
       }
     })
     .catch((err: unknown) => ({

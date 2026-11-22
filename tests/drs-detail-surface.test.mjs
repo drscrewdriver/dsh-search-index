@@ -1,19 +1,21 @@
 #!/usr/bin/env node
 /**
- * 内容搜索失败时，`detail` 必须随 error 一起回到界面（issue #4）。
+ * 内容搜索失败的 detail 表面（issue #4 建立、issue #5 收口）。
  *
- * 缺陷形状：宿主半边抓到了可诊断的原始细节（`未找到投影库：<完整路径>`、
- * `投影库无法打开：<原因>`、`缺少 meta.schema_version`、`尚无会话行`），
- * 但它**只进了宿主日志**：`messageForDrsFailure(failure.code)` 没传 detail，
- * 客户端拿到的是一句没有细节的档位文案。日志在宿主进程里，报 issue 的人拿不到，
- * 于是只能写「装了这个插件还是失败」。
+ * issue #4：detail 必须随失败一起回到界面（此前只进宿主日志）。
+ * issue #5：宿主不再拼任何语言的散文——`messageForDrsFailure`（7 档中文）整体
+ * 删除，失败响应只出 `{ code, detail }`；本地化文案由 client 按 code 查字典
+ * （`panel.contentErr.*`，10 locale），`{error}` 插槽的数据源换成宿主原始
+ * `detail`。非 zh locale 不再混排输出。
  *
- * 断言四件事：
- * 1. `contentSearch` 的 catch 把 `failure.detail` 传给 `messageForDrsFailure`；
- * 2. `drs-empty` / `drs-not-activated` / `drs-missing` 三档的文案带 detail 后缀
- *    （此前这三档**完全吞掉** detail，而它们正是最常见的一档）；
+ * 断言五件事：
+ * 1. `contentSearch` 的失败响应只含 `code: failure.code, detail: failure.detail`，
+ *    且宿主全文不再引用 `messageForDrsFailure`；
+ * 2. 契约模块已无散文函数；`classifyDrsFailure` 的 detail 原样透传
+ *    （无 `（…）` 后缀加工——格式化是 client 的事）；
  * 3. 客户端十语文案都带 `{error}` 占位，否则 translate 无处可插；
- * 4. `drs-empty` 的四种成因各自的 detail 都真的被构造出来（不是空串）。
+ * 4. `drs-empty` 的四种成因各自的 detail 都真的被构造出来（不是空串）；
+ * 5. client 把宿主 `detail` 接到 `{error}` 槽（host-api 透传 + panel 数据源）。
  *
  * Usage: node --import tsx tests/drs-detail-surface.test.mjs
  */
@@ -27,25 +29,34 @@ const ROOT = join(fileURLToPath(import.meta.url), '..', '..')
 const HOST = readFileSync(join(ROOT, 'src', 'index.ts'), 'utf8')
 const LOCAL = readFileSync(join(ROOT, 'src', 'host', 'index', 'drs-local.ts'), 'utf8')
 
-const { messageForDrsFailure } = await import('../src/host/index/drs-contract.ts')
+const { classifyDrsFailure } = await import('../src/host/index/drs-contract.ts')
 
-test('issue #4：contentSearch 的 catch 把 detail 传下去', () => {
+test('issue #5：contentSearch 失败响应只出 code + detail，宿主无散文引用', () => {
   assert.match(
     HOST,
-    /messageForDrsFailure\(failure\.code,\s*failure\.detail\)/,
-    '必须传 detail —— 不传就等于把唯一的分诊依据留在宿主日志里',
+    /return \{ ok: false, code: failure\.code, detail: failure\.detail \}/,
+    '失败响应必须是 { ok, code, detail } —— 散文字段 error 已随 issue #5 删除',
+  )
+  assert.ok(
+    !HOST.includes('messageForDrsFailure'),
+    '宿主不得再引用 messageForDrsFailure —— 非 zh locale 的面板曾混排输出（issue #5）',
   )
 })
 
-test('issue #4：drs-empty / drs-not-activated / drs-missing 三档都带 detail 后缀', () => {
-  // 这三档此前把 detail 整段吞掉。逐个断言 detail 会出现在文案里。
-  for (const code of ['drs-empty', 'drs-not-activated', 'drs-missing']) {
-    const msg = messageForDrsFailure(code, 'PROBE-DETAIL-XYZ')
-    assert.ok(
-      msg.includes('PROBE-DETAIL-XYZ'),
-      `${code} 的文案必须包含 detail（实际：${msg}）`,
-    )
-  }
+test('issue #5：契约模块已无散文函数，classifyDrsFailure 的 detail 原样透传', () => {
+  const CONTRACT = readFileSync(join(ROOT, 'src', 'host', 'index', 'drs-contract.ts'), 'utf8')
+  assert.ok(
+    !CONTRACT.includes('messageForDrsFailure'),
+    '契约模块不得再有散文函数（issue #5 删除）',
+  )
+  const failure = classifyDrsFailure(new Error('DRS ?op=probe → HTTP 404 XYZ-DETAIL'))
+  assert.equal(failure.code, 'drs-not-activated')
+  assert.equal(
+    failure.detail,
+    'DRS ?op=probe → HTTP 404 XYZ-DETAIL',
+    `detail 必须原样透传，不得被宿主加工（实际：${failure.detail}）`,
+  )
+  assert.ok(!failure.detail.includes('（'), '宿主侧不得出现括号后缀加工')
 })
 
 test('issue #4：drs-empty 的四种成因都真的构造了 detail', () => {
@@ -83,8 +94,17 @@ test('issue #4：客户端十语文案都带 {error} 占位', () => {
   assert.deepEqual(missing, [], '这些 contentErr 文案缺 {error} 占位，detail 会无处可插')
 })
 
-test('issue #4：detail 为空时不留下空的括号', () => {
-  const msg = messageForDrsFailure('drs-empty')
-  assert.ok(!msg.includes('（）'), '无 detail 时不得出现空括号')
-  assert.ok(!msg.includes('()'), '无 detail 时不得出现空括号')
+test('issue #5：client 把宿主 detail 接到 {error} 槽', () => {
+  const HOST_API = readFileSync(join(ROOT, 'src', 'client', 'host-api.ts'), 'utf8')
+  assert.match(
+    HOST_API,
+    /typeof record\?\.detail === 'string' \? \{ detail: record\.detail \} : \{\}/,
+    'callHost 失败分支必须透传宿主 detail',
+  )
+  const PANEL = readFileSync(join(ROOT, 'src', 'client', 'panel.tsx'), 'utf8')
+  assert.match(
+    PANEL,
+    /panel\.contentErr\.\$\{activeContent\.code\}` as LocaleKey, \{ error: activeContent\.detail \?\? '' \}/,
+    '`{error}` 槽的数据源必须是宿主原始 detail（宿主散文已随 issue #5 删除）',
+  )
 })
