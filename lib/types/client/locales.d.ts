@@ -183,6 +183,17 @@ export declare const zh: {
     readonly 'hud.fail': "回溯未命中目标";
     readonly 'hud.retry': "再试一次（追加翻页预算）";
     readonly 'hud.close': "关闭";
+    readonly 'panel.sessionsError.bare': "读取会话列表失败";
+    readonly 'panel.searchFailed': "搜索失败";
+    readonly 'panel.unknownError': "未知错误";
+    readonly 'panel.indexUnreachable': "索引状态不可达：Host 半可能是旧进程。请完全重启 dsh web（浏览器刷新不重载 Host）后重试。";
+    readonly 'panel.locate.pending': "定位巡逻中";
+    readonly 'panel.locate.ok': "已跳转到命中行";
+    readonly 'panel.locate.miss': "未能定位（行未渲染/文本被拆分/超时）";
+    readonly 'card.indexStatus.requestFailed': "index-status 请求失败";
+    readonly 'card.indexStatus.readFailed': "状态读取失败";
+    readonly 'card.indexStatus.readFailedHint': "索引状态读取失败：{error}。请完全重启 dsh web（浏览器刷新不会重载 Host 半）后重试。";
+    readonly 'card.indexStatus.retry': "重试状态";
 };
 export type LocaleKey = keyof typeof zh;
 export type Dict = Record<LocaleKey, string>;
@@ -206,6 +217,14 @@ export declare const es: Partial<Dict>;
 export declare const pt: Partial<Dict>;
 /** All shipped dictionaries by locale id. */
 export declare const dictionaries: Record<string, Record<string, string>>;
+/** A translate function bound to one namespace, as returned by `locale.bind(ns)`. */
+export type TranslateFn = (key: LocaleKey, params?: Record<string, unknown>) => string;
+/**
+ * Bind the plugin's own locale namespace as the fallback seat.
+ * Slot components are not guaranteed to receive `t` in their props, so the
+ * plugin must be able to translate without one.
+ */
+export declare function bindDefaultSeat(seat: TranslateFn | undefined): void;
 /** Translate with {param} interpolation; falls back to zh, then the key itself. */
-export declare function translate(locale: ((key: LocaleKey, params?: Record<string, unknown>) => string) | undefined, key: LocaleKey, params?: Record<string, unknown>): string;
+export declare function translate(locale: TranslateFn | undefined, key: LocaleKey, params?: Record<string, unknown>): string;
 //# sourceMappingURL=locales.d.ts.map

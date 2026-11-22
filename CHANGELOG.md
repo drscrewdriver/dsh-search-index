@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.7.26
+
+**面板本地化接线（PR [#3](https://github.com/drscrewdriver/dsh-search-index/pull/3) 合并 + follow-up 实现）：宿主 locale 不再被面板裸中文串旁路。**
+
+astyd256 在 PR #3 里定位并修复了根因：slot 组件不保证从 props 拿到 `t`，`translate()` 此时任 fallback 直接落到 zh 字典——宿主切 en/ru 后面板仍整面中文。修复 = `apply()` 时 `locale.bind(NS)` 绑定插件自己的命名空间为默认席位（`bindDefaultSeat`），`translate()` 回退链变为 **props `t` → defaultSeat → zh 字典 → key**（`typeof locale.bind === 'function'` 守卫降级，旧宿主安全；props 传入的 `t` 仍优先）。
+
+Follow-up（顺着同一思路收口面板全部可见中文）：
+
+- **纯接线 2 处**：`panel.tsx` 的 `'读取会话列表失败'` / `'搜索失败'` 绕过了字典里已有的 `panel.sessionsError` / `panel.contentError` ——新增 bare 变体键（fallback 场景无 error 可填，复用带参键会渲染悬挂冒号）。
+- **新键 11 个 × 10 语**：panel 的 `unknownError` / `indexUnreachable`（长句）/ `locate.pending·ok·miss`（定位 HUD 三态）+ card 的 `indexStatus.requestFailed / readFailed / readFailedHint（{error}） / retry`。zh 照抄原串为 canonical（`LocaleKey` 自动入类型），其余 9 语同步补齐。
+- **契约测试**：`client-locales.test.mjs` 新增 2 用例——11 键 zh 存在 + en 占位符奇偶；panel.tsx / card.tsx **排除注释后无裸 CJK 运行时串**（两文件注释密集，剥离规则限行首注释形态）。
+
+门禁：`tsc --noEmit` 0 error；`npm test` 全链 fail 0（含新增 2 用例）；`npm run build` 后 lib/client.js 含 defaultSeat 机制与新键。
+
 ## 0.7.24
 
 issue [#4](https://github.com/drscrewdriver/dsh-search-index/issues/4) 的第二段：0.7.22 解决了「这一次的失败原因能显示」，这版解决「连续踩坑时怎么把现场带走」。

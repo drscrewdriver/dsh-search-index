@@ -116,3 +116,38 @@ test('a live locale callback wins over the built-in dictionaries', () => {
   assert.equal(translate(() => '', 'card.title'), zh['card.title'])
   assert.equal(translate((key) => key, 'card.title'), zh['card.title'])
 })
+
+test('the default-seat keys exist in zh with their {error} placeholders (PR #3 wiring)', () => {
+  // The PR #3 mechanism (bindDefaultSeat) makes these keys reachable without a
+  // props `t`; they must exist in the canonical dictionary, and the one
+  // templated hint must keep its {error} placeholder in en as well.
+  for (const key of [
+    'panel.sessionsError.bare', 'panel.searchFailed', 'panel.unknownError',
+    'panel.indexUnreachable', 'panel.locate.pending', 'panel.locate.ok', 'panel.locate.miss',
+    'card.indexStatus.requestFailed', 'card.indexStatus.readFailed',
+    'card.indexStatus.readFailedHint', 'card.indexStatus.retry',
+  ]) {
+    assert.ok(typeof zh[key] === 'string' && zh[key].length > 0, `zh is missing ${key}`)
+  }
+  assert.ok(en['card.indexStatus.readFailedHint'].includes('{error}'), 'en readFailedHint lost its {error} placeholder')
+  assert.equal(placeholders(zh['card.indexStatus.readFailedHint']).join(','), placeholders(en['card.indexStatus.readFailedHint']).join(','))
+})
+
+test('panel.tsx and card.tsx ship no bare CJK runtime strings', async () => {
+  // The 2026-11-22 wiring pass replaced every bare Chinese runtime string in
+  // the two client components with `translate(t, …)` calls (PR #3 follow-up).
+  // Comments are exempt — both files are documentation-dense.
+  const { readFileSync } = await import('node:fs')
+  const { fileURLToPath } = await import('node:url')
+  const CJK = /[\u4e00-\u9fff]/
+  const stripComments = (src) => src
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n')
+    .filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line))
+    .join('\n')
+  for (const file of ['panel.tsx', 'card.tsx']) {
+    const src = stripComments(readFileSync(fileURLToPath(new URL(`../src/client/${file}`, import.meta.url)), 'utf8'))
+    const hits = src.split('\n').map((line, i) => (CJK.test(line) ? `${file}:${i + 1} ${line.trim().slice(0, 80)}` : null)).filter(Boolean)
+    assert.deepEqual(hits, [], `${file} still ships bare CJK runtime strings:\n${hits.join('\n')}`)
+  }
+})

@@ -1,6 +1,6 @@
 {
   "name": "dsh-search-index",
-  "version": "0.7.25",
+  "version": "0.7.26",
   "publishConfig": {
     "registry": "https://registry.npmjs.org",
     "tag": "latest"

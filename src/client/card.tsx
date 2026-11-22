@@ -173,7 +173,7 @@ function IndexBlock(props: { t?: SearchSettingsCardProps['t'] }): JSX.Element {
           // The host half may be older than the client bundle (browser
           // refresh does not reload the host) — surface it, never spin.
           setStatus(null)
-          setFetchError(res.error ?? 'index-status 请求失败')
+          setFetchError(res.error ?? translate(t, 'card.indexStatus.requestFailed'))
         }
         const rebuilding = res.rebuild?.state === 'building' || res.rebuild?.state === 'swapping'
         const deep = res.deepSync?.state
@@ -239,7 +239,7 @@ function IndexBlock(props: { t?: SearchSettingsCardProps['t'] }): JSX.Element {
       : String(status?.mode ?? 'none')
 
   const pillLabel = fetchError !== null
-    ? '状态读取失败'
+    ? translate(t, 'card.indexStatus.readFailed')
     : rebuilding
       ? translate(t, 'card.index.rebuilding', { done: status?.rebuild?.done ?? 0, total: status?.rebuild?.total || '?' })
       : status === null
@@ -249,7 +249,7 @@ function IndexBlock(props: { t?: SearchSettingsCardProps['t'] }): JSX.Element {
         : translate(t, 'card.index.empty')
 
   const statusLine = fetchError !== null
-    ? `索引状态读取失败：${fetchError}。请完全重启 dsh web（浏览器刷新不会重载 Host 半）后重试。`
+    ? translate(t, 'card.indexStatus.readFailedHint', { error: fetchError })
     : status === null
       ? translate(t, 'card.index.reading')
     : rebuilding
@@ -404,7 +404,7 @@ function IndexBlock(props: { t?: SearchSettingsCardProps['t'] }): JSX.Element {
         type: 'button',
         className: 'dsws_actBtn',
         onClick: () => { setAttempt(n => n + 1) },
-      }, '重试状态'),
+      }, translate(t, 'card.indexStatus.retry')),
       createElement('label', { key: 'import', className: 'dsws_actBtn' }, [
         translate(t, 'card.index.import'),
         createElement('input', {

@@ -190,6 +190,17 @@ export const zh = {
   'hud.fail': '回溯未命中目标',
   'hud.retry': '再试一次（追加翻页预算）',
   'hud.close': '关闭',
+  'panel.sessionsError.bare': '读取会话列表失败',
+  'panel.searchFailed': '搜索失败',
+  'panel.unknownError': '未知错误',
+  'panel.indexUnreachable': '索引状态不可达：Host 半可能是旧进程。请完全重启 dsh web（浏览器刷新不重载 Host）后重试。',
+  'panel.locate.pending': '定位巡逻中',
+  'panel.locate.ok': '已跳转到命中行',
+  'panel.locate.miss': '未能定位（行未渲染/文本被拆分/超时）',
+  'card.indexStatus.requestFailed': 'index-status 请求失败',
+  'card.indexStatus.readFailed': '状态读取失败',
+  'card.indexStatus.readFailedHint': '索引状态读取失败：{error}。请完全重启 dsh web（浏览器刷新不会重载 Host 半）后重试。',
+  'card.indexStatus.retry': '重试状态',
 } as const
 
 export type LocaleKey = keyof typeof zh
@@ -377,6 +388,17 @@ export const en: Dict = {
   'hud.fail': 'Backfill did not find the target',
   'hud.retry': 'Retry (extra page budget)',
   'hud.close': 'Close',
+  'panel.sessionsError.bare': 'Failed to load session list',
+  'panel.searchFailed': 'Search failed',
+  'panel.unknownError': 'Unknown error',
+  'panel.indexUnreachable': 'Index status unreachable: the Host half is probably a stale process. Fully restart dsh web (a browser refresh does not reload the Host) and retry.',
+  'panel.locate.pending': 'Locating the hit…',
+  'panel.locate.ok': 'Jumped to the hit line',
+  'panel.locate.miss': 'Could not locate (line not rendered / text split / timed out)',
+  'card.indexStatus.requestFailed': 'index-status request failed',
+  'card.indexStatus.readFailed': 'Failed to read status',
+  'card.indexStatus.readFailedHint': 'Failed to read index status: {error}. Fully restart dsh web (a browser refresh does not reload the Host half) and retry.',
+  'card.indexStatus.retry': 'Retry status',
 }
 
 /** Japanese dictionary. */
@@ -500,6 +522,17 @@ export const ja: Partial<Dict> = {
   'panel.doctor.copied': '診断レポートをコピーしました。そのまま issue に貼り付けてください。',
   'panel.doctor.failed': '診断レポートの生成に失敗しました：{error}',
   'panel.doctor.copyFailed': 'レポートは生成されましたがコピーに失敗しました（{error}）。ブラウザのコンソールに出力しました。',
+  'panel.sessionsError.bare': 'セッション一覧の読み込みに失敗しました',
+  'panel.searchFailed': '検索に失敗しました',
+  'panel.unknownError': '不明なエラー',
+  'panel.indexUnreachable': 'インデックス状態に到達できません：Host 側が旧プロセスの可能性があります。dsh web を完全に再起動し（ブラウザの再読み込みでは Host は再読込されません）、再試行してください。',
+  'panel.locate.pending': 'ヒット行を探しています…',
+  'panel.locate.ok': 'ヒット行にジャンプしました',
+  'panel.locate.miss': '位置特定できませんでした（行が未レンダリング／テキスト分割／タイムアウト）',
+  'card.indexStatus.requestFailed': 'index-status リクエストに失敗しました',
+  'card.indexStatus.readFailed': 'ステータスの読み取りに失敗しました',
+  'card.indexStatus.readFailedHint': 'インデックス状態の読み取りに失敗しました：{error}。dsh web を完全に再起動し（ブラウザの再読み込みでは Host 半分は再読込されません）、再試行してください。',
+  'card.indexStatus.retry': 'ステータスを再試行',
 }
 
 /** Korean dictionary. */
@@ -623,6 +656,17 @@ export const ko: Partial<Dict> = {
   'panel.doctor.copied': '진단 보고서를 복사했습니다. 그대로 issue 에 붙여넣으세요.',
   'panel.doctor.failed': '진단 보고서 생성 실패: {error}',
   'panel.doctor.copyFailed': '보고서는 생성되었지만 복사에 실패했습니다({error}). 브라우저 콘솔에 출력했습니다.',
+  'panel.sessionsError.bare': '세션 목록을 불러오지 못했습니다',
+  'panel.searchFailed': '검색에 실패했습니다',
+  'panel.unknownError': '알 수 없는 오류',
+  'panel.indexUnreachable': '인덱스 상태에 도달할 수 없습니다: Host 쪽이 이전 프로세스일 가능성이 있습니다. dsh web을 완전히 재시작한 뒤(브라우저 새로고침으로는 Host가 다시 로드되지 않음) 재시도하세요.',
+  'panel.locate.pending': '히트 줄을 찾는 중…',
+  'panel.locate.ok': '히트 줄로 이동했습니다',
+  'panel.locate.miss': '위치를 찾지 못했습니다(줄 미렌더링/텍스트 분할/시간 초과)',
+  'card.indexStatus.requestFailed': 'index-status 요청 실패',
+  'card.indexStatus.readFailed': '상태를 읽지 못했습니다',
+  'card.indexStatus.readFailedHint': '인덱스 상태를 읽지 못했습니다: {error}. dsh web을 완전히 재시작한 뒤(브라우저 새로고침으로는 Host 절반이 다시 로드되지 않음) 재시도하세요.',
+  'card.indexStatus.retry': '상태 재시도',
 }
 
 /** French dictionary. */
@@ -746,6 +790,17 @@ export const fr: Partial<Dict> = {
   'panel.doctor.copied': "Rapport de diagnostic copié — collez-le directement dans l'issue.",
   'panel.doctor.failed': 'Échec de génération du rapport de diagnostic : {error}',
   'panel.doctor.copyFailed': "Rapport généré mais copie impossible ({error}) ; il a été affiché dans la console du navigateur.",
+  'panel.sessionsError.bare': 'Échec du chargement de la liste des sessions',
+  'panel.searchFailed': 'Échec de la recherche',
+  'panel.unknownError': 'Erreur inconnue',
+  'panel.indexUnreachable': "État de l'index inaccessible : la moitié Host est probablement un processus obsolète. Redémarrez complètement dsh web (un rafraîchissement du navigateur ne recharge pas le Host) puis réessayez.",
+  'panel.locate.pending': 'Recherche de la ligne correspondante…',
+  'panel.locate.ok': 'Allé à la ligne correspondante',
+  'panel.locate.miss': 'Impossible de localiser (ligne non rendue / texte fractionné / délai dépassé)',
+  'card.indexStatus.requestFailed': 'Échec de la requête index-status',
+  'card.indexStatus.readFailed': 'Échec de la lecture du statut',
+  'card.indexStatus.readFailedHint': "Échec de la lecture du statut de l'index : {error}. Redémarrez complètement dsh web (un rafraîchissement du navigateur ne recharge pas la moitié Host) puis réessayez.",
+  'card.indexStatus.retry': 'Réessayer le statut',
 }
 
 /** German dictionary. */
@@ -869,6 +924,17 @@ export const de: Partial<Dict> = {
   'panel.doctor.copied': 'Diagnosebericht kopiert – direkt ins Issue einfügen.',
   'panel.doctor.failed': 'Diagnosebericht konnte nicht erstellt werden: {error}',
   'panel.doctor.copyFailed': 'Bericht erstellt, aber Kopieren fehlgeschlagen ({error}); in der Browser-Konsole ausgegeben.',
+  'panel.sessionsError.bare': 'Sitzungsliste konnte nicht geladen werden',
+  'panel.searchFailed': 'Suche fehlgeschlagen',
+  'panel.unknownError': 'Unbekannter Fehler',
+  'panel.indexUnreachable': 'Indexstatus nicht erreichbar: die Host-Hälfte ist wahrscheinlich ein veralteter Prozess. Starten Sie dsh web vollständig neu (ein Browser-Refresh lädt den Host nicht neu) und versuchen Sie es erneut.',
+  'panel.locate.pending': 'Suche die Trefferzeile…',
+  'panel.locate.ok': 'Zur Trefferzeile gesprungen',
+  'panel.locate.miss': 'Konnte nicht lokalisiert werden (Zeile nicht gerendert / Text aufgeteilt / Timeout)',
+  'card.indexStatus.requestFailed': 'index-status-Anfrage fehlgeschlagen',
+  'card.indexStatus.readFailed': 'Status konnte nicht gelesen werden',
+  'card.indexStatus.readFailedHint': 'Indexstatus konnte nicht gelesen werden: {error}. Starten Sie dsh web vollständig neu (ein Browser-Refresh lädt die Host-Hälfte nicht neu) und versuchen Sie es erneut.',
+  'card.indexStatus.retry': 'Status erneut versuchen',
 }
 
 /** Italian dictionary. */
@@ -992,6 +1058,17 @@ export const it: Partial<Dict> = {
   'panel.doctor.copied': "Report di diagnostica copiato: incollalo direttamente nell'issue.",
   'panel.doctor.failed': 'Impossibile generare il report di diagnostica: {error}',
   'panel.doctor.copyFailed': 'Report generato ma copia non riuscita ({error}); è stato stampato nella console del browser.',
+  'panel.sessionsError.bare': 'Caricamento dell\'elenco delle sessioni non riuscito',
+  'panel.searchFailed': 'Ricerca non riuscita',
+  'panel.unknownError': 'Errore sconosciuto',
+  'panel.indexUnreachable': 'Stato dell\'indice irraggiungibile: la metà Host è probabilmente un processo obsoleto. Riavvia completamente dsh web (un refresh del browser non ricarica l\'Host) e riprova.',
+  'panel.locate.pending': 'Ricerca della riga corrispondente…',
+  'panel.locate.ok': 'Passato alla riga corrispondente',
+  'panel.locate.miss': 'Impossibile localizzare (riga non renderizzata / testo diviso / timeout)',
+  'card.indexStatus.requestFailed': 'Richiesta index-status non riuscita',
+  'card.indexStatus.readFailed': 'Lettura dello stato non riuscita',
+  'card.indexStatus.readFailedHint': 'Lettura dello stato dell\'indice non riuscita: {error}. Riavvia completamente dsh web (un refresh del browser non ricarica la metà Host) e riprova.',
+  'card.indexStatus.retry': 'Riprova stato',
 }
 
 /** Russian dictionary. */
@@ -1115,6 +1192,17 @@ export const ru: Partial<Dict> = {
   'panel.doctor.copied': 'Отчёт диагностики скопирован — вставьте его прямо в issue.',
   'panel.doctor.failed': 'Не удалось построить отчёт диагностики: {error}',
   'panel.doctor.copyFailed': 'Отчёт построен, но копирование не удалось ({error}); он выведен в консоль браузера.',
+  'panel.sessionsError.bare': 'Не удалось загрузить список сессий',
+  'panel.searchFailed': 'Поиск не удался',
+  'panel.unknownError': 'Неизвестная ошибка',
+  'panel.indexUnreachable': 'Статус индекса недоступен: вероятно, процесс Host устарел. Полностью перезапустите dsh web (обновление браузера не перезагружает Host) и повторите попытку.',
+  'panel.locate.pending': 'Ищу строку с совпадением…',
+  'panel.locate.ok': 'Перешёл на строку с совпадением',
+  'panel.locate.miss': 'Не удалось найти позицию (строка не отрисована / текст разбит / таймаут)',
+  'card.indexStatus.requestFailed': 'Ошибка запроса index-status',
+  'card.indexStatus.readFailed': 'Не удалось прочитать статус',
+  'card.indexStatus.readFailedHint': 'Не удалось прочитать статус индекса: {error}. Полностью перезапустите dsh web (обновление браузера не перезагружает половину Host) и повторите попытку.',
+  'card.indexStatus.retry': 'Повторить проверку статуса',
 }
 
 /** Spanish dictionary. */
@@ -1238,6 +1326,17 @@ export const es: Partial<Dict> = {
   'panel.doctor.copied': 'Informe de diagnóstico copiado: pégalo directamente en el issue.',
   'panel.doctor.failed': 'No se pudo generar el informe de diagnóstico: {error}',
   'panel.doctor.copyFailed': 'Informe generado pero la copia falló ({error}); se imprimió en la consola del navegador.',
+  'panel.sessionsError.bare': 'No se pudo cargar la lista de sesiones',
+  'panel.searchFailed': 'La búsqueda falló',
+  'panel.unknownError': 'Error desconocido',
+  'panel.indexUnreachable': 'Estado del índice inaccesible: la mitad Host probablemente sea un proceso obsoleto. Reinicie completamente dsh web (una actualización del navegador no recarga el Host) y reintente.',
+  'panel.locate.pending': 'Buscando la línea del resultado…',
+  'panel.locate.ok': 'Saltó a la línea del resultado',
+  'panel.locate.miss': 'No se pudo localizar (línea no renderizada / texto dividido / tiempo agotado)',
+  'card.indexStatus.requestFailed': 'Solicitud index-status fallida',
+  'card.indexStatus.readFailed': 'No se pudo leer el estado',
+  'card.indexStatus.readFailedHint': 'No se pudo leer el estado del índice: {error}. Reinicie completamente dsh web (una actualización del navegador no recarga la mitad Host) y reintente.',
+  'card.indexStatus.retry': 'Reintentar estado',
 }
 
 /** Brazilian Portuguese dictionary (full zh key set). */
@@ -1422,6 +1521,17 @@ export const pt: Partial<Dict> = {
   'hud.fail': 'O retrocesso não encontrou o alvo',
   'hud.retry': 'Tentar de novo (orçamento extra de páginas)',
   'hud.close': 'Fechar',
+  'panel.sessionsError.bare': 'Falha ao carregar a lista de sessões',
+  'panel.searchFailed': 'A busca falhou',
+  'panel.unknownError': 'Erro desconhecido',
+  'panel.indexUnreachable': 'Status do índice inacessível: a metade Host provavelmente é um processo desatualizado. Reinicie totalmente o dsh web (uma atualização do navegador não recarrega o Host) e tente novamente.',
+  'panel.locate.pending': 'Localizando a linha do resultado…',
+  'panel.locate.ok': 'Saltou para a linha do resultado',
+  'panel.locate.miss': 'Não foi possível localizar (linha não renderizada / texto dividido / tempo esgotado)',
+  'card.indexStatus.requestFailed': 'Falha na solicitação index-status',
+  'card.indexStatus.readFailed': 'Falha ao ler o status',
+  'card.indexStatus.readFailedHint': 'Falha ao ler o status do índice: {error}. Reinicie totalmente o dsh web (uma atualização do navegador não recarrega a metade Host) e tente novamente.',
+  'card.indexStatus.retry': 'Repetir status',
 }
 
 /** All shipped dictionaries by locale id. */

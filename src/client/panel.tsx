@@ -625,7 +625,7 @@ export function SwitchPanel({
     callHost<HostSessionItem>('list-sessions', {}).then((res) => {
       if (cancelled) return
       if (res.ok) { setSessions(res.items); setSessionsError(null) }
-      else setSessionsError(res.error ?? '读取会话列表失败')
+      else setSessionsError(res.error ?? translate(t, 'panel.sessionsError.bare'))
     })
     return () => { cancelled = true }
   }, [sessions])
@@ -656,7 +656,7 @@ export function SwitchPanel({
           query: requestKey,
           status: res.ok ? 'ready' : 'error',
           items: res.ok ? sortHits(res.items, sortBy) : [],
-          error: res.ok ? undefined : (res.error ?? '搜索失败'),
+          error: res.ok ? undefined : (res.error ?? translate(t, 'panel.searchFailed')),
           code: res.ok ? undefined : res.code,
         })
       })
@@ -930,7 +930,7 @@ export function SwitchPanel({
       children.push(createElement('div', { key: 'unavailable', className: 'dsws_error' }, [
         createElement('div', { key: 'msg' },
           searchStatus.reason === 'unreachable'
-            ? '索引状态不可达：Host 半可能是旧进程。请完全重启 dsh web（浏览器刷新不重载 Host）后重试。'
+            ? translate(t, 'panel.indexUnreachable')
             : searchStatus.reason === 'unavailable'
               ? translate(t, 'panel.unavailable')
               : translate(t, 'panel.notBuilt')),
@@ -965,7 +965,7 @@ export function SwitchPanel({
     } else if (activeContent.status === 'error') {
       // 有档位码时用本地化文案；旧宿主无 code 则回退宿主原文。
       const text = activeContent.code === undefined
-        ? translate(t, 'panel.contentError', { error: activeContent.error ?? '未知错误' })
+        ? translate(t, 'panel.contentError', { error: activeContent.error ?? translate(t, 'panel.unknownError') })
         : translate(t, `panel.contentErr.${activeContent.code}` as LocaleKey, { error: activeContent.error ?? '' })
       children.push(createElement('div', { key: 'error', className: 'dsws_error' }, text))
     } else if (activeContent.items.length === 0) {
@@ -1005,9 +1005,9 @@ export function SwitchPanel({
             createElement('span', { key: 'time', className: 'dsws_tag' }, fmtTime(groupMode === 'expand' ? item.time : item.updatedAt)),
             ...(locateStatus[`${item.sessionId}:${item.seq}`] === undefined ? [] : [createElement('span', {
               key: 'loc', className: 'dsws_tag',
-              title: locateStatus[`${item.sessionId}:${item.seq}`] === 'pending' ? '定位巡逻中'
-                : locateStatus[`${item.sessionId}:${item.seq}`] === 'ok' ? '已跳转到命中行'
-                  : '未能定位（行未渲染/文本被拆分/超时）',
+              title: locateStatus[`${item.sessionId}:${item.seq}`] === 'pending' ? translate(t, 'panel.locate.pending')
+                : locateStatus[`${item.sessionId}:${item.seq}`] === 'ok' ? translate(t, 'panel.locate.ok')
+                  : translate(t, 'panel.locate.miss'),
             }, locateStatus[`${item.sessionId}:${item.seq}`] === 'pending'
               ? (deepProgress?.key === `${item.sessionId}:${item.seq}` ? `⏳ ${String(deepProgress.pulled)}/${String(deepProgress.budget)}` : '⏳')
               : locateStatus[`${item.sessionId}:${item.seq}`] === 'ok' ? '✓' : '✗')]),
