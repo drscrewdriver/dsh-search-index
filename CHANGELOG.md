@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.7.27
+
+**语料补齐首批（search-index-locale-live-audit 计划 task_9，所有者拍板）：7 语 ×20 个高频可见键，英文中间态从核心交互面退场。**
+
+计划 `.agents/plans/search-index-locale-live-audit/` 的审计结论（宿主源码 0.2.0-rc.2 一手取证）：切换实效由宿主 outlet revision 机制天然保证（每个 slot outlet 订阅 locale revision，切换即全 outlet 重渲染，seat 调用时现读 active locale）——插件侧订阅（候选项 A）与回退链改造（候选项 B）均为重复通道/死路径，不进。唯一真实观感缺口是**覆盖率**：7 语（ja ko fr de it ru es）各缺 61 键（~32%），其中 32 键是 panel/card 运行期可见键，缺键经宿主链落 **en** 中间态（译语+英文混排，非 zh）。
+
+本版补首批 20 键 × 7 语（zh/en 为锚，逐条对齐各语既有术语）：
+
+- **panel 状态条 3 键**：`panel.index.count`（索引 {n}）/ `panel.index.none` / `panel.index.rebuilding`（整理中 {done}/{total}）——面板首屏稳定可见。
+- **筛选/标签 4 键**：`domain.all` / `tag.archived` / `date.from` / `date.to`。
+- **回溯 HUD 6 键**：`hud.progress·done·jump·fail·retry·close`——超长会话回溯加载时的高频面。
+- **冷数据徽标与确认 6 键**：`cold.badge.hint` / `cold.confirm.body·ok·cancel` / `toocold.badge.hint` / `toocold.hint`。
+- **深度同步按钮 1 键**：`card.deepSync.btn`。
+
+术语对齐：ja/ko 保留「整理／정리」（与 `panel.deepSync.rebuild` 一致），fr/de/it/ru/es 沿用各自 Reconstruction/Neuaufbau/Ricostruzione/Пересборка/Reconstruyendo 词根；跳转/回溯分别对齐各语 `panel.locate.ok` 的动词（ジャンプ/이동/Atteindre/Springen/Salta/Перейти/Saltar）；关闭/取消复用 `panel.footer.close` 与各语惯例。占位符与 zh 逐一对应（守卫钉死）。
+
+**覆盖率守卫**（`client-locales.test.mjs` 新增 2 用例）：① 首批 20 键十语在场 + 占位符奇偶；② 覆盖率地板——七语 Partial 各 ≥150 键（191 的 ~78%），防倒退，后续批次随批抬高。
+
+门禁：`tsc --noEmit` 0 error；`npm test` 全链 fail 0（含新增 2 用例，locales 套件 10→12）。
+
+余量分期：61−20=41 键待后续批次（可见 12 键：card.deepSync.hint/drs/rebuilding、card.corpusSource(.desc)、card.mode.drs/native、card.drsBaseUrl(.desc)、card.drsStatus.up/down/reading；不可见 29 键：card.meta/drsReason 组、panel.contentErr 组等），分期计划在计划 findings 留档。
+
 ## 0.7.26
 
 **面板本地化接线（PR [#3](https://github.com/drscrewdriver/dsh-search-index/pull/3) 合并 + follow-up 实现）：宿主 locale 不再被面板裸中文串旁路。**

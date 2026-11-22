@@ -133,6 +133,47 @@ test('the default-seat keys exist in zh with their {error} placeholders (PR #3 w
   assert.equal(placeholders(zh['card.indexStatus.readFailedHint']).join(','), placeholders(en['card.indexStatus.readFailedHint']).join(','))
 })
 
+// 0.7.27 语料补齐首批（search-index-locale-live-audit task_9，所有者拍板）：
+// 20 个高频可见键（panel 状态条 / HUD / 冷数据徽标与确认 / 深度同步按钮）七语必须全部在场，
+// 不得只靠宿主链落 en 中间态；占位符与 zh 逐一对应。
+test('every dictionary carries the first-batch high-visibility keys', () => {
+  const keys = [
+    'panel.index.count', 'panel.index.none', 'panel.index.rebuilding',
+    'domain.all', 'tag.archived', 'date.from', 'date.to',
+    'hud.progress', 'hud.done', 'hud.jump', 'hud.fail', 'hud.retry', 'hud.close',
+    'cold.badge.hint', 'cold.confirm.body', 'cold.confirm.ok', 'cold.confirm.cancel',
+    'toocold.badge.hint', 'toocold.hint', 'card.deepSync.btn',
+  ]
+  const missing = []
+  const placeholderProblems = []
+  for (const [locale, dict] of Object.entries(dictionaries)) {
+    for (const key of keys) {
+      if (typeof dict[key] !== 'string' || dict[key] === '') {
+        missing.push(`${locale}.${key}`)
+        continue
+      }
+      const expected = placeholders(zh[key])
+      const actual = placeholders(dict[key])
+      if (JSON.stringify(expected) !== JSON.stringify(actual)) {
+        placeholderProblems.push(`${locale}.${key}: zh ${JSON.stringify(expected)} vs ${JSON.stringify(actual)}`)
+      }
+    }
+  }
+  assert.deepEqual(missing, [], 'missing first-batch keys')
+  assert.deepEqual(placeholderProblems, [], 'placeholder mismatches')
+})
+
+// 覆盖率地板：七语 Partial 在首批补齐后各 ≥150 键（191 的 ~78%）。
+// 钉住下限防倒退——任何人删键守卫立刻红；后续批次补齐时随批次抬高。
+test('partial dictionaries keep the batch-1 coverage floor', () => {
+  const FLOOR = 150
+  const below = Object.entries(dictionaries)
+    .filter(([locale]) => locale !== 'zh' && locale !== 'en' && locale !== 'pt')
+    .filter(([, dict]) => Object.keys(dict).length < FLOOR)
+    .map(([locale, dict]) => `${locale}=${Object.keys(dict).length}`)
+  assert.deepEqual(below, [], `dictionaries below the ${FLOOR}-key floor`)
+})
+
 test('panel.tsx and card.tsx ship no bare CJK runtime strings', async () => {
   // The 2026-11-22 wiring pass replaced every bare Chinese runtime string in
   // the two client components with `translate(t, …)` calls (PR #3 follow-up).
