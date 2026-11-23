@@ -66,8 +66,7 @@ Der Einstellungs-Namespace bleibt `switch-search` (**Speicherschlüssel bleibt s
 
 Layout des Sucheinstiegs in der Seitenleiste und des Suchpanels:
 
-![Sucheinstieg in der Seitenleiste](assets/content-search-example.png)
-![Suchpanel](assets/new-index.png)
+![Suchpanel](assets/new-search-index.png)
 
 ## Der eigene Index: drei Mechanismen
 

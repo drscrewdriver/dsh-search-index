@@ -66,8 +66,7 @@ Il namespace delle impostazioni resta `switch-search` (**chiave di memorizzazion
 
 Disposizione della voce di ricerca nella barra laterale e del pannello di ricerca:
 
-![Voce di ricerca nella barra laterale](assets/content-search-example.png)
-![Pannello di ricerca](assets/new-index.png)
+![Pannello di ricerca](assets/new-search-index.png)
 
 ## L'indice indipendente: tre meccanismi
 

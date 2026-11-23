@@ -65,8 +65,7 @@ O namespace de configurações continua sendo `switch-search` (**a chave de arma
 
 Disposição da entrada de busca na barra lateral e do painel de busca:
 
-![Entrada de busca na barra lateral](assets/content-search-example.png)
-![Painel de busca](assets/new-index.png)
+![Painel de busca](assets/new-search-index.png)
 
 ## O índice independente: três mecanismos
 

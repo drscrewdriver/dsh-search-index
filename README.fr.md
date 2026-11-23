@@ -66,8 +66,7 @@ L'espace de noms des réglages reste `switch-search` (**clé de stockage inchang
 
 Disposition de l'entrée de recherche dans la barre latérale et du panneau de recherche :
 
-![Entrée de recherche de la barre latérale](assets/content-search-example.png)
-![Panneau de recherche](assets/new-index.png)
+![Panneau de recherche](assets/new-search-index.png)
 
 ## L'index indépendant : trois mécanismes
 

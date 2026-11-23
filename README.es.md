@@ -66,8 +66,7 @@ El espacio de nombres de ajustes sigue siendo `switch-search` (**la clave de alm
 
 Disposición de la entrada de búsqueda en la barra lateral y del panel de búsqueda:
 
-![Entrada de búsqueda en la barra lateral](assets/content-search-example.png)
-![Panel de búsqueda](assets/new-index.png)
+![Panel de búsqueda](assets/new-search-index.png)
 
 ## El índice independiente: tres mecanismos
 
