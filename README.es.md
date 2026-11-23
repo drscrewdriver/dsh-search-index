@@ -64,9 +64,9 @@ El espacio de nombres de ajustes sigue siendo `switch-search` (**la clave de alm
 
 ## Vista previa de la interfaz
 
-Disposición de la entrada de búsqueda en la barra lateral y del panel de búsqueda:
+Entrada por la página de plugins (DSH ≥ 0.1.7): a la izquierda la fila **Índice de búsqueda** en la barra lateral, a la derecha el área principal con el campo de búsqueda y la lista de resultados:
 
-![Panel de búsqueda](assets/new-search-index.png)
+![Fila Índice de búsqueda en la barra lateral y lista de resultados en el área principal](assets/new-search-index.png)
 
 ## El índice independiente: tres mecanismos
 

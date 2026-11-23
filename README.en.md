@@ -86,6 +86,13 @@ the seats are ready, and the other form is removed in place if a seat shows up l
 Supports DSH 0.1.0-rc.2, 0.1.0-rc.3, 0.1.0-rc.6, 0.1.0-rc.7, 0.1.0-rc.8, 0.1.1-rc.1, 0.1.1-rc.2, 0.1.2-rc.1, 0.1.5-rc.1, 0.1.5-rc.2, 0.1.5-rc.3, 0.1.7-rc.1, 0.1.7-rc.2, 0.2.0-rc.1, 0.2.0-rc.2, 0.2.1-rc.1, 0.2.1-rc.2, 0.2.1-rc.3 (enumerated peers; 9 of these rc versions have a farm-cell smoke — matrix below).
 <!-- hosts-sync:end -->
 
+## Preview
+
+Plugins-page entry (DSH ≥ 0.1.7): the **Search Index** row in the sidebar's plugin group on the
+left, and the full main-area page it opens on the right — query box plus results grouped by session:
+
+![Search Index row in the sidebar and the results page in the main area](assets/new-search-index.png)
+
 ## Compatibility matrix (0.7.7 measured)
 
 Each rc was installed into its farm cell (`_host-farm/cells/<rc>`), booted with `dsh web`, and probed:

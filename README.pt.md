@@ -63,9 +63,9 @@ O namespace de configurações continua sendo `switch-search` (**a chave de arma
 
 ## Prévia da interface
 
-Disposição da entrada de busca na barra lateral e do painel de busca:
+Entrada pela página de plugins (DSH ≥ 0.1.7): à esquerda a linha **Índice de busca** na barra lateral, à direita a área principal com o campo de busca e a lista de resultados:
 
-![Painel de busca](assets/new-search-index.png)
+![Linha Índice de busca na barra lateral e lista de resultados na área principal](assets/new-search-index.png)
 
 ## O índice independente: três mecanismos
 

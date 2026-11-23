@@ -64,9 +64,9 @@ L'espace de noms des réglages reste `switch-search` (**clé de stockage inchang
 
 ## Aperçu de l'interface
 
-Disposition de l'entrée de recherche dans la barre latérale et du panneau de recherche :
+Entrée par la page de plugins (DSH ≥ 0.1.7) : à gauche la ligne **Index de recherche** dans la barre latérale, à droite la zone principale avec le champ de recherche et la liste des résultats :
 
-![Panneau de recherche](assets/new-search-index.png)
+![Ligne Index de recherche dans la barre latérale et liste de résultats dans la zone principale](assets/new-search-index.png)
 
 ## L'index indépendant : trois mécanismes
 

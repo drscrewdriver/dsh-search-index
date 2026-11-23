@@ -64,9 +64,9 @@ Il namespace delle impostazioni resta `switch-search` (**chiave di memorizzazion
 
 ## Anteprima dell'interfaccia
 
-Disposizione della voce di ricerca nella barra laterale e del pannello di ricerca:
+Ingresso dalla pagina dei plugin (DSH ≥ 0.1.7): a sinistra la voce **Indice di ricerca** nella barra laterale, a destra l'area principale con il campo di ricerca e l'elenco dei risultati:
 
-![Pannello di ricerca](assets/new-search-index.png)
+![Voce Indice di ricerca nella barra laterale ed elenco dei risultati nell'area principale](assets/new-search-index.png)
 
 ## L'indice indipendente: tre meccanismi
 

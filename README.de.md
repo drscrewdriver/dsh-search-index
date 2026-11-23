@@ -64,9 +64,9 @@ Der Einstellungs-Namespace bleibt `switch-search` (**Speicherschlüssel bleibt s
 
 ## Vorschau der Oberfläche
 
-Layout des Sucheinstiegs in der Seitenleiste und des Suchpanels:
+Plugin-Seiten-Einstieg (DSH ≥ 0.1.7): links die Zeile **Suchindex** in der Seitenleiste, rechts der Hauptbereich mit Suchfeld und Trefferliste:
 
-![Suchpanel](assets/new-search-index.png)
+![Zeile Suchindex in der Seitenleiste und Trefferliste im Hauptbereich](assets/new-search-index.png)
 
 ## Der eigene Index: drei Mechanismen
 
