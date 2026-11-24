@@ -48,7 +48,7 @@ export declare function skipGuide(ns: string): void;
 /** 清标记 = 允许重新教学。 */
 export declare function resetGuide(ns: string): void;
 /**
- * 引导主体：3 步以内的小教学 + 恒定可见的 Skip。
+ * 引导主体：≤10 步的小教学（惯例：末条讲「用量端点」贴士）+ 恒定可见的 Skip。
  *
  * `onClose` 由宿主卡面传：Skip/Done 都会调用它（Skip 同时写标记）。
  */

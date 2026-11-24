@@ -443,7 +443,7 @@ export function SearchSettingsCard(props: SearchSettingsCardProps): JSX.Element 
 
   const body = createCardBody({ t, snapshot, scope })
 
-  // 首次使用引导（本地标记持久化；卡底「重新查看引导」清标记就地重开）。
+  // 首次使用引导（本地标记持久化；卡顶「重新查看引导」清标记就地重开）。
   const [guideOpen, setGuideOpen] = useState(() => !isGuideSkipped('search-index'))
   const guideEl = guideOpen
     ? createElement(GuidePanel, {
@@ -452,7 +452,7 @@ export function SearchSettingsCard(props: SearchSettingsCardProps): JSX.Element 
       onClose: () => { setGuideOpen(false) },
     })
     : null
-  const restartEl = createElement('p', { key: 'guide-restart', style: { margin: '10px 0 0' } },
+  const restartEl = createElement('p', { key: 'guide-restart', style: { margin: '0 0 10px' } },
     createElement(GuideRestartButton, {
       key: 'b',
       ns: 'search-index',
@@ -520,7 +520,7 @@ export function SearchSettingsCard(props: SearchSettingsCardProps): JSX.Element 
       })),
     ]),
     open && createElement('div', { key: 'body', style: { padding: '12px 16px' } },
-      guideEl === null ? [...body, restartEl] : [guideEl, ...body, restartEl]),
+      [restartEl, ...(guideEl === null ? [] : [guideEl]), ...body]),
   ])
 }
 
