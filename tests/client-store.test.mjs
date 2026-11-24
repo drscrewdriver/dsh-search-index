@@ -31,6 +31,14 @@ const TABLE = {
     useState: (v) => [v, () => {}], useEffect: () => {}, useMemo: (f) => f(),
     useRef: (v) => ({ current: v }), useSyncExternalStore: (sub, get) => get(),
   },
+  // JSX runtime：`src/client/guide.tsx`（guide-kit 副本）是 .tsx，构建时按
+  // react-jsx 产出 `react/jsx-runtime`。它与 `react` 同域同版本，属基线依赖，
+  // 不是新引入的第三方包——本表仍只放宿主已提供的这两类。
+  'react/jsx-runtime': {
+    jsx: (type, props) => ({ type, props }),
+    jsxs: (type, props) => ({ type, props }),
+    Fragment: {},
+  },
   'react-dom': { createPortal: () => ({}) },
 }
 

@@ -79,8 +79,12 @@ test('缺包：drs-missing 档位（不崩、不打成"请安装 DRS"）', async
     assert.equal(out.search.status, 200)
     assert.equal(out.search.body.ok, false)
     assert.equal(out.search.body.code, 'drs-missing')
-    assert.match(out.search.body.error, /重装本插件/u)
-    assert.doesNotMatch(out.search.body.error, /请安装/u, '缺包文案不能把用户推去单独安装依赖')
+    // issue #5 后的契约：宿主只出 { code, detail }，本地化散文由 client 按码查字典
+    // （`panel.contentErr.*`，10 语全覆盖）。所以这里钉两件事——宿主不再随 error
+    // 下发任何语言的散文，且 detail 不能把用户推去单独安装依赖。
+    assert.equal(out.search.body.error, undefined, '宿主不再随 error 下发散文')
+    assert.equal(typeof out.search.body.detail, 'string', 'detail 必须随失败响应回传（分诊唯一依据）')
+    assert.doesNotMatch(out.search.body.detail, /请安装/u, '缺包文案不能把用户推去单独安装依赖')
   } finally {
     rmSync(root, { recursive: true, force: true })
   }

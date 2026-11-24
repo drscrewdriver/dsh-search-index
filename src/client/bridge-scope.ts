@@ -14,6 +14,7 @@
  */
 import type { SwitchSearchConfig } from '../config.ts'
 import { callHostAny } from './host-api.ts'
+import { translate } from './locales.ts'
 
 /** 与宿主 settings-bridge.ts 的命名空间键一致（存储键稳定承诺）。 */
 const SEARCH_NS = 'switch-search'
@@ -134,7 +135,7 @@ function makeBridgeScope<V extends object>(
     },
     set: async (field, value) => {
       if (shared.status !== 'ready' || shared.writable === false) {
-        throw new Error('设置桥不可写（describe 未就绪或宿主只读）')
+        throw new Error(translate(undefined, 'err.settingsUnwritable'))
       }
       const before = keyOf(shared)[field]
       // 乐观回显：开关即时翻转，权威值由 mutate 响应修正。
@@ -153,7 +154,7 @@ function makeBridgeScope<V extends object>(
         // 失败回滚：开关弹回 = 用户可见的失败信号。
         keyOf(shared)[field] = before
         refresh()
-        throw new Error(res.error ?? '设置写入失败')
+        throw new Error(res.error ?? translate(undefined, 'err.settingsWriteFailed'))
       }
     },
   }

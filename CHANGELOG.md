@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.0 (2026-11-24)
+
+- **新增首次使用引导（3 步）**：设置卡顶部三步——先建索引再搜索、两个入口（插件页式侧栏行 + 主栏结果页）、搜不到看状态条。底部恒定重开入口；Skip 与「开始使用」都写 `dsh.guide.search-index.skipped`。
+- **引导十语外壳**：七个外壳词自带 zh·en·ja·ko·fr·de·it·ru·es·pt，按 `<html lang>` 取词、认不出落 en；步骤正文 zh/en，其余语种回退 en。
+- **与 issue #5 契约对齐**：`tests/drs-missing.test.mjs` 原断言宿主 `error` 含中文散文，而该契约早已删除（宿主只出 `{ code, detail }`，本地化由 client 按码查 `panel.contentErr.*` 字典）。改为断言「宿主不再随 error 下发散文」+「detail 必须回传」，测试重新符合真实行为。
+- **bundle 依赖白名单补 `react/jsx-runtime`**：引导件是 .tsx，构建产出该 specifier；它与 `react` 同域同版本，属基线依赖，`client-store` 的「非基线 require」守卫仍只放行宿主已提供的 react 两类。
+- **附带语言守卫棘轮**：硬编码 CJK 计数只降不升，引导两文件按设计登记白名单。
+- **全量**：全部测试通过（含新增 locale-guard）。
+
 ## 0.7.28
 
 **drs 失败面错误码化收口（issue #5）：宿主停拼散文，失败响应 `{ ok:false, code, detail }`，非 zh locale 面板不再混排。**

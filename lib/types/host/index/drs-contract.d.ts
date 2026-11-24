@@ -83,6 +83,9 @@ export declare class DrsUnavailableError extends Error {
  * - `DRS ?op=…: ok=false(…)` / `响应非 JSON 对象`
  */
 export declare function classifyDrsFailure(err: unknown): DrsUnavailableError;
-/** 服务端兜底文案（与客户端 `card.drsReason.*` / `panel.contentErr.*` 同义）。 */
-export declare function messageForDrsFailure(code: DrsFailureCode, detail?: string): string;
+/**
+ * 失败文案按码由 client 字典本地化（`card.drsReason.*` / `panel.contentErr.*`，
+ * 10 locale 全覆盖）。宿主曾在此拼 7 档中文散文随 `error` 下发（issue #5），
+ * 非 zh locale 的面板会混排输出——现已整体删除，宿主只出 `{ code, detail }`。
+ */
 //# sourceMappingURL=drs-contract.d.ts.map

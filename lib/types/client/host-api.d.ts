@@ -1,15 +1,13 @@
-/**
- * Client-side helpers and structural mirrors shared by the search panel and
- * the settings card. Everything talks to the host through the fenced
- * `/switch-search/api` route; no official package is value-imported.
- */
 /** POST a JSON body to a fenced switch-search API method (items shape).
- *  `code` 是 0.7.8 起的失败档位（旧宿主无此字段）；客户端优先按它取本地化文案。 */
+ *  `code` 是 0.7.8 起的失败档位（旧宿主无此字段）；客户端优先按它取本地化文案。
+ *  `detail` 是 0.7.28 起的原始细节（issue #5）：宿主不再拼散文，`error` 只剩
+ *  通用兜底，drs 档位的 `{error}` 插槽数据源由 `detail` 提供。 */
 export declare function callHost<T>(method: string, body: unknown): Promise<{
     ok: boolean;
     items: T[];
     error?: string;
     code?: string;
+    detail?: string;
 }>;
 /** POST a body to a fenced switch-search API method, returning the whole record. */
 export declare function callHostAny<T>(method: string, body: unknown, timeout?: number): Promise<Partial<T> & {

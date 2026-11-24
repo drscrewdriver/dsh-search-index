@@ -22,6 +22,8 @@ import {
   type HostIndexStatus,
 } from './host-api.ts'
 import { translate, type LocaleKey } from './locales.ts'
+import { GuidePanel, GuideRestartButton, guideSteps, isGuideSkipped } from './guide.tsx'
+import { SEARCH_GUIDE_STEPS } from './guide-steps.ts'
 
 /**
  * Structural mirror of the settings scope (the plugin must not value- or
@@ -441,6 +443,22 @@ export function SearchSettingsCard(props: SearchSettingsCardProps): JSX.Element 
 
   const body = createCardBody({ t, snapshot, scope })
 
+  // 首次使用引导（本地标记持久化；卡底「重新查看引导」清标记就地重开）。
+  const [guideOpen, setGuideOpen] = useState(() => !isGuideSkipped('search-index'))
+  const guideEl = guideOpen
+    ? createElement(GuidePanel, {
+      ns: 'search-index',
+      steps: guideSteps(SEARCH_GUIDE_STEPS),
+      onClose: () => { setGuideOpen(false) },
+    })
+    : null
+  const restartEl = createElement('p', { key: 'guide-restart', style: { margin: '10px 0 0' } },
+    createElement(GuideRestartButton, {
+      key: 'b',
+      ns: 'search-index',
+      onOpen: () => { setGuideOpen(true) },
+    }))
+
   return createElement('div', {
     style: {
       border: '1px solid var(--dsw-alias-border-l2, rgba(127,127,127,0.35))',
@@ -501,7 +519,8 @@ export function SearchSettingsCard(props: SearchSettingsCardProps): JSX.Element 
         strokeLinejoin: 'round',
       })),
     ]),
-    open && createElement('div', { key: 'body', style: { padding: '12px 16px' } }, body),
+    open && createElement('div', { key: 'body', style: { padding: '12px 16px' } },
+      guideEl === null ? [...body, restartEl] : [guideEl, ...body, restartEl]),
   ])
 }
 

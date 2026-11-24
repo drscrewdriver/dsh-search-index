@@ -3,6 +3,11 @@
  * the settings card. Everything talks to the host through the fenced
  * `/switch-search/api` route; no official package is value-imported.
  */
+import { translate } from './locales.ts'
+
+/** 模块级错误文案：走 `translate` 的 defaultSeat（`index.ts` 用 `locale.bind(NS)` 绑定），
+ * 因此这里没有 `t` 可传也能跟随宿主语言，而不是写死中文。 */
+const errText = (key: 'err.requestFailed' | 'err.timeout'): string => translate(undefined, key)
 
 /** Fetch timeout for one host call (long for import: the body can be large). */
 const FETCH_TIMEOUT = 10_000
@@ -31,7 +36,7 @@ export function callHost<T>(method: string, body: unknown): Promise<{ ok: boolea
       return {
         ok: false,
         items: [],
-        error: record?.error ?? '请求失败',
+        error: record?.error ?? errText('err.requestFailed'),
         ...(typeof record?.code === 'string' ? { code: record.code } : {}),
         ...(typeof record?.detail === 'string' ? { detail: record.detail } : {}),
       }
@@ -39,7 +44,7 @@ export function callHost<T>(method: string, body: unknown): Promise<{ ok: boolea
     .catch((err: unknown) => ({
       ok: false,
       items: [],
-      error: err instanceof DOMException && err.name === 'AbortError' ? '请求超时' : String(err instanceof Error ? err.message : err),
+      error: err instanceof DOMException && err.name === 'AbortError' ? errText('err.timeout') : String(err instanceof Error ? err.message : err),
     }))
     .finally(() => {
       if (timer !== undefined) clearTimeout(timer)
@@ -61,7 +66,7 @@ export function callHostAny<T>(method: string, body: unknown, timeout = FETCH_TI
     .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
     .catch((err: unknown) => ({
       ok: false,
-      error: err instanceof DOMException && err.name === 'AbortError' ? '请求超时' : String(err instanceof Error ? err.message : err),
+      error: err instanceof DOMException && err.name === 'AbortError' ? errText('err.timeout') : String(err instanceof Error ? err.message : err),
     }))
     .finally(() => {
       if (timer !== undefined) clearTimeout(timer)
@@ -178,7 +183,7 @@ export function callSteward<T>(method: string, body: unknown, timeout = FETCH_TI
     .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
     .catch((err: unknown) => ({
       ok: false,
-      error: err instanceof DOMException && err.name === 'AbortError' ? '请求超时' : String(err instanceof Error ? err.message : err),
+      error: err instanceof DOMException && err.name === 'AbortError' ? errText('err.timeout') : String(err instanceof Error ? err.message : err),
     }))
     .finally(() => {
       if (timer !== undefined) clearTimeout(timer)

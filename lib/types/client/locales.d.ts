@@ -194,6 +194,10 @@ export declare const zh: {
     readonly 'card.indexStatus.readFailed': "状态读取失败";
     readonly 'card.indexStatus.readFailedHint': "索引状态读取失败：{error}。请完全重启 dsh web（浏览器刷新不会重载 Host 半）后重试。";
     readonly 'card.indexStatus.retry': "重试状态";
+    readonly 'err.requestFailed': "请求失败";
+    readonly 'err.timeout': "请求超时";
+    readonly 'err.settingsUnwritable': "设置桥不可写（describe 未就绪或宿主只读）";
+    readonly 'err.settingsWriteFailed': "设置写入失败";
 };
 export type LocaleKey = keyof typeof zh;
 export type Dict = Record<LocaleKey, string>;
