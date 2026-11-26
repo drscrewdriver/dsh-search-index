@@ -24,6 +24,7 @@ import {
 import { translate, type LocaleKey } from './locales.ts'
 import { GuidePanel, GuideRestartButton, guideSteps, isGuideSkipped } from './guide.tsx'
 import { SEARCH_GUIDE_STEPS } from './guide-steps.ts'
+import { mountStarRow } from './star-row-copy.ts'
 
 /**
  * Structural mirror of the settings scope (the plugin must not value- or
@@ -521,6 +522,7 @@ export function SearchSettingsCard(props: SearchSettingsCardProps): JSX.Element 
     ]),
     open && createElement('div', { key: 'body', style: { padding: '12px 16px' } },
       [restartEl, ...(guideEl === null ? [] : [guideEl]), ...body]),
+    createElement('span', { key: 'star-row', ref: (node: HTMLElement | null) => { if (node && !node.firstChild) node.appendChild(mountStarRow()) } }),
   ])
 }
 

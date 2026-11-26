@@ -80,6 +80,10 @@
       {
         "file": "src/client/guide-steps.ts",
         "reason": "引导词表刻意独立于插件字典（十语外壳 + zh/en 正文）"
+      },
+      {
+        "file": "src/client/star-row-copy.ts",
+        "reason": "star-row 生成副本，10 语文案自含（非插件字典，同 guide.tsx 口径）"
       }
     ]
   },
